@@ -3,38 +3,50 @@ package com.topjohnwu.magisk.ui.settings
 import android.os.Bundle
 import android.view.View
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.arch.BaseFragment
-import com.topjohnwu.magisk.arch.viewModel
-import com.topjohnwu.magisk.databinding.FragmentSettingsMd2Binding
-import rikka.recyclerview.addEdgeSpacing
-import rikka.recyclerview.addItemSpacing
-import rikka.recyclerview.fixEdgeEffect
+import androidx.fragment.app.Fragment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.fragment.findNavController
 import com.topjohnwu.magisk.core.R as CoreR
 
-class SettingsFragment : BaseFragment<FragmentSettingsMd2Binding>() {
-
-    override val layoutRes = R.layout.fragment_settings_md2
-    override val viewModel by viewModel<SettingsViewModel>()
-    override val snackbarView: View get() = binding.snackbarContainer
-
-    override fun onStart() {
-        super.onStart()
-
-        activity?.title = resources.getString(CoreR.string.settings)
-    }
+class SettingsFragment : Fragment(R.layout.fragment_settings_md2) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.settingsList.apply {
-            addEdgeSpacing(bottom = R.dimen.l1)
-            addItemSpacing(R.dimen.l1, R.dimen.l_50, R.dimen.l1)
-            fixEdgeEffect()
+
+        val composeView = view as ComposeView
+        composeView.setContent {
+            SettingsScreen()
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        viewModel.items.forEach { it.refresh() }
+    @Composable
+    fun SettingsScreen() {
+        val settingsViewModel: SettingsViewModel = viewModel()
+        val isMonetEnabled by settingsViewModel.isMonetEnabled.collectAsState()
+
+        SettingsContent(isMonetEnabled, { settingsViewModel.toggleMonetEnabled() })
     }
 
+    @Composable
+    fun SettingsContent(isMonetEnabled: Boolean, onToggleMonet: () -> Unit) {
+        // 这里可以添加你的设置 UI 组件
+        // 例如使用 Switch 来控制 Monet 取色功能
+        // 示例代码：
+        /*
+        var monetEnabled by remember { mutableStateOf(isMonetEnabled) }
+        Switch(
+            checked = monetEnabled,
+            onCheckedChange = {
+                monetEnabled = it
+                onToggleMonet()
+            },
+            label = { Text(text = stringResource(id = R.string.monet_color_extraction)) }
+        )
+        */
+    }
 }

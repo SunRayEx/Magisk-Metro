@@ -10,12 +10,18 @@ import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.view.forEach
-import androidx.core.view.isGone
-import androidx.core.view.isVisible
-import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavDirections
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.topjohnwu.magisk.MainDirections
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseViewModel
@@ -39,10 +45,15 @@ import com.topjohnwu.magisk.view.Shortcuts
 import kotlinx.coroutines.launch
 import java.io.File
 import com.topjohnwu.magisk.core.R as CoreR
+import com.topjohnwu.magisk.ui.MetroComponents
+import com.topjohnwu.magisk.ui.MagiskViewModel
+import com.topjohnwu.magisk.ui.settings.SettingsViewModel
+import com.topjohnwu.magisk.ui.utils.WallpaperColorExtractor
+import android.app.WallpaperManager
 
 class MainViewModel : BaseViewModel()
 
-class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenHost {
+class MainActivity : ComponentActivity(), SplashScreenHost {
 
     override val layoutRes = R.layout.activity_main_md2
     override val viewModel by viewModel<MainViewModel>()
@@ -70,11 +81,41 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
         splashController.preOnCreate()
         super.onCreate(savedInstanceState)
         splashController.onCreate(savedInstanceState)
+
+        setContent {
+            val magiskViewModel: MagiskViewModel = viewModel()
+            val uiState by magiskViewModel.uiState.collectAsState()
+            val settingsViewModel: SettingsViewModel = viewModel()
+            val isMonetEnabled by settingsViewModel.isMonetEnabled.collectAsState()
+
+            val context = LocalContext.current
+            val wallpaperColor = if (isMonetEnabled) {
+                getWallpaperColor(context)
+            } else {
+                null
+            }
+
+            MaterialTheme(
+                colorScheme = if (wallpaperColor != null) {
+                    Theme.dynamicColorScheme(wallpaperColor)
+                } else {
+                    Theme.selected.colorScheme
+                }
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MetroScreen(uiState)
+                }
+            }
+        }
     }
 
-    override fun onResume() {
-        super.onResume()
-        splashController.onResume()
+    private fun getWallpaperColor(context: Context): Int? {
+        val wallpaperManager = context.getSystemService(Context.WALLPAPER_SERVICE) as WallpaperManager
+        val drawable = wallpaperManager.drawable
+        return WallpaperColorExtractor.extractDominantColor(drawable)
     }
 
     @SuppressLint("InlinedApi")
@@ -241,37 +282,6 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
                 setMessage(CoreR.string.unsupport_system_app_msg)
                 setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
                 setCancelable(false)
-            }.show()
-        }
-
-        if (applicationInfo.flags and ApplicationInfo.FLAG_EXTERNAL_STORAGE != 0) {
-            MagiskDialog(this).apply {
-                setTitle(CoreR.string.unsupport_general_title)
-                setMessage(CoreR.string.unsupport_external_storage_msg)
-                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
-                setCancelable(false)
-            }.show()
-        }
-    }
-
-    private fun askForHomeShortcut() {
-        if (isRunningAsStub && !Config.askedHome &&
-            ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
-            // Ask and show dialog
-            Config.askedHome = true
-            MagiskDialog(this).apply {
-                setTitle(CoreR.string.add_shortcut_title)
-                setMessage(CoreR.string.add_shortcut_msg)
-                setButton(MagiskDialog.ButtonType.NEGATIVE) {
-                    text = android.R.string.cancel
-                }
-                setButton(MagiskDialog.ButtonType.POSITIVE) {
-                    text = android.R.string.ok
-                    onClick {
-                        Shortcuts.addHomeIcon(this@MainActivity)
-                    }
-                }
-                setCancelable(true)
             }.show()
         }
     }

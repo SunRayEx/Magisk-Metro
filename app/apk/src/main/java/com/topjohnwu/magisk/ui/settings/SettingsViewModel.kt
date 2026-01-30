@@ -31,6 +31,15 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
 
+    private val _isMonetEnabled = MutableStateFlow(false)
+    val isMonetEnabled = _isMonetEnabled.asStateFlow()
+
+    fun toggleMonetEnabled() {
+        viewModelScope.launch {
+            _isMonetEnabled.value = !_isMonetEnabled.value
+        }
+    }
+
     val items = createItems()
     val extraBindings = bindExtra {
         it.put(BR.handler, this)

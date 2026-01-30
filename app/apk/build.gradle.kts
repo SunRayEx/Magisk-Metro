@@ -39,6 +39,10 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("androidx.compose.material3:material3:1.0.0")
+    implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-android:2.10.0")
     coreLibraryDesugaring(libs.jdk.libs)
 
     implementation(libs.indeterminate.checkbox)
