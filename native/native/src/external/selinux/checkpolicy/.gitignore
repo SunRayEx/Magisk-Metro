@@ -1,0 +1,7 @@
+checkmodule
+checkpolicy
+lex.yy.c
+y.tab.c
+y.tab.h
+tests/testpol.bin
+tests/testpol.conf

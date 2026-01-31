@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="splash_background">#0D0D0D</color>
+    <color name="colorOnSurface">#D8D8D8</color>
+</resources>

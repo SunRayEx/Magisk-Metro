@@ -1,0 +1,64 @@
+.TH CHCAT "8" "September 2005" "chcat" "User Commands"
+.SH NAME
+chcat \- change SELinux security categories of files/users
+.SH SYNOPSIS
+.B chcat
+\fIcategory file\fR...
+.br
+.B chcat -l 
+\fIcategory user\fR...
+.br
+.B chcat
+\fI[[+|-]category...]  file\fR...
+.br
+.B chcat -l 
+\fI[[+|-]category...]  user\fR...
+.br
+.B chcat
+[\fI-d\fR] \fIfile\fR...
+.br
+.B chcat -l 
+[\fI-d\fR] \fIuser\fR...
+.br
+.B chcat
+\fI-L\fR [ \-l ] [ user ... ]
+.br
+.SH DESCRIPTION
+.PP
+Use +/- to add/remove categories from a \fIfile\fR or \fIuser\fR (only a single category can be specified at a time). Or specify the desired list/range of categories to be applied (replacing the existing categories).
+.PP
+.B
+Note:
+When removing a category you must specify '\-\-' on the command line before using the \-Category syntax. This tells the command that you have finished entering options and are now specifying a category name instead.
+
+.TP
+\fB\-d\fR
+delete all categories from given FILE/USER.
+.TP
+\fB\-L\fR
+list available categories.
+.TP
+\fB\-l\fR
+Tells chcat to operate on users instead of files.
+
+.SH EXAMPLE
+.nf
+Replace categories of user "test" with c0.c6
+# chcat -l c0.c6 test
+Add category c1023 to user "test"
+# chcat -l +c1023 test
+Remove category c5 from file "file"
+# chcat -- -c5 file
+Remove all categories from file "file"
+# chcat -d file
+
+.SH "SEE ALSO"
+.TP
+chcon(1), selinux(8), semanage(8)
+.PP
+.br
+When operating on files this script wraps the chcon command.
+.SH "FILES"
+/etc/selinux/{SELINUXTYPE}/setrans.conf 
+.br
+/etc/selinux/{SELINUXTYPE}/seusers
