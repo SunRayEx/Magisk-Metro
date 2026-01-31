@@ -1,0 +1,283 @@
+package com.MagisKube.magisk.ui
+
+import android.Manifest
+import android.Manifest.permission.REQUEST_INSTALL_PACKAGES
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.os.Bundle
+import android.view.MenuItem
+import android.view.View
+import android.view.WindowManager
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.MagisKube.magisk.MainDirections
+import com.MagisKube.magisk.R
+import com.MagisKube.magisk.arch.BaseViewModel
+import com.MagisKube.magisk.arch.NavigationActivity
+import com.MagisKube.magisk.arch.startAnimations
+import com.MagisKube.magisk.arch.viewModel
+import com.MagisKube.magisk.core.Config
+import com.MagisKube.magisk.core.Const
+import com.MagisKube.magisk.core.Info
+import com.MagisKube.magisk.core.base.SplashController
+import com.MagisKube.magisk.core.base.SplashScreenHost
+import com.MagisKube.magisk.core.isRunningAsStub
+import com.MagisKube.magisk.core.ktx.toast
+import com.MagisKube.magisk.core.model.module.LocalModule
+import com.MagisKube.magisk.core.tasks.AppMigration
+import com.MagisKube.magisk.databinding.ActivityMainMd2Binding
+import com.MagisKube.magisk.ui.home.HomeFragmentDirections
+import com.MagisKube.magisk.ui.theme.Theme
+import com.MagisKube.magisk.view.MagiskDialog
+import com.MagisKube.magisk.view.Shortcuts
+import kotlinx.coroutines.launch
+import java.io.File
+import com.MagisKube.magisk.core.R as CoreR
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import com.example.yourapp.MagiskViewModel
+import com.example.yourapp.YourAppTheme
+import com.MagisKube.magisk.ui.utils.WallpaperColorExtractor
+import android.app.WallpaperManager
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.yourapp.NavGraph
+
+class MainViewModel : BaseViewModel()
+class MainActivity : ComponentActivity(), SplashScreenHost {
+
+    override val layoutRes = R.layout.activity_main_md2
+    override val viewModel by viewModel<MainViewModel>()
+    override val navHostId: Int = R.id.main_nav_host
+    override val splashController = SplashController(this)
+    override val snackbarView: View
+        get() {
+            val fragmentOverride = currentFragment?.snackbarView
+            return fragmentOverride ?: super.snackbarView
+        }
+    override val snackbarAnchorView: View?
+        get() {
+            val fragmentAnchor = currentFragment?.snackbarAnchorView
+            return when {
+                fragmentAnchor?.isVisible == true -> fragmentAnchor
+                binding.mainNavigation.isVisible -> return binding.mainNavigation
+                else -> null
+            }
+        }
+
+    private var isRootFragment = true
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(Theme.selected.themeRes)
+        splashController.preOnCreate()
+        super.onCreate(savedInstanceState)
+        splashController.onCreate(savedInstanceState)
+
+        setContent {
+            YourAppTheme {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    val navController = rememberNavController()
+                    NavGraph(navController)
+                    MetroScreen(viewModel(), navController)
+                }
+            }
+        }
+    }
+
+    @Preview
+    @Composable
+    fun PreviewMainActivity() {
+        YourAppTheme {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                val navController = rememberNavController()
+                MetroScreen(viewModel(), navController)
+            }
+        }
+    }
+}
+
+    private fun getWallpaperColor(context: Context): Int? {
+        val wallpaperManager = context.getSystemService(Context.WALLPAPER_SERVICE) as WallpaperManager
+        val drawable = wallpaperManager.drawable
+        return WallpaperColorExtractor.extractDominantColor(drawable)
+    }
+
+    @SuppressLint("InlinedApi")
+    override fun onCreateUi(savedInstanceState: Bundle?) {
+        setContentView()
+        showUnsupportedMessage()
+        askForHomeShortcut()
+
+        // Ask permission to post notifications for background update check
+        if (Config.checkUpdate) {
+            withPermission(Manifest.permission.POST_NOTIFICATIONS) {
+                Config.checkUpdate = it
+            }
+        }
+
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
+        navigation.addOnDestinationChangedListener { _, destination, _ ->
+            isRootFragment = when (destination.id) {
+                R.id.homeFragment,
+                R.id.modulesFragment,
+                R.id.superuserFragment,
+                R.id.logFragment -> true
+                else -> false
+            }
+
+            setDisplayHomeAsUpEnabled(!isRootFragment)
+            requestNavigationHidden(!isRootFragment)
+
+            binding.mainNavigation.menu.forEach {
+                if (it.itemId == destination.id) {
+                    it.isChecked = true
+                }
+            }
+        }
+
+        setSupportActionBar(binding.mainToolbar)
+
+        binding.mainNavigation.setOnItemSelectedListener {
+            getScreen(it.itemId)?.navigate()
+            true
+        }
+        binding.mainNavigation.setOnItemReselectedListener {
+            // https://issuetracker.google.com/issues/124538620
+        }
+        binding.mainNavigation.menu.apply {
+            findItem(R.id.superuserFragment)?.isEnabled = Info.showSuperUser
+            findItem(R.id.modulesFragment)?.isEnabled = Info.env.isActive && LocalModule.loaded()
+        }
+
+        val section =
+            if (intent.action == Intent.ACTION_APPLICATION_PREFERENCES)
+                Const.Nav.SETTINGS
+            else
+                intent.getStringExtra(Const.Key.OPEN_SECTION)
+
+        getScreen(section)?.navigate()
+
+        if (!isRootFragment) {
+            requestNavigationHidden(requiresAnimation = savedInstanceState == null)
+        }
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            android.R.id.home -> onBackPressed()
+            else -> return super.onOptionsItemSelected(item)
+        }
+        return true
+    }
+
+    fun setDisplayHomeAsUpEnabled(isEnabled: Boolean) {
+        binding.mainToolbar.startAnimations()
+        when {
+            isEnabled -> binding.mainToolbar.setNavigationIcon(R.drawable.ic_back_md2)
+            else -> binding.mainToolbar.navigationIcon = null
+        }
+    }
+
+    internal fun requestNavigationHidden(hide: Boolean = true, requiresAnimation: Boolean = true) {
+        val bottomView = binding.mainNavigation
+        if (requiresAnimation) {
+            bottomView.isVisible = true
+            bottomView.isHidden = hide
+        } else {
+            bottomView.isGone = hide
+        }
+    }
+
+    fun invalidateToolbar() {
+        //binding.mainToolbar.startAnimations()
+        binding.mainToolbar.invalidate()
+    }
+
+    private fun getScreen(name: String?): NavDirections? {
+        return when (name) {
+            Const.Nav.SUPERUSER -> MainDirections.actionSuperuserFragment()
+            Const.Nav.MODULES -> MainDirections.actionModuleFragment()
+            Const.Nav.SETTINGS -> HomeFragmentDirections.actionHomeFragmentToSettingsFragment()
+            else -> null
+        }
+    }
+
+    private fun getScreen(id: Int): NavDirections? {
+        return when (id) {
+            R.id.homeFragment -> MainDirections.actionHomeFragment()
+            R.id.modulesFragment -> MainDirections.actionModuleFragment()
+            R.id.superuserFragment -> MainDirections.actionSuperuserFragment()
+            R.id.logFragment -> MainDirections.actionLogFragment()
+            else -> null
+        }
+    }
+
+    @SuppressLint("InlinedApi")
+    override fun showInvalidStateMessage(): Unit = runOnUiThread {
+        MagiskDialog(this).apply {
+            setTitle(CoreR.string.unsupport_nonroot_stub_title)
+            setMessage(CoreR.string.unsupport_nonroot_stub_msg)
+            setButton(MagiskDialog.ButtonType.POSITIVE) {
+                text = CoreR.string.install
+                onClick {
+                    withPermission(REQUEST_INSTALL_PACKAGES) {
+                        if (!it) {
+                            toast(CoreR.string.install_unknown_denied, Toast.LENGTH_SHORT)
+                            showInvalidStateMessage()
+                        } else {
+                            lifecycleScope.launch {
+                                AppMigration.restore(this@MainActivity)
+                            }
+                        }
+                    }
+                }
+            }
+            setCancelable(false)
+            show()
+        }
+    }
+
+    private fun showUnsupportedMessage() {
+        if (Info.env.isUnsupported) {
+            MagiskDialog(this).apply {
+                setTitle(CoreR.string.unsupport_magisk_title)
+                setMessage(CoreR.string.unsupport_magisk_msg, Const.Version.MIN_VERSION)
+                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
+                setCancelable(false)
+            }.show()
+        }
+
+        if (!Info.isEmulator && Info.env.isActive && System.getenv("PATH")
+                ?.split(':')
+                ?.filterNot { File("$it/magisk").exists() }
+                ?.any { File("$it/su").exists() } == true) {
+            MagiskDialog(this).apply {
+                setTitle(CoreR.string.unsupport_general_title)
+                setMessage(CoreR.string.unsupport_other_su_msg)
+                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
+                setCancelable(false)
+            }.show()
+        }
+
+        if (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
+            MagiskDialog(this).apply {
+                setTitle(CoreR.string.unsupport_general_title)
+                setMessage(CoreR.string.unsupport_system_app_msg)
+                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
+                setCancelable(false)
+            }.show()
+        }
+    }
+}

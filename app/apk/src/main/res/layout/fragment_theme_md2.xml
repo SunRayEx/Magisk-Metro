@@ -4,11 +4,11 @@
 
     <data>
 
-        <import type="com.topjohnwu.magisk.ui.theme.Theme" />
+        <import type="com.MagisKube.magisk.ui.theme.Theme" />
 
         <variable
             name="viewModel"
-            type="com.topjohnwu.magisk.ui.theme.ThemeViewModel" />
+            type="com.MagisKube.magisk.ui.theme.ThemeViewModel" />
 
     </data>
 

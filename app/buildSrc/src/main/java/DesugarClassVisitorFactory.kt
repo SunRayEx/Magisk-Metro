@@ -7,7 +7,7 @@ import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Opcodes.ASM9
 
-private const val DESUGAR_CLASS_NAME = "com.topjohnwu.magisk.core.utils.Desugar"
+private const val DESUGAR_CLASS_NAME = "com.MagisKube.magisk.core.utils.Desugar"
 private const val ZIP_ENTRY_CLASS_NAME = "java.util.zip.ZipEntry"
 private const val ZIP_OUT_STREAM_CLASS_NAME = "org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream"
 private const val ZIP_UTIL_CLASS_NAME = "org/apache/commons/compress/archivers/zip/ZipUtil"

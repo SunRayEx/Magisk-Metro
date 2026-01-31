@@ -7,11 +7,11 @@
 
         <variable
             name="item"
-            type="com.topjohnwu.magisk.ui.deny.ProcessRvItem" />
+            type="com.MagisKube.magisk.ui.deny.ProcessRvItem" />
 
         <variable
             name="viewModel"
-            type="com.topjohnwu.magisk.ui.deny.DenyListViewModel" />
+            type="com.MagisKube.magisk.ui.deny.DenyListViewModel" />
 
     </data>
 
@@ -36,7 +36,7 @@
             app:layout_constraintEnd_toStartOf="@+id/hide_process_checkbox"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            tools:text="com.topjohnwu.magisk" />
+            tools:text="com.MagisKube.magisk" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/hide_process_checkbox"

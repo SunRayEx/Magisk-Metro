@@ -12,10 +12,10 @@ ksp {
 }
 
 android {
-    namespace = "com.topjohnwu.magisk.core"
+    namespace = "com.MagisKube.magisk.core"
 
     defaultConfig {
-        buildConfigField("String", "APP_PACKAGE_NAME", "\"com.topjohnwu.magisk\"")
+        buildConfigField("String", "APP_PACKAGE_NAME", "\"com.magiskube.magisk\"")
         buildConfigField("int", "APP_VERSION_CODE", "${Config.versionCode}")
         buildConfigField("String", "APP_VERSION_NAME", "\"${Config.version}\"")
         buildConfigField("int", "STUB_VERSION", Config.stubVersion)
@@ -33,12 +33,21 @@ android {
 }
 
 dependencies {
+    // Material Design
+    api("com.google.android.material:material:1.12.0")
+    
+
+    // AndroidX
+    api("androidx.customview:customview:1.1.0")
+    api("androidx.interpolator:interpolator:1.0.0")
+
     api(project(":shared"))
     coreLibraryDesugaring(libs.jdk.libs)
 
     api(libs.timber)
     api(libs.markwon.core)
     implementation(libs.bcpkix)
+    implementation(libs.bcprov)
     implementation(libs.commons.compress)
 
     api(libs.libsu.core)

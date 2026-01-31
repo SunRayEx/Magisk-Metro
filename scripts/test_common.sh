@@ -58,14 +58,14 @@ run_setup() {
   # Install the test app
   adb install -r -g out/test.apk
 
-  local app='com.topjohnwu.magisk.test/com.topjohnwu.magisk.test.AppTestRunner'
+  local app='com.MagisKube.magisk.test/com.MagisKube.magisk.test.AppTestRunner'
 
   # Run setup through the test app
   am_instrument '.Environment#setupEnvironment' $app
 }
 
 run_tests() {
-  local pkg='com.topjohnwu.magisk.test'
+  local pkg='com.MagisKube.magisk.test'
   local self="$pkg/$pkg.TestRunner"
   local app="$pkg/$pkg.AppTestRunner"
   local stub="repackaged.$pkg/$pkg.AppTestRunner"

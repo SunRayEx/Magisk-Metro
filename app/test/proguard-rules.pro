@@ -3,7 +3,7 @@
 -keep class androidx.test.** { *; }
 
 # Make sure the classloader constructor is kept
--keepclassmembers class com.topjohnwu.magisk.test.TestClassLoader { <init>(); }
+-keepclassmembers class com.MagisKube.magisk.test.TestClassLoader { <init>(); }
 
 # Repackage dependencies
 -repackageclasses 'deps'

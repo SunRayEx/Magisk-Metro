@@ -5,4 +5,5 @@
     <color name="light">#e0e0e0</color>
     <color name="su_request_background">#e0e0e0</color>
     <color name="splash_background">@color/ic_launcher_background</color>
+    <color name="colorOnSurface">#444444</color>
 </resources>

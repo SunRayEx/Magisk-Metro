@@ -5,15 +5,15 @@
 
     <data>
 
-        <import type="com.topjohnwu.magisk.R" />
+        <import type="com.MagisKube.magisk.R" />
 
         <variable
             name="item"
-            type="com.topjohnwu.magisk.ui.deny.DenyListRvItem" />
+            type="com.MagisKube.magisk.ui.deny.DenyListRvItem" />
 
         <variable
             name="viewModel"
-            type="com.topjohnwu.magisk.ui.deny.DenyListViewModel" />
+            type="com.MagisKube.magisk.ui.deny.DenyListViewModel" />
 
     </data>
 
@@ -78,9 +78,9 @@
                     app:layout_constraintEnd_toEndOf="@+id/hide_name"
                     app:layout_constraintStart_toStartOf="@+id/hide_name"
                     app:layout_constraintTop_toBottomOf="@+id/hide_name"
-                    tools:text="com.topjohnwu.magisk" />
+                    tools:text="com.MagisKube.magisk" />
 
-                <com.topjohnwu.widget.IndeterminateCheckBox
+                <com.MagisKube.widget.IndeterminateCheckBox
                     android:id="@+id/hide_expand_icon"
                     state="@={item.state}"
                     android:layout_width="0dp"

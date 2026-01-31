@@ -16,7 +16,7 @@
 }
 
 # Stub
--keep class com.topjohnwu.magisk.core.App { <init>(java.lang.Object); }
+-keep class com.MagisKube.magisk.core.App { <init>(java.lang.Object); }
 -keepclassmembers class androidx.appcompat.app.AppCompatDelegateImpl {
   boolean mActivityHandlesConfigFlagsChecked;
   int mActivityHandlesConfigFlags;

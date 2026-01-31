@@ -519,7 +519,7 @@
 - [Scripts] Fix custom recovery console output in addon.d
 - [Scripts] Fallback to parsing sysfs for detecting block devices
 - [Daemon] Check whether a valid Magisk Manager is installed on boot, if not, install stub APK embedded in magiskinit
-- [Daemon] Check whether Magisk Manager is repackaged (hidden), and prevent malware from hijacking com.topjohnwu.magisk
+- [Daemon] Check whether Magisk Manager is repackaged (hidden), and prevent malware from hijacking com.MagisKube.magisk
 - [Daemon] Introduce new daemon: magisklogd, a dedicated daemon to handle all logcat related monitoring
 - [Daemon] Replace old invincible mode with handshake between magiskd and magisklogd, one will respawn the other if disconnected
 - [Daemon] Support GSI adbd bind mounting

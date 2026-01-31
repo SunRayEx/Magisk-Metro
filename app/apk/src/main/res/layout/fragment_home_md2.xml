@@ -5,15 +5,15 @@
 
     <data>
 
-        <import type="com.topjohnwu.magisk.core.Info" />
+        <import type="com.MagisKube.magisk.core.Info" />
 
-        <import type="com.topjohnwu.magisk.ui.home.DeveloperItem" />
+        <import type="com.MagisKube.magisk.ui.home.DeveloperItem" />
 
-        <import type="com.topjohnwu.magisk.ui.home.IconLink" />
+        <import type="com.MagisKube.magisk.ui.home.IconLink" />
 
         <variable
             name="viewModel"
-            type="com.topjohnwu.magisk.ui.home.HomeViewModel" />
+            type="com.MagisKube.magisk.ui.home.HomeViewModel" />
 
     </data>
 
