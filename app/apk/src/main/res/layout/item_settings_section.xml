@@ -6,7 +6,7 @@
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.ui.settings.BaseSettingsItem" />
+            type="com.topjohnwu.magisk.ui.settings.BaseSettingsItem" />
 
     </data>
 

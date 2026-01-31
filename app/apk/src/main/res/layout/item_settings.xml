@@ -7,11 +7,11 @@
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.ui.settings.BaseSettingsItem" />
+            type="com.topjohnwu.magisk.ui.settings.BaseSettingsItem" />
 
         <variable
             name="handler"
-            type="com.MagisKube.magisk.ui.settings.BaseSettingsItem.Handler" />
+            type="com.topjohnwu.magisk.ui.settings.BaseSettingsItem.Handler" />
 
     </data>
 

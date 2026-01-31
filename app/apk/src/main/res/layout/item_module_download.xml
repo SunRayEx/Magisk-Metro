@@ -6,11 +6,11 @@
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.ui.module.InstallModule" />
+            type="com.topjohnwu.magisk.ui.module.InstallModule" />
 
         <variable
             name="viewModel"
-            type="com.MagisKube.magisk.ui.module.ModuleViewModel" />
+            type="com.topjohnwu.magisk.ui.module.ModuleViewModel" />
 
     </data>
 

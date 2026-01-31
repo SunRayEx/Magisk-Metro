@@ -7,7 +7,7 @@
 
         <variable
             name="data"
-            type="com.MagisKube.magisk.ui.settings.Hide" />
+            type="com.topjohnwu.magisk.ui.settings.Hide" />
 
     </data>
 

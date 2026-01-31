@@ -7,13 +7,13 @@
 
     <fragment
         android:id="@+id/denyFragment"
-        android:name="com.MagisKube.magisk.ui.deny.DenyListFragment"
+        android:name="com.magiskube.magisk.ui.deny.DenyListFragment"
         android:label="DenyListFragment"
         tools:layout="@layout/fragment_deny_md2" />
 
     <fragment
         android:id="@+id/homeFragment"
-        android:name="com.MagisKube.magisk.ui.home.HomeFragment"
+        android:name="com.magiskube.magisk.ui.home.HomeFragment"
         android:label="HomeFragment"
         tools:layout="@layout/fragment_home_md2">
 
@@ -37,7 +37,7 @@
 
     <fragment
         android:id="@+id/flashFragment"
-        android:name="com.MagisKube.magisk.ui.flash.FlashFragment"
+        android:name="com.magiskube.magisk.ui.flash.FlashFragment"
         android:label="FlashFragment"
         tools:layout="@layout/fragment_flash_md2">
 
@@ -55,7 +55,7 @@
 
     <fragment
         android:id="@+id/actionFragment"
-        android:name="com.MagisKube.magisk.ui.module.ActionFragment"
+        android:name="com.magiskube.magisk.ui.module.ActionFragment"
         android:label="ActionFragment"
         tools:layout="@layout/fragment_action_md2" >
 
@@ -70,25 +70,25 @@
 
     <fragment
         android:id="@+id/installFragment"
-        android:name="com.MagisKube.magisk.ui.install.InstallFragment"
+        android:name="com.magiskube.magisk.ui.install.InstallFragment"
         android:label="InstallFragment"
         tools:layout="@layout/fragment_install_md2" />
 
     <fragment
         android:id="@+id/logFragment"
-        android:name="com.MagisKube.magisk.ui.log.LogFragment"
+        android:name="com.magiskube.magisk.ui.log.LogFragment"
         android:label="LogFragment"
         tools:layout="@layout/fragment_log_md2" />
 
     <fragment
         android:id="@+id/modulesFragment"
-        android:name="com.MagisKube.magisk.ui.module.ModuleFragment"
+        android:name="com.magiskube.magisk.ui.module.ModuleFragment"
         android:label="ModuleFragment"
         tools:layout="@layout/fragment_module_md2" />
 
     <fragment
         android:id="@+id/settingsFragment"
-        android:name="com.MagisKube.magisk.ui.settings.SettingsFragment"
+        android:name="com.magiskube.magisk.ui.settings.SettingsFragment"
         android:label="SettingsFragment"
         tools:layout="@layout/fragment_settings_md2">
 
@@ -112,13 +112,13 @@
 
     <fragment
         android:id="@+id/superuserFragment"
-        android:name="com.MagisKube.magisk.ui.superuser.SuperuserFragment"
+        android:name="com.magiskube.magisk.ui.superuser.SuperuserFragment"
         android:label="SuperuserFragment"
         tools:layout="@layout/fragment_superuser_md2" />
 
     <fragment
         android:id="@+id/themeFragment"
-        android:name="com.MagisKube.magisk.ui.theme.ThemeFragment"
+        android:name="com.magiskube.magisk.ui.theme.ThemeFragment"
         android:label="ThemeFragment"
         tools:layout="@layout/fragment_theme_md2" />
 

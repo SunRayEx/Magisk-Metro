@@ -5,11 +5,11 @@
 
     <data>
 
-        <import type="com.MagisKube.magisk.databinding.DataBindingAdaptersKt" />
+        <import type="com.topjohnwu.magisk.databinding.DataBindingAdaptersKt" />
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.ui.superuser.PolicyRvItem" />
+            type="com.topjohnwu.magisk.ui.superuser.PolicyRvItem" />
 
     </data>
 
@@ -85,7 +85,7 @@
                         app:layout_constraintStart_toStartOf="@id/policy_app_name"
                         app:layout_constraintTop_toBottomOf="@id/policy_app_name"
                         app:layout_constraintVertical_bias="0"
-                        tools:text="com.MagisKube.magisk" />
+                        tools:text="com.topjohnwu.magisk" />
 
                     <FrameLayout
                         android:id="@+id/policy_indicator"

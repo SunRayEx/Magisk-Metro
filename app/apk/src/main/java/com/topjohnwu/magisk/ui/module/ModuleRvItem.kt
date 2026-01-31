@@ -74,5 +74,12 @@ class LocalModuleRvItem(
         isRemoved = !isRemoved
     }
 
+    val stateIconRes: Int
+        get() = when {
+            isRemoved -> R.drawable.ic_delete_md2
+            isUpdated -> R.drawable.ic_update_md2
+            else -> 0
+        }
+
     override fun itemSameAs(other: LocalModuleRvItem): Boolean = item.id == other.item.id
 }

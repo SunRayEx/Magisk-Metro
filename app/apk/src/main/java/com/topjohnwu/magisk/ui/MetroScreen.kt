@@ -1,7 +1,13 @@
-#!/usr/bin/env kotlin
+package com.topjohnwu.magisk.ui
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.palette.graphics.Palette
+import com.google.accompanist.systemuicontroller.SystemUiController
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -15,25 +21,22 @@ class MagiskUiState(
 )
 
 class MagiskViewModel : ViewModel() {
-    // 1. 定义状态流，UI 会监听这个变量
     private val _uiState = MutableStateFlow(MagiskUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
-        // 初始化时开始获取数据
         fetchMagiskStatus()
     }
 
     private fun fetchMagiskStatus() {
         viewModelScope.launch {
-            // --- 真实场景：在这里调用 Magisk 底层代码 ---
-            val version = getMagiskVersion()
-            val rootStatus = checkRootAccess()
-            val modulesCount = countModules()
-            val appsCount = countApps()
-            val denyListCount = countDenyList()
+            // NOTE: placeholder functions — replace with real implementations
+            val version = "unknown"
+            val rootStatus = false
+            val modulesCount = 0
+            val appsCount = 0
+            val denyListCount = 0
 
-            // 更新状态，UI 会自动刷新
             _uiState.value = _uiState.value.copy(
                 magiskVersion = version,
                 isRooted = rootStatus,
@@ -45,14 +48,7 @@ class MagiskViewModel : ViewModel() {
     }
 }
 
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
-import androidx.palette.graphics.Palette
-import com.google.accompanist.systemuicontroller.rememberSystemUiController
-import com.google.accompanist.systemuicontroller.SystemUiController
-
 object WallpaperColorExtractor {
-
     fun extractDominantColor(drawable: Drawable): Int? {
         val bitmap = drawable.toBitmap()
         return Palette.from(bitmap).generate().getDominantColor(0)
@@ -60,18 +56,12 @@ object WallpaperColorExtractor {
 
     private fun Drawable.toBitmap(): Bitmap {
         val bitmap = Bitmap.createBitmap(intrinsicWidth, intrinsicHeight, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bitmap)
+        val canvas = Canvas(bitmap)
         setBounds(0, 0, canvas.width, canvas.height)
         draw(canvas)
         return bitmap
     }
 }
-
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 class SettingsViewModel : ViewModel() {
     private val _isMonetEnabled = MutableStateFlow(false)

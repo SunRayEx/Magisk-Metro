@@ -6,7 +6,7 @@
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.view.TextItem" />
+            type="com.topjohnwu.magisk.view.TextItem" />
 
     </data>
 

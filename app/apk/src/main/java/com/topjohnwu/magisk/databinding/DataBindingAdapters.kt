@@ -42,6 +42,7 @@ import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.utils.TextHolder
 import com.topjohnwu.superuser.internal.UiThreadHandler
 import com.topjohnwu.widget.IndeterminateCheckBox
+import com.github.topjohnwu.widget.IndeterminateCheckBox as GhIndeterminateCheckBox
 import kotlin.math.roundToInt
 
 @BindingAdapter("gone")
@@ -267,6 +268,25 @@ fun getState(view: IndeterminateCheckBox) = view.state
 @BindingAdapter("stateAttrChanged")
 fun setListeners(
     view: IndeterminateCheckBox,
+    attrChange: InverseBindingListener
+) {
+    view.setOnStateChangedListener { _, _ ->
+        attrChange.onChange()
+    }
+}
+
+@BindingAdapter("state")
+fun setState(view: GhIndeterminateCheckBox, state: Boolean?) {
+    if (view.state != state)
+        view.state = state
+}
+
+@InverseBindingAdapter(attribute = "state")
+fun getState(view: GhIndeterminateCheckBox) = view.state
+
+@BindingAdapter("stateAttrChanged")
+fun setListeners(
+    view: GhIndeterminateCheckBox,
     attrChange: InverseBindingListener
 ) {
     view.setOnStateChangedListener { _, _ ->

@@ -5,11 +5,11 @@
 
     <data>
 
-        <import type="com.MagisKube.magisk.ui.home.HomeViewModel.State" />
+        <import type="com.topjohnwu.magisk.ui.home.HomeViewModel.State" />
 
         <variable
             name="viewModel"
-            type="com.MagisKube.magisk.ui.home.HomeViewModel" />
+            type="com.topjohnwu.magisk.ui.home.HomeViewModel" />
 
     </data>
 
@@ -157,7 +157,7 @@
                                 android:id="@+id/home_manager_extra_connection_value"
                                 style="@style/W.Home.ItemContent.Right"
                                 android:text="@{context.packageName}"
-                                tools:text="com.MagisKube.magisk" />
+                                tools:text="com.topjohnwu.magisk" />
 
                         </LinearLayout>
 

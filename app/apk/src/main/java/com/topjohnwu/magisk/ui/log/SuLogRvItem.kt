@@ -26,6 +26,9 @@ class SuLogRvItem(val log: SuLog) : ObservableRvItem(), DiffItem<SuLogRvItem> {
     var isBottom = false
         set(value) = set(value, field, { field = it }, BR.bottom)
 
+    val bulletRes: Int
+        get() = if (log.action >= 2) R.drawable.ic_check_md2 else R.drawable.ic_close_md2
+
     override fun itemSameAs(other: SuLogRvItem) = log.appName == other.log.appName
 
     private fun genInfo(): String {
