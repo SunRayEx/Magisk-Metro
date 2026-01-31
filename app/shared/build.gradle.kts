@@ -5,6 +5,6 @@ plugins {
 setupCommon()
 
 android {
-    namespace = "com.MagisKube.shared"
+    namespace = "com.magiskube.shared"
     enableKotlin = false
 }

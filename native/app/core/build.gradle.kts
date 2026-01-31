@@ -12,7 +12,7 @@ ksp {
 }
 
 android {
-    namespace = "com.MagisKube.magisk.core"
+    namespace = "com.magiskube.magisk.core"
 
     defaultConfig {
         buildConfigField("String", "APP_PACKAGE_NAME", "\"com.magiskube.magisk\"")

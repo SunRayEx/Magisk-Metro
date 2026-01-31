@@ -5,15 +5,15 @@
 
     <data>
 
-        <import type="com.MagisKube.magisk.R" />
+        <import type="com.magiskube.magisk.R" />
 
         <variable
             name="item"
-            type="com.MagisKube.magisk.ui.module.LocalModuleRvItem" />
+            type="com.magiskube.magisk.ui.module.LocalModuleRvItem" />
 
         <variable
             name="viewModel"
-            type="com.MagisKube.magisk.ui.module.ModuleViewModel" />
+            type="com.magiskube.magisk.ui.module.ModuleViewModel" />
 
     </data>
 

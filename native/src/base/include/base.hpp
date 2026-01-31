@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <functional>
+#include <pthread.h>
 
 #include <rust/cxx.h>
 

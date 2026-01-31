@@ -13,11 +13,11 @@
     </application>
 
     <instrumentation
-        android:name="com.MagisKube.magisk.test.AppTestRunner"
-        android:targetPackage="com.MagisKube.magisk" />
+        android:name="com.magiskube.magisk.test.AppTestRunner"
+        android:targetPackage="com.magiskube.magisk" />
 
     <instrumentation
-        android:name="com.MagisKube.magisk.test.TestRunner"
-        android:targetPackage="com.MagisKube.magisk.test" />
+        android:name="com.magiskube.magisk.test.TestRunner"
+        android:targetPackage="com.magiskube.magisk.test" />
 
 </manifest>

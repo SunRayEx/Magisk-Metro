@@ -10,7 +10,7 @@ lsparanoid {
 }
 
 android {
-    namespace = "com.MagisKube.magisk"
+    namespace = "com.magiskube.magisk"
 
     val canary = !Config.version.contains(".")
     val base = "https://github.com/SunRayEx/Magisk-Metro/releases/download/"
@@ -18,7 +18,7 @@ android {
     val canaryUrl = base + "canary-${Config.versionCode}/"
 
     defaultConfig {
-        applicationId = "com.MagisKube.magisk"
+        applicationId = "com.magiskube.magisk"
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "APK_URL", "\"$url\"")
