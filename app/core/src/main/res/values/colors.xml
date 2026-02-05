@@ -6,4 +6,53 @@
     <color name="su_request_background">#e0e0e0</color>
     <color name="splash_background">@color/ic_launcher_background</color>
     <color name="colorOnSurface">#444444</color>
+
+    <!-- MetroUI Tile Colors - Material Design 3 Monet Inspired -->
+    <color name="metro_tile_magisk_primary">#6750A4</color>
+    <color name="metro_tile_magisk_on_primary">#FFFFFF</color>
+    <color name="metro_tile_magisk_container">#EADDFF</color>
+    <color name="metro_tile_magisk_on_container">#21005D</color>
+
+    <color name="metro_tile_rooted_primary">#00796B</color>
+    <color name="metro_tile_rooted_on_primary">#FFFFFF</color>
+    <color name="metro_tile_rooted_container">#C8E6C9</color>
+    <color name="metro_tile_rooted_on_container">#002204</color>
+
+    <color name="metro_tile_excluded_primary">#0288D1</color>
+    <color name="metro_tile_excluded_on_primary">#FFFFFF</color>
+    <color name="metro_tile_excluded_container">#B3E5FC</color>
+    <color name="metro_tile_excluded_on_container">#001F2A</color>
+
+    <color name="metro_tile_modules_primary">#F57C00</color>
+    <color name="metro_tile_modules_on_primary">#FFFFFF</color>
+    <color name="metro_tile_modules_container">#FFE0B2</color>
+    <color name="metro_tile_modules_on_container">#3E2723</color>
+
+    <color name="metro_tile_contributors_primary">#7B1FA2</color>
+    <color name="metro_tile_contributors_on_primary">#FFFFFF</color>
+    <color name="metro_tile_contributors_container">#E1BEE7</color>
+    <color name="metro_tile_contributors_on_container">#4A148C</color>
+
+    <color name="metro_tile_logs_primary">#C62828</color>
+    <color name="metro_tile_logs_on_primary">#FFFFFF</color>
+    <color name="metro_tile_logs_container">#FFCDD2</color>
+    <color name="metro_tile_logs_on_container">#B71C1C</color>
+
+    <!-- Ripple and overlay colors -->
+    <color name="metro_tile_ripple">#1F000000</color>
+    <color name="metro_overlay_background">#E8DEF8</color>
+
+    <!-- Metro Tile Background Colors for Menus -->
+    <color name="metro_tile_magisk_background">#EADDFF</color>
+    <color name="metro_tile_magisk_on_background">#21005D</color>
+    <color name="metro_tile_rooted_background">#C8E6C9</color>
+    <color name="metro_tile_rooted_on_background">#002204</color>
+    <color name="metro_tile_excluded_background">#B3E5FC</color>
+    <color name="metro_tile_excluded_on_background">#001F2A</color>
+    <color name="metro_tile_modules_background">#FFE0B2</color>
+    <color name="metro_tile_modules_on_background">#3E2723</color>
+    <color name="metro_tile_contributors_background">#E1BEE7</color>
+    <color name="metro_tile_contributors_on_background">#4A148C</color>
+    <color name="metro_tile_logs_background">#FFCDD2</color>
+    <color name="metro_tile_logs_on_background">#B71C1C</color>
 </resources>

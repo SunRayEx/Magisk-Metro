@@ -1,16 +1,65 @@
-> Task :stub:compileDebugJavaWithJavac
-Note: Some input files use or override a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
+> Task :apk:compileDebugKotlin
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:31:41 Unresolved reference 'ActivityMainMd2Binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:41:1 Class 'MainActivity' is not abstract and does not implement abstract members:
+fun onCreateUi(savedInstanceState: Bundle?): Unit
+val extension: ActivityExtension
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:43:5 'layoutRes' overrides nothing.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:44:5 'viewModel' overrides nothing.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:44:31 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <reified VM : ViewModel> ViewModelHolder.viewModel(): Lazy<VM>
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:45:5 'navHostId' overrides nothing.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:47:5 'snackbarView' overrides nothing.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:49:36 Unresolved reference 'currentFragment'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:50:46 Unresolved reference 'snackbarView'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:52:5 'snackbarAnchorView' overrides nothing.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:54:34 Unresolved reference 'currentFragment'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:55:20 Return type mismatch: expected 'View?', actual 'Any?'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:57:17 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:57:60 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:72:9 Unresolved reference 'navigation'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:72:54 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:72:57 Cannot infer type for value parameter 'destination'. Specify it explicitly.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:72:70 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:73:48 Unresolved reference 'id'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:84:13 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:85:21 Unresolved reference 'it'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:85:46 Unresolved reference 'id'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:86:21 Unresolved reference 'it'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:91:9 Unresolved reference 'setSupportActionBar'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:91:29 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:93:9 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:94:23 Unresolved reference 'it'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:94:35 Unresolved reference 'navigate'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:97:9 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:99:9 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:99:37 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:99:43 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:100:13 Unresolved reference 'findItem'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:101:13 Unresolved reference 'findItem'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:110:29 Unresolved reference 'navigate'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:126:9 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:128:26 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:129:21 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:134:26 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:144:9 Unresolved reference 'binding'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:147:43 Unresolved reference 'NavDirections'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:156:37 Unresolved reference 'NavDirections'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/MainActivity.kt:179:29 Unresolved reference 'lifecycleScope'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/metro/MetroFragment.kt:34:5 'onEventDispatched' overrides nothing. Potential signatures for overriding:
+fun onEventDispatched(event: ViewEvent): Unit
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/metro/MetroFragment.kt:34:43 Unresolved reference 'ViewEvent'.
+e: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/apk/src/main/java/com/magiskube/magisk/ui/metro/MetroFragment.kt:36:22 Unresolved reference 'CloseMenuEvent'.
 
-> Task :apk:kaptDebugKotlin FAILED
+> Task :apk:compileDebugKotlin FAILED
 
 [Incubating] Problems report is available at: file:///home/sunray/%E6%A8%A1%E6%9D%BF/app/build/reports/problems/problems-report.html
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':apk:kaptDebugKotlin'.
-> A failure occurred while executing org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask$KaptExecutionWorkAction
+Execution failed for task ':apk:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
 
 * Try:
 > Run with --info or --debug option to get more log output.
@@ -18,7 +67,7 @@ Execution failed for task ':apk:kaptDebugKotlin'.
 > Get more help at https://help.gradle.org.
 
 * Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':apk:kaptDebugKotlin'.
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':apk:compileDebugKotlin'.
         at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:135)
         at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:288)
         at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:133)
@@ -52,7 +101,7 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':apk:kap
         at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
         at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
         at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
-Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask$KaptExecutionWorkAction
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
         at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:289)
         at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:130)
         at org.gradle.internal.Factories$1.create(Factories.java:30)
@@ -136,7 +185,7 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
         at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:77)
         at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:46)
         at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:133)
-        at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:59)
+        at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:64)
         at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
         at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
         at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
@@ -160,9 +209,10 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
         at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:68)
         at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:132)
         ... 30 more
-Caused by: java.lang.reflect.InvocationTargetException
-        at org.jetbrains.kotlin.gradle.internal.KaptExecution.run(KaptWithoutKotlincTask.kt:336)
-        at org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask$KaptExecutionWorkAction.execute(KaptWithoutKotlincTask.kt:273)
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+        at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+        at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:112)
+        at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:75)
         at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
         at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
         at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
@@ -193,34 +243,6 @@ Caused by: java.lang.reflect.InvocationTargetException
         at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:164)
         at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:133)
         ... 2 more
-Caused by: java.lang.reflect.InvocationTargetException
-        at org.jetbrains.kotlin.kapt.base.AnnotationProcessingKt.doAnnotationProcessing(annotationProcessing.kt:98)
-        at org.jetbrains.kotlin.kapt.base.AnnotationProcessingKt.doAnnotationProcessing(annotationProcessing.kt:37)
-        at org.jetbrains.kotlin.kapt.base.Kapt.kapt(Kapt.kt:46)
-        ... 33 more
-Caused by: com.sun.tools.javac.processing.AnnotationProcessingError: android.databinding.tool.util.LoggedErrorException: Found data binding error(s):
-
-ERROR: Could not find accessor com.magiskube.magisk.ui.log.SuLogRvItem.bulletRes file://apk/src/main/res/layout/item_log_access_md2.xml Line:27
-ERROR: Cannot find a setter for <com.github.topjohnwu.widget.IndeterminateCheckBox state> that accepts parameter type 'java.lang.Boolean'
-
-If a binding adapter provides the setter, check that the adapter is annotated correctly and that the parameter type matches. file://apk/src/main/res/layout/item_hide_md2.xml Line:82
-ERROR: Could not find accessor com.magiskube.magisk.ui.module.LocalModuleRvItem.stateIconRes file://apk/src/main/res/layout/item_module_md2.xml Line:39
-
-        ... 36 more
-Caused by: android.databinding.tool.util.LoggedErrorException: Found data binding error(s):
-
-ERROR: Could not find accessor com.magiskube.magisk.ui.log.SuLogRvItem.bulletRes file://apk/src/main/res/layout/item_log_access_md2.xml Line:27
-ERROR: Cannot find a setter for <com.github.topjohnwu.widget.IndeterminateCheckBox state> that accepts parameter type 'java.lang.Boolean'
-
-If a binding adapter provides the setter, check that the adapter is annotated correctly and that the parameter type matches. file://apk/src/main/res/layout/item_hide_md2.xml Line:82
-ERROR: Could not find accessor com.magiskube.magisk.ui.module.LocalModuleRvItem.stateIconRes file://apk/src/main/res/layout/item_module_md2.xml Line:39
-
-        at android.databinding.tool.processing.Scope.assertNoError(Scope.java:114)
-        at android.databinding.annotationprocessor.ProcessDataBinding.doProcess(ProcessDataBinding.java:123)
-        at android.databinding.annotationprocessor.ProcessDataBinding.process(ProcessDataBinding.java:87)
-        at org.jetbrains.kotlin.kapt.base.incremental.IncrementalProcessor.process(incrementalProcessors.kt:88)
-        at org.jetbrains.kotlin.kapt.base.ProcessorWrapper.process(annotationProcessing.kt:217)
-        ... 36 more
 
 
-BUILD FAILED in 9s
+BUILD FAILED in 28s

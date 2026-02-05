@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    app:consumeSystemWindowsInsets="start|end"
-    app:edgeToEdge="true"
-    app:fitsSystemWindowsInsets="start|end"
-    tools:ignore="RtlHardcoded">
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+        <variable
+            name="viewModel"
+            type="com.magiskube.magisk.ui.MainViewModel" />
+    </data>
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:consumeSystemWindowsInsets="start|end"
+        app:edgeToEdge="true"
+        app:fitsSystemWindowsInsets="start|end"
+        tools:ignore="RtlHardcoded">
 
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/main_nav_host"
@@ -53,4 +61,5 @@
             app:labelVisibilityMode="labeled"
             app:menu="@menu/menu_bottom_nav" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</layout>

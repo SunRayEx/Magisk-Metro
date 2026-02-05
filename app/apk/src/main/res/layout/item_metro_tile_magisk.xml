@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <data>
+        <variable
+            name="viewModel"
+            type="com.magiskube.magisk.ui.metro.MetroViewModel" />
+    </data>
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/WidgetFoundation.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/l_50"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:background="@color/metro_tile_magisk_primary">
+
+            <ImageView
+                android:id="@+id/tile_icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/magisk"
+                android:src="@drawable/ic_superuser_filled_md2"
+                android:tint="@color/metro_tile_magisk_on_primary" />
+
+            <TextView
+                android:id="@+id/tile_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/magisk"
+                android:textColor="@color/metro_tile_magisk_on_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tile_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@{viewModel.magiskStatus}"
+                android:textColor="@color/metro_tile_magisk_on_primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tile_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@{viewModel.magiskVersion}"
+                android:textColor="@color/metro_tile_magisk_on_primary"
+                android:textSize="12sp"
+                android:alpha="0.8" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+</layout>

@@ -78,9 +78,10 @@
                     app:layout_constraintTop_toBottomOf="@+id/hide_name"
                     tools:text="com.magiskube.magisk" />
 
+                <!-- Temporarily commented out IndeterminateCheckBox
                 <com.magiskube.widget.IndeterminateCheckBox
                     android:id="@+id/hide_expand_icon"
-                    state="@{item.state}"
+                    android:checked="@{item.state == true}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="@dimen/l1"
@@ -89,8 +90,7 @@
                     android:nextFocusLeft="@id/hide_expand"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
+                    app:layout_constraintTop_toTopOf="parent" /> -->
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <androidx.recyclerview.widget.RecyclerView

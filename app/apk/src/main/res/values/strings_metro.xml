@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MetroUI Strings -->
+    <string name="metro_tile_magisk_status">Up to date</string>
+    <string name="metro_tile_rooted_apps">Rooted Apps</string>
+    <string name="metro_tile_excluded_apps">Excluded Apps</string>
+    <string name="metro_tile_installed_modules">Installed Modules</string>
+    <string name="metro_tile_core_contributors">Core Contributors</string>
+    <string name="metro_tile_errors_count">%d Errors</string>
+    <string name="metro_tile_warnings_count">%d Warnings</string>
+
+    <!-- Magisk Menu -->
+    <string name="metro_menu_magisk_install">Install Magisk</string>
+    <string name="metro_menu_magisk_uninstall">Uninstall Magisk</string>
+    <string name="metro_menu_magisk_settings">Magisk Settings</string>
+
+    <!-- Rooted Apps Menu -->
+    <string name="metro_menu_rooted_list">Rooted Apps List</string>
+    <string name="metro_menu_grant_superuser">Grant Superuser</string>
+    <string name="metro_menu_revoke_superuser">Revoke Superuser</string>
+
+    <!-- Excluded Apps Menu -->
+    <string name="metro_menu_excluded_list">Excluded Apps List</string>
+    <string name="metro_menu_add_excluded">Add Excluded App</string>
+    <string name="metro_menu_remove_excluded">Remove Excluded App</string>
+
+    <!-- Modules Menu -->
+    <string name="metro_menu_modules_list">Modules List</string>
+    <string name="metro_menu_install_module">Install Module</string>
+    <string name="metro_menu_modules_settings">Modules Settings</string>
+
+    <!-- Contributors Menu -->
+    <string name="metro_menu_view_contributors">View Contributors</string>
+    <string name="metro_menu_donate">Donate</string>
+    <string name="metro_menu_view_source">View Source</string>
+
+    <!-- Logs Menu -->
+    <string name="metro_menu_view_logs">View Logs</string>
+    <string name="metro_menu_su_logs">SU Logs</string>
+    <string name="metro_menu_magisk_logs">Magisk Logs</string>
+</resources>

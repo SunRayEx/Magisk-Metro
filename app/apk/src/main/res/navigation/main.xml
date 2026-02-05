@@ -3,7 +3,31 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
-    app:startDestination="@id/homeFragment">
+    app:startDestination="@id/metroFragment">
+
+    <fragment
+        android:id="@+id/metroFragment"
+        android:name="com.magiskube.magisk.ui.metro.MetroFragment"
+        android:label="MetroFragment"
+        tools:layout="@layout/fragment_metro">
+
+        <action
+            android:id="@+id/action_metroFragment_to_installFragment"
+            app:destination="@id/installFragment"
+            app:enterAnim="@anim/fragment_enter"
+            app:exitAnim="@anim/fragment_exit"
+            app:popEnterAnim="@anim/fragment_enter_pop"
+            app:popExitAnim="@anim/fragment_exit_pop" />
+
+        <action
+            android:id="@+id/action_metroFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment"
+            app:enterAnim="@anim/fragment_enter"
+            app:exitAnim="@anim/fragment_exit"
+            app:popEnterAnim="@anim/fragment_enter_pop"
+            app:popExitAnim="@anim/fragment_exit_pop" />
+
+    </fragment>
 
     <fragment
         android:id="@+id/denyFragment"
@@ -124,12 +148,12 @@
 
     <action
         android:id="@+id/action_homeFragment"
-        app:destination="@id/homeFragment"
+        app:destination="@id/metroFragment"
         app:enterAnim="@anim/fragment_enter"
         app:exitAnim="@anim/fragment_exit"
         app:popEnterAnim="@anim/fragment_enter_pop"
         app:popExitAnim="@anim/fragment_exit_pop"
-        app:popUpTo="@id/homeFragment"
+        app:popUpTo="@id/metroFragment"
         app:popUpToInclusive="true" />
 
     <action
@@ -139,7 +163,7 @@
         app:exitAnim="@anim/fragment_exit"
         app:popEnterAnim="@anim/fragment_enter_pop"
         app:popExitAnim="@anim/fragment_exit_pop"
-        app:popUpTo="@id/homeFragment" />
+        app:popUpTo="@id/metroFragment" />
 
     <action
         android:id="@+id/action_logFragment"
@@ -148,7 +172,7 @@
         app:exitAnim="@anim/fragment_exit"
         app:popEnterAnim="@anim/fragment_enter_pop"
         app:popExitAnim="@anim/fragment_exit_pop"
-        app:popUpTo="@id/homeFragment" />
+        app:popUpTo="@id/metroFragment" />
 
     <action
         android:id="@+id/action_moduleFragment"
@@ -157,7 +181,7 @@
         app:exitAnim="@anim/fragment_exit"
         app:popEnterAnim="@anim/fragment_enter_pop"
         app:popExitAnim="@anim/fragment_exit_pop"
-        app:popUpTo="@id/homeFragment" />
+        app:popUpTo="@id/metroFragment" />
 
     <action
         android:id="@+id/action_flashFragment"
