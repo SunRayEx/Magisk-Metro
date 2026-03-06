@@ -58,8 +58,7 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
   }
 }
 
-final appsProvider =
-    StateNotifierProvider<AppsNotifier, List<AppInfo>>((ref) {
+final appsProvider = StateNotifierProvider<AppsNotifier, List<AppInfo>>((ref) {
   return AppsNotifier();
 });
 
@@ -93,7 +92,9 @@ final logsProvider = StreamProvider<List<String>>((ref) {
   return controller.stream;
 });
 
-class LogStreamController extends StreamController<List<String>> {
+class LogStreamController {
+  final StreamController<List<String>> _controller =
+      StreamController<List<String>>();
   late final Timer _timer;
   final List<String> _logs = [];
   int _counter = 0;
@@ -113,7 +114,7 @@ class LogStreamController extends StreamController<List<String>> {
     '[E] I Don\'t Wanna Type!',
   ];
 
-  LogStreamController() : super() {
+  LogStreamController() {
     _addLog();
     _addLog();
     _addLog();
@@ -129,13 +130,14 @@ class LogStreamController extends StreamController<List<String>> {
       _logs.removeAt(0);
     }
     _counter++;
-    add(List.from(_logs));
+    _controller.add(List.from(_logs));
   }
 
-  @override
+  Stream<List<String>> get stream => _controller.stream;
+
   void dispose() {
     _timer.cancel();
-    super.dispose();
+    _controller.close();
   }
 }
 
@@ -143,8 +145,17 @@ final denyListEnabledProvider = StateProvider<bool>((ref) => true);
 
 final contributorsProvider = Provider<List<Contributor>>((ref) {
   return const [
-    Contributor(name: 'topjohnwu', platform: 'GitHub'),
-    Contributor(name: 'vvb2060', platform: 'GitHub'),
-    Contributor(name: '[HuskyDG]', platform: 'none'),
+    Contributor(
+        name: 'topjohnwu',
+        platform: 'GitHub',
+        github: 'https://github.com/topjohnwu'),
+    Contributor(
+        name: 'vvb2060',
+        platform: 'GitHub',
+        github: 'https://github.com/vvb2060'),
+    Contributor(
+        name: '[HuskyDG]',
+        platform: 'GitHub',
+        github: 'https://github.com/HuskyDG'),
   ];
 });

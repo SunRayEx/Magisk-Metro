@@ -49,9 +49,11 @@ class AppInfo {
 class Contributor {
   final String name;
   final String platform;
+  final String? github;
 
   const Contributor({
     required this.name,
     required this.platform,
+    this.github,
   });
 }
