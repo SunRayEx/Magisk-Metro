@@ -1,7 +1,7 @@
 import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.dsl.CommonExtension
-import com.android.build.api.instrumentation.FramesComputationMode
+import com.android.build.api.instrumentation.FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS
 import com.android.build.api.instrumentation.InstrumentationScope
 import com.android.build.api.variant.AndroidComponentsExtension
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
@@ -21,7 +21,6 @@ import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.objectweb.asm.ClassWriter
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
@@ -108,16 +107,10 @@ private fun Project.downloadFile(url: String, checksum: String): File {
     }
     if (!file.exists()) {
         file.parentFile.mkdirs()
-        try {
-            URI(url).toURL().openStream().use { dl ->
-                file.outputStream().use {
-                    dl.copyTo(it)
-                }
+        URI(url).toURL().openStream().use { dl ->
+            file.outputStream().use {
+                dl.copyTo(it)
             }
-        } catch (e: Exception) {
-            logger.warn("Failed to download $url: ${e.message}")
-            if (file.exists()) file.delete()
-            throw e
         }
     }
     return file
@@ -155,22 +148,12 @@ fun Project.setupCoreLib() {
                         }
                     }
                 }
-                
-                // Defer download to execution phase, not configuration phase
-                doFirst {
-                    val busyboxZip = downloadFile(BUSYBOX_DOWNLOAD_URL, BUSYBOX_ZIP_CHECKSUM)
-                    from(zipTree(busyboxZip)) {
-                        include(abiList.map { "$it/libbusybox.so" })
-                    }
-                }
-                
+                from(zipTree(downloadFile(BUSYBOX_DOWNLOAD_URL, BUSYBOX_ZIP_CHECKSUM)))
+                include(abiList.map { "$it/libbusybox.so" })
                 onlyIf {
-                    if (inputs.sourceFiles.files.size != abiList.size * 6) {
-                        logger.warn("Missing native binaries. Run: ./build.py binary")
-                        false
-                    } else {
-                        true
-                    }
+                    if (inputs.sourceFiles.files.size != abiList.size * 6)
+                        throw StopExecutionException("Please build binaries first! (./build.py binary)")
+                    true
                 }
             }
 
@@ -311,10 +294,11 @@ fun Project.setupMainApk() {
     setupAppCommon()
 
     androidApp {
-        namespace = "com.magiskube.magisk" // 改为全小写
+        namespace = "com.topjohnwu.magisk"
 
         defaultConfig {
-            applicationId = "com.magiskube.magisk" // 改为全小写
+            applicationId = "com.topjohnwu.magisk"
+            vectorDrawables.useSupportLibrary = true
             versionName = Config.version
             versionCode = Config.versionCode
             ndk {
@@ -327,7 +311,7 @@ fun Project.setupMainApk() {
     androidComponents {
         onVariants { variant ->
             variant.instrumentation.apply {
-                setAsmFramesComputationMode(FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS)
+                setAsmFramesComputationMode(COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS)
                 transformClassesWith(
                     DesugarClassVisitorFactory::class.java, InstrumentationScope.ALL) {}
             }
@@ -357,25 +341,11 @@ fun Project.setupTestApk() {
                 outputFolder.set(layout.buildDirectory.dir("$variantName/lsposed"))
                 into(outputFolder)
 
-                // Defer download to execution phase
-                doFirst {
-                    try {
-                        val lsposedZip = downloadFile(LSPOSED_DOWNLOAD_URL, LSPOSED_CHECKSUM)
-                        from(lsposedZip) {
-                            rename { "lsposed.zip" }
-                        }
-                    } catch (e: Exception) {
-                        logger.warn("Failed to download LSPosed: ${e.message}")
-                    }
-                    
-                    try {
-                        val shamikoZip = downloadFile(SHAMIKO_DOWNLOAD_URL, SHAMIKO_CHECKSUM)
-                        from(shamikoZip) {
-                            rename { "shamiko.zip" }
-                        }
-                    } catch (e: Exception) {
-                        logger.warn("Failed to download Shamiko: ${e.message}")
-                    }
+                from(downloadFile(LSPOSED_DOWNLOAD_URL, LSPOSED_CHECKSUM)) {
+                    rename { "lsposed.zip" }
+                }
+                from(downloadFile(SHAMIKO_DOWNLOAD_URL, SHAMIKO_CHECKSUM)) {
+                    rename { "shamiko.zip" }
                 }
             }
 
