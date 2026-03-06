@@ -2,22 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'providers/dashboard_providers.dart';
+import 'navigation/flip_page_route.dart';
+import 'screens/secondary_pages.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Column(
             children: [
-              _buildTopBar(),
+              _buildTopBar(context, ref, isDark),
               Expanded(
-                child: _buildMainContent(context, ref),
+                child: _buildMainContent(context, ref, isDark),
               ),
             ],
           ),
@@ -26,74 +30,111 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  void _navigateTo(BuildContext context, String route) {
-    Navigator.pushNamed(context, route);
-  }
-
-  Widget _buildTopBar() {
+  Widget _buildTopBar(BuildContext context, WidgetRef ref, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Icon(
-            Icons.settings,
-            color: Colors.white,
-            size: 24,
+          GestureDetector(
+            onTap: () => _showSettings(context, ref),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                Icons.settings,
+                color: AppTheme.getFont(isDark),
+                size: 24,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMainContent(BuildContext context, WidgetRef ref) {
+  void _showSettings(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SettingsSheet(),
+    );
+  }
+
+  void _navigateTo(BuildContext context, String route) {
+    Widget page;
+    switch (route) {
+      case '/magisk':
+        page = const MagiskManagerPage();
+        break;
+      case '/denylist':
+        page = const DenyListPage();
+        break;
+      case '/modules':
+        page = const ModulesPage();
+        break;
+      case '/apps':
+        page = const AppsPage();
+        break;
+      case '/logs':
+        page = const LogsPage();
+        break;
+      case '/contributors':
+        page = const ContributorsPage();
+        break;
+      default:
+        return;
+    }
+    Navigator.push(context, FlipPageRoute(page: page));
+  }
+
+  Widget _buildMainContent(BuildContext context, WidgetRef ref, bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: _buildLeftColumn(context, ref),
+          child: _buildLeftColumn(context, ref, isDark),
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: _buildRightColumn(context, ref),
+          child: _buildRightColumn(context, ref, isDark),
         ),
       ],
     );
   }
 
-  Widget _buildLeftColumn(BuildContext context, WidgetRef ref) {
+  Widget _buildLeftColumn(BuildContext context, WidgetRef ref, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 6, child: _buildMagiskCard(context, ref)),
+        Expanded(flex: 6, child: _buildMagiskCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildDenyListCard(context, ref)),
+        Expanded(flex: 3, child: _buildDenyListCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildContributorCard(context, ref)),
+        Expanded(flex: 3, child: _buildContributorCard(context, ref, isDark)),
       ],
     );
   }
 
-  Widget _buildRightColumn(BuildContext context, WidgetRef ref) {
+  Widget _buildRightColumn(BuildContext context, WidgetRef ref, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 4, child: _buildModulesCard(context, ref)),
+        Expanded(flex: 4, child: _buildModulesCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 4, child: _buildAppsCard(context, ref)),
+        Expanded(flex: 4, child: _buildAppsCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 4, child: _buildLogsCard(context, ref)),
+        Expanded(flex: 4, child: _buildLogsCard(context, ref, isDark)),
       ],
     );
   }
 
-  Widget _buildMagiskCard(BuildContext context, WidgetRef ref) {
+  Widget _buildMagiskCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/magisk'),
       child: Container(
-        color: const Color(0xFF009688),
+        color: isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC),
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -111,7 +152,9 @@ class DashboardScreen extends ConsumerWidget {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w900,
                       fontSize: 32,
-                      color: const Color(0xFF009688),
+                      color: isDark
+                          ? const Color(0xFF009688)
+                          : const Color(0xFF00796B),
                     ),
                   ),
                 ),
@@ -122,7 +165,7 @@ class DashboardScreen extends ConsumerWidget {
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
-                  color: const Color(0xFF000000),
+                  color: Colors.black,
                 ),
               ),
               Text(
@@ -130,7 +173,7 @@ class DashboardScreen extends ConsumerWidget {
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
-                  color: const Color(0xFF000000),
+                  color: Colors.black,
                 ),
               ),
               const Spacer(),
@@ -155,7 +198,7 @@ class DashboardScreen extends ConsumerWidget {
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w600,
               fontSize: 10,
-              color: const Color(0xFF000000),
+              color: Colors.black,
             ),
           ),
           Text(
@@ -163,7 +206,7 @@ class DashboardScreen extends ConsumerWidget {
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w900,
               fontSize: 10,
-              color: const Color(0xFF000000),
+              color: Colors.black,
             ),
           ),
         ],
@@ -171,74 +214,71 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDenyListCard(BuildContext context, WidgetRef ref) {
+  Widget _buildDenyListCard(BuildContext context, WidgetRef ref, bool isDark) {
     final isEnabled = ref.watch(denyListEnabledProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/denylist'),
       child: Container(
-        color: const Color(0xFFFFC107),
+        color: isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                isEnabled ? 'DenyList' : 'DenyList [OFF]',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  color: const Color(0xFF000000),
-                ),
+          padding: const EdgeInsets.all(12.0),
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Text(
+              isEnabled ? 'DenyList' : 'DenyList [OFF]',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: Colors.black,
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildContributorCard(BuildContext context, WidgetRef ref) {
+  Widget _buildContributorCard(
+      BuildContext context, WidgetRef ref, bool isDark) {
     final contributors = ref.watch(contributorsProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/contributors'),
       child: Container(
-        color: const Color(0xFF9C27B0),
+        color: isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 'Contributor',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  color: const Color(0xFF000000),
+                  fontSize: 20,
+                  color: Colors.black,
                 ),
               ),
-              const Spacer(),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: contributors
-                        .map((c) => Text(
-                              c.name,
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 9,
-                                color: const Color(0xFF000000),
-                              ),
-                            ))
-                        .toList(),
+              const SizedBox(height: 4),
+              Text(
+                contributors.isNotEmpty ? contributors.first.name : '',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                  color: Colors.black,
+                ),
+              ),
+              if (contributors.length > 1)
+                Text(
+                  contributors[1].name,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    color: Colors.black,
                   ),
                 ),
-              ),
+              const Spacer(),
             ],
           ),
         ),
@@ -246,15 +286,15 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildModulesCard(BuildContext context, WidgetRef ref) {
+  Widget _buildModulesCard(BuildContext context, WidgetRef ref, bool isDark) {
     final modules = ref.watch(modulesProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/modules'),
       child: Container(
-        color: const Color(0xFF4285F4),
+        color: isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -262,46 +302,35 @@ class DashboardScreen extends ConsumerWidget {
                 'Modules',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  color: const Color(0xFF000000),
+                  fontSize: 20,
+                  color: Colors.black,
                 ),
               ),
-              const Spacer(),
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        ...modules.take(2).map((m) => Text(
-                              m.name,
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 8,
-                                color: const Color(0xFF000000),
-                              ),
-                            )),
-                        if (modules.length > 2)
-                          Text(
-                            '...',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 8,
-                              color: const Color(0xFF000000),
-                            ),
-                          ),
-                      ],
-                    ),
+              const SizedBox(height: 4),
+              Text(
+                modules.isNotEmpty ? modules.first.name : '',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: Colors.black,
+                ),
+              ),
+              if (modules.length > 1)
+                Text(
+                  modules[1].name,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    color: Colors.black,
                   ),
                 ),
-              ),
+              const Spacer(),
               Text(
                 '${modules.length}',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
-                  fontSize: 24,
-                  color: const Color(0xFF000000),
+                  fontSize: 32,
+                  color: Colors.black,
                 ),
               ),
             ],
@@ -311,15 +340,15 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAppsCard(BuildContext context, WidgetRef ref) {
+  Widget _buildAppsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final apps = ref.watch(appsProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/apps'),
       child: Container(
-        color: const Color(0xFFD32F2F),
+        color: isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350),
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -327,46 +356,35 @@ class DashboardScreen extends ConsumerWidget {
                 'Apps',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  color: const Color(0xFF000000),
+                  fontSize: 20,
+                  color: Colors.black,
                 ),
               ),
-              const Spacer(),
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        ...apps.take(2).map((a) => Text(
-                              a.name,
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 8,
-                                color: const Color(0xFF000000),
-                              ),
-                            )),
-                        if (apps.length > 2)
-                          Text(
-                            '...',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 8,
-                              color: const Color(0xFF000000),
-                            ),
-                          ),
-                      ],
-                    ),
+              const SizedBox(height: 4),
+              Text(
+                apps.isNotEmpty ? apps.first.name : '',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: Colors.black,
+                ),
+              ),
+              if (apps.length > 1)
+                Text(
+                  apps[1].name,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    color: Colors.black,
                   ),
                 ),
-              ),
+              const Spacer(),
               Text(
                 '${apps.length}',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
-                  fontSize: 24,
-                  color: const Color(0xFF000000),
+                  fontSize: 32,
+                  color: Colors.black,
                 ),
               ),
             ],
@@ -376,33 +394,35 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLogsCard(BuildContext context, WidgetRef ref) {
+  Widget _buildLogsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final logsAsync = ref.watch(logsProvider);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/logs'),
       child: Container(
-        color: const Color(0xFFFFFFFF),
+        color: isDark ? Colors.white : Colors.black,
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Logs',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  color: const Color(0xFF000000),
+              Align(
+                alignment: Alignment.topRight,
+                child: Text(
+                  'Logs',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    color: isDark ? Colors.black : Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
               Expanded(
                 child: logsAsync.when(
-                  data: (logs) => _LogsListView(logs: logs),
-                  loading: () => const Center(
+                  data: (logs) => _LogsListView(logs: logs, isDark: isDark),
+                  loading: () => Center(
                     child: CircularProgressIndicator(
-                      color: Colors.black,
+                      color: isDark ? Colors.black : Colors.white,
                     ),
                   ),
                   error: (error, stack) => Text(
@@ -410,7 +430,7 @@ class DashboardScreen extends ConsumerWidget {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w500,
                       fontSize: 8,
-                      color: const Color(0xFF000000),
+                      color: isDark ? Colors.black : Colors.white,
                     ),
                     overflow: TextOverflow.clip,
                   ),
@@ -426,8 +446,9 @@ class DashboardScreen extends ConsumerWidget {
 
 class _LogsListView extends StatefulWidget {
   final List<String> logs;
+  final bool isDark;
 
-  const _LogsListView({required this.logs});
+  const _LogsListView({required this.logs, required this.isDark});
 
   @override
   State<_LogsListView> createState() => _LogsListViewState();
@@ -473,7 +494,7 @@ class _LogsListViewState extends State<_LogsListView> {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w500,
             fontSize: 8,
-            color: const Color(0xFF000000),
+            color: widget.isDark ? Colors.black : Colors.white,
           ),
           overflow: TextOverflow.clip,
           maxLines: 1,
