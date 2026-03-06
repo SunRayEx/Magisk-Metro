@@ -2,7 +2,7 @@
 
 [![Downloads](https://img.shields.io/badge/dynamic/json?color=green&label=Downloads&query=totalString&url=https%3A%2F%2Fraw.githubusercontent.com%2Ftopjohnwu%2Fmagisk-files%2Fcount%2Fcount.json&cacheSeconds=1800)](https://raw.githubusercontent.com.MagisKube/magisk-files/count/count.json)
 
-#### This is not an officially supported Google product
+#### This is not an officially supported Google product, And this is a Magisk fork.
 
 ## Introduction
 
@@ -13,10 +13,11 @@ Some highlight features:
 - **Magisk Modules**: Modify read-only partitions by installing modules
 - **MagiskBoot**: The most complete tool for unpacking and repacking Android boot images
 - **Zygisk**: Run code in every Android applications' processes
+- **ModernUI**: A Windows 8/Windows Phone like UI Design by Flutter with Dart Language
 
 ## Downloads
 
-[Github](https://github.com/topjohnwu/Magisk/releases) is the only source where you can get official Magisk information and downloads.
+[Github](https://github.com/SunRayEx/Magisk-Metro/releases) is Download link of the Magisk forked by SunRay_Ex in "Extra Smart Team".
 
 ## Useful Links
 
@@ -41,6 +42,11 @@ Default string resources for the Magisk app and its stub APK are located here:
 - `app/stub/src/main/res/values/strings.xml`
 
 Translate each and place them in the respective locations (`[module]/src/main/res/values-[lang]/strings.xml`).
+
+## Upstream Link
+
+- Magisk
+- [GitHub](https://github.com/topjohnwu/Magisk)
 
 ## License
 
