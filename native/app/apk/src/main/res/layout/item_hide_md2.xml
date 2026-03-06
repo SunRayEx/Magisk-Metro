@@ -82,7 +82,7 @@
 
                 <com.magiskube.widget.IndeterminateCheckBox
                     android:id="@+id/hide_expand_icon"
-                    android:checked="@{item.state == true}"
+                    state="@={item.state}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="@dimen/l1"

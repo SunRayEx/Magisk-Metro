@@ -10,18 +10,30 @@ import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.magiskube.magisk.MainDirections
 import com.magiskube.magisk.R
 import com.magiskube.magisk.arch.BaseViewModel
 import com.magiskube.magisk.arch.NavigationActivity
 import com.magiskube.magisk.arch.startAnimations
+import com.magiskube.magisk.arch.viewModel
 import com.magiskube.magisk.core.Config
 import com.magiskube.magisk.core.Const
 import com.magiskube.magisk.core.Info
 import com.magiskube.magisk.core.base.SplashController
 import com.magiskube.magisk.core.base.SplashScreenHost
+import com.magiskube.magisk.core.isRunningAsStub
 import com.magiskube.magisk.core.ktx.toast
 import com.magiskube.magisk.core.model.module.LocalModule
 import com.magiskube.magisk.core.tasks.AppMigration
@@ -33,22 +45,27 @@ import com.magiskube.magisk.view.Shortcuts
 import kotlinx.coroutines.launch
 import java.io.File
 import com.magiskube.magisk.core.R as CoreR
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import com.example.yourapp.MagiskViewModel
+import com.example.yourapp.YourAppTheme
+import com.magiskube.magisk.ui.utils.WallpaperColorExtractor
+import android.app.WallpaperManager
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.yourapp.NavGraph
 
 class MainViewModel : BaseViewModel()
-
-class MainActivity : NavigationActivity<ActivityMainMd2Binding>() {
+class MainActivity : ComponentActivity(), SplashScreenHost {
 
     override val layoutRes = R.layout.activity_main_md2
     override val viewModel by viewModel<MainViewModel>()
     override val navHostId: Int = R.id.main_nav_host
     override val splashController = SplashController(this)
-
     override val snackbarView: View
         get() {
             val fragmentOverride = currentFragment?.snackbarView
             return fragmentOverride ?: super.snackbarView
         }
-
     override val snackbarAnchorView: View?
         get() {
             val fragmentAnchor = currentFragment?.snackbarAnchorView
@@ -66,6 +83,34 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>() {
         splashController.preOnCreate()
         super.onCreate(savedInstanceState)
         splashController.onCreate(savedInstanceState)
+
+        setContent {
+            YourAppTheme {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    val navController = rememberNavController()
+                    NavGraph(navController)
+                    MetroScreen(viewModel(), navController)
+                }
+            }
+        }
+    }
+
+    @Preview
+    @Composable
+    fun PreviewMainActivity() {
+        YourAppTheme {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                val navController = rememberNavController()
+                MetroScreen(viewModel(), navController)
+            }
+        }
+    }
+}
+
+    private fun getWallpaperColor(context: Context): Int? {
+        val wallpaperManager = context.getSystemService(Context.WALLPAPER_SERVICE) as WallpaperManager
+        val drawable = wallpaperManager.drawable
+        return WallpaperColorExtractor.extractDominantColor(drawable)
     }
 
     @SuppressLint("InlinedApi")
@@ -74,6 +119,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>() {
         showUnsupportedMessage()
         askForHomeShortcut()
 
+        // Ask permission to post notifications for background update check
         if (Config.checkUpdate) {
             withPermission(Manifest.permission.POST_NOTIFICATIONS) {
                 Config.checkUpdate = it
@@ -108,6 +154,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>() {
             true
         }
         binding.mainNavigation.setOnItemReselectedListener {
+            // https://issuetracker.google.com/issues/124538620
         }
         binding.mainNavigation.menu.apply {
             findItem(R.id.superuserFragment)?.isEnabled = Info.showSuperUser
@@ -154,6 +201,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>() {
     }
 
     fun invalidateToolbar() {
+        //binding.mainToolbar.startAnimations()
         binding.mainToolbar.invalidate()
     }
 
