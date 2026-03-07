@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dashboard_screen.dart';
+import 'animated_dashboard_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MagiskDashboardApp()));
@@ -13,7 +13,7 @@ class MagiskDashboardApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Magisk Dashboard',
+      title: 'MagisKube',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -27,7 +27,7 @@ class MagiskDashboardApp extends StatelessWidget {
           displayColor: const Color(0xFF000000),
         ),
       ),
-      home: const DashboardScreen(),
+      home: const AnimatedDashboardScreen(),
     );
   }
 }

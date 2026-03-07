@@ -11,6 +11,8 @@ class MagiskManagerPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(magiskStatusProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(0, tileColorIndex, isDark);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -27,6 +29,7 @@ class MagiskManagerPage extends ConsumerWidget {
                     'Install Magisk',
                     'Install or upgrade Magisk',
                     Icons.download,
+                    widgetColor,
                     () => _showInstallDialog(context),
                     isDark,
                   ),
@@ -35,6 +38,7 @@ class MagiskManagerPage extends ConsumerWidget {
                     'Uninstall Magisk',
                     'Remove Magisk from device',
                     Icons.delete_forever,
+                    widgetColor,
                     () => _showUninstallDialog(context),
                     isDark,
                   ),
@@ -43,6 +47,7 @@ class MagiskManagerPage extends ConsumerWidget {
                     'Patch Boot Image',
                     'Patch boot image manually',
                     Icons.construction,
+                    widgetColor,
                     () => _showPatchDialog(context),
                     isDark,
                   ),
@@ -51,11 +56,12 @@ class MagiskManagerPage extends ConsumerWidget {
                     'Update Manager',
                     'Check for updates',
                     Icons.system_update,
+                    widgetColor,
                     () => _showUpdateDialog(context),
                     isDark,
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoCard(status, isDark),
+                  _buildInfoCard(status, isDark, widgetColor),
                 ],
               ),
             ),
@@ -99,6 +105,7 @@ class MagiskManagerPage extends ConsumerWidget {
     String title,
     String subtitle,
     IconData icon,
+    Color widgetColor,
     VoidCallback onTap,
     bool isDark,
   ) {
@@ -110,7 +117,7 @@ class MagiskManagerPage extends ConsumerWidget {
         color: AppTheme.getListItem(isDark),
         child: Row(
           children: [
-            Icon(icon, color: AppTheme.getListItemFont(isDark), size: 24),
+            Icon(icon, color: widgetColor, size: 24),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -144,10 +151,10 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoCard(MagiskStatus status, bool isDark) {
+  Widget _buildInfoCard(MagiskStatus status, bool isDark, Color widgetColor) {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC),
+      color: widgetColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -160,18 +167,18 @@ class MagiskManagerPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _buildInfoRow('Version', status.versionCode, isDark),
-          _buildInfoRow('Root', status.isRooted ? 'Yes' : 'No', isDark),
-          _buildInfoRow('Zygisk',
-              status.isZygiskEnabled ? 'Enabled' : 'Disabled', isDark),
-          _buildInfoRow('Ramdisk',
-              status.isRamdiskLoaded ? 'Loaded' : 'Not Loaded', isDark),
+          _buildInfoRow('Version', status.versionCode),
+          _buildInfoRow('Root', status.isRooted ? 'Yes' : 'No'),
+          _buildInfoRow(
+              'Zygisk', status.isZygiskEnabled ? 'Enabled' : 'Disabled'),
+          _buildInfoRow(
+              'Ramdisk', status.isRamdiskLoaded ? 'Loaded' : 'Not Loaded'),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, bool isDark) {
+  Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -192,27 +199,35 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  void _showInstallDialog(BuildContext context) =>
-      _showDialog(context, 'Install Magisk', 'Select installation method:');
-  void _showUninstallDialog(BuildContext context) =>
-      _showDialog(context, 'Uninstall Magisk', 'Choose uninstallation method:');
-  void _showPatchDialog(BuildContext context) =>
-      _showDialog(context, 'Patch Boot Image', 'Select a boot image file:');
-  void _showUpdateDialog(BuildContext context) =>
-      _showDialog(context, 'Update Manager', 'Current version: 25.2');
+  void _showInstallDialog(BuildContext context) {
+    _showDialog(
+        context, 'Install Magisk', 'This will install Magisk on your device.');
+  }
 
-  void _showDialog(BuildContext context, String title, String content) {
+  void _showUninstallDialog(BuildContext context) {
+    _showDialog(context, 'Uninstall Magisk',
+        'This will remove Magisk from your device.');
+  }
+
+  void _showPatchDialog(BuildContext context) {
+    _showDialog(context, 'Patch Boot Image', 'Select a boot image to patch.');
+  }
+
+  void _showUpdateDialog(BuildContext context) {
+    _showDialog(context, 'Update Manager', 'Checking for updates...');
+  }
+
+  void _showDialog(BuildContext context, String title, String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text(title,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w900)),
-        content: Text(content, style: GoogleFonts.poppins(fontSize: 14)),
+        title: Text(title),
+        content: Text(message),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
@@ -226,6 +241,8 @@ class DenyListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isEnabled = ref.watch(denyListEnabledProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(1, tileColorIndex, isDark);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -258,7 +275,7 @@ class DenyListPage extends ConsumerWidget {
                       onChanged: (value) => ref
                           .read(denyListEnabledProvider.notifier)
                           .state = value,
-                      activeColor: const Color(0xFFFFC107),
+                      activeColor: widgetColor,
                     ),
                   ),
                 ],
@@ -279,16 +296,21 @@ class DenyListPage extends ConsumerWidget {
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
-                padding: const EdgeInsets.all(8),
-                child: Icon(Icons.chevron_left,
-                    color: AppTheme.getFont(isDark), size: 28)),
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
           ),
           Expanded(
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: AppTheme.getFont(isDark)))),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -302,6 +324,8 @@ class ModulesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final modules = ref.watch(modulesProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(3, tileColorIndex, isDark);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -310,35 +334,32 @@ class ModulesPage extends ConsumerWidget {
           children: [
             _buildHeader(context, 'Modules', isDark),
             Expanded(
-              child: modules.isEmpty
-                  ? Center(
-                      child: Text('No modules installed',
-                          style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              color: AppTheme.getFont(isDark)
-                                  .withValues(alpha: 0.6))))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(4),
-                      itemCount: modules.length,
-                      itemBuilder: (context, index) {
-                        final module = modules[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          color: AppTheme.getListItem(isDark),
-                          child: ListTile(
-                            title: Text(module.name,
-                                style: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                    color: AppTheme.getListItemFont(isDark))),
-                            trailing: Switch(
-                                value: module.isEnabled,
-                                onChanged: (value) {},
-                                activeColor: const Color(0xFF4285F4)),
-                          ),
-                        );
-                      },
+              child: ListView.builder(
+                padding: const EdgeInsets.all(4),
+                itemCount: modules.length,
+                itemBuilder: (context, index) {
+                  final module = modules[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    color: AppTheme.getListItem(isDark),
+                    child: ListTile(
+                      leading: Icon(Icons.extension, color: widgetColor),
+                      title: Text(
+                        module.name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.getListItemFont(isDark),
+                        ),
+                      ),
+                      trailing: Switch(
+                        value: module.isEnabled,
+                        onChanged: (value) {},
+                        activeColor: widgetColor,
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -353,17 +374,23 @@ class ModulesPage extends ConsumerWidget {
       child: Row(
         children: [
           GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(Icons.chevron_left,
-                      color: AppTheme.getFont(isDark), size: 28))),
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
           Expanded(
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: AppTheme.getFont(isDark)))),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -377,6 +404,8 @@ class AppsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final apps = ref.watch(appsProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(4, tileColorIndex, isDark);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -385,35 +414,32 @@ class AppsPage extends ConsumerWidget {
           children: [
             _buildHeader(context, 'Apps', isDark),
             Expanded(
-              child: apps.isEmpty
-                  ? Center(
-                      child: Text('No apps configured',
-                          style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              color: AppTheme.getFont(isDark)
-                                  .withValues(alpha: 0.6))))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(4),
-                      itemCount: apps.length,
-                      itemBuilder: (context, index) {
-                        final app = apps[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          color: AppTheme.getListItem(isDark),
-                          child: ListTile(
-                            title: Text(app.name,
-                                style: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                    color: AppTheme.getListItemFont(isDark))),
-                            trailing: Switch(
-                                value: app.isActive,
-                                onChanged: (value) {},
-                                activeColor: const Color(0xFFD32F2F)),
-                          ),
-                        );
-                      },
+              child: ListView.builder(
+                padding: const EdgeInsets.all(4),
+                itemCount: apps.length,
+                itemBuilder: (context, index) {
+                  final app = apps[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    color: AppTheme.getListItem(isDark),
+                    child: ListTile(
+                      leading: Icon(Icons.apps, color: widgetColor),
+                      title: Text(
+                        app.name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.getListItemFont(isDark),
+                        ),
+                      ),
+                      trailing: Switch(
+                        value: app.isActive,
+                        onChanged: (value) {},
+                        activeColor: widgetColor,
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -428,17 +454,23 @@ class AppsPage extends ConsumerWidget {
       child: Row(
         children: [
           GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(Icons.chevron_left,
-                      color: AppTheme.getFont(isDark), size: 28))),
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
           Expanded(
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: AppTheme.getFont(isDark)))),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -464,24 +496,25 @@ class LogsPage extends ConsumerWidget {
                 data: (logs) => ListView.builder(
                   padding: const EdgeInsets.all(4),
                   itemCount: logs.length,
-                  itemBuilder: (context, index) => Container(
-                    margin: const EdgeInsets.only(bottom: 2),
-                    padding: const EdgeInsets.all(8),
-                    color: AppTheme.getListItem(isDark),
-                    child: Text(logs[index],
+                  itemBuilder: (context, index) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 2),
+                      padding: const EdgeInsets.all(8),
+                      color: AppTheme.getListItem(isDark),
+                      child: Text(
+                        logs[index],
                         style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            color: AppTheme.getListItemFont(isDark)),
-                        overflow: TextOverflow.clip),
-                  ),
+                          fontSize: 12,
+                          color: AppTheme.getListItemFont(isDark),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                loading: () => Center(
-                    child: CircularProgressIndicator(
-                        color: AppTheme.getFont(isDark))),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => Center(
-                    child: Text('Error: $error',
-                        style: GoogleFonts.poppins(
-                            color: AppTheme.getFont(isDark)))),
+                  child: Text('Error: $error'),
+                ),
               ),
             ),
           ],
@@ -497,17 +530,23 @@ class LogsPage extends ConsumerWidget {
       child: Row(
         children: [
           GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(Icons.chevron_left,
-                      color: AppTheme.getFont(isDark), size: 28))),
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
           Expanded(
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: AppTheme.getFont(isDark)))),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -521,6 +560,8 @@ class ContributorsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final contributors = ref.watch(contributorsProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(2, tileColorIndex, isDark);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -536,35 +577,24 @@ class ContributorsPage extends ConsumerWidget {
                   final contributor = contributors[index];
                   return Container(
                     margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.all(16),
                     color: AppTheme.getListItem(isDark),
-                    child: Row(
-                      children: [
-                        Container(
-                            width: 40,
-                            height: 40,
-                            color: const Color(0xFF9C27B0),
-                            child: const Icon(Icons.person,
-                                color: Colors.white, size: 20)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(contributor.name,
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                      color: AppTheme.getListItemFont(isDark))),
-                              Text(contributor.platform,
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: AppTheme.getListItemFont(isDark)
-                                          .withValues(alpha: 0.6))),
-                            ],
-                          ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: widgetColor,
+                        child: Text(
+                          contributor.name.isNotEmpty
+                              ? contributor.name[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(color: Colors.white),
                         ),
-                      ],
+                      ),
+                      title: Text(
+                        contributor.name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.getListItemFont(isDark),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -583,17 +613,130 @@ class ContributorsPage extends ConsumerWidget {
       child: Row(
         children: [
           GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(Icons.chevron_left,
-                      color: AppTheme.getFont(isDark), size: 28))),
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
           Expanded(
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: AppTheme.getFont(isDark)))),
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ThemePage extends ConsumerWidget {
+  const ThemePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider);
+    final selectedColorIndex = ref.watch(tileColorProvider);
+
+    return Scaffold(
+      backgroundColor: AppTheme.getBackground(isDark),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context, 'Theme', isDark),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(4),
+                itemCount: AppTheme.tileColorNames.length,
+                itemBuilder: (context, index) {
+                  final isSelected = index == selectedColorIndex;
+                  return GestureDetector(
+                    onTap: () =>
+                        ref.read(tileColorProvider.notifier).state = index,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.all(16),
+                      color: AppTheme.getListItem(isDark),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: index == 0
+                                  ? (isDark
+                                      ? const Color(0xFF009688)
+                                      : const Color(0xFF4DB6AC))
+                                  : AppTheme.tileColors[index],
+                              borderRadius: BorderRadius.circular(4),
+                              border: isSelected
+                                  ? Border.all(color: Colors.white, width: 2)
+                                  : null,
+                            ),
+                            child: isSelected
+                                ? const Icon(Icons.check,
+                                    color: Colors.white, size: 20)
+                                : null,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              AppTheme.tileColorNames[index],
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppTheme.getListItemFont(isDark),
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            Icon(
+                              Icons.check_circle,
+                              color: AppTheme.getListItemFont(isDark),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, String title, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      color: AppTheme.getTile(isDark),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -601,11 +744,15 @@ class ContributorsPage extends ConsumerWidget {
 }
 
 class SettingsSheet extends ConsumerWidget {
-  SettingsSheet({super.key});
+  final VoidCallback? onThemeTap;
+
+  const SettingsSheet({super.key, this.onThemeTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getWidgetColor(tileColorIndex, isDark);
 
     return Container(
       decoration: BoxDecoration(
@@ -632,15 +779,19 @@ class SettingsSheet extends ConsumerWidget {
               ],
             ),
           ),
-          _buildTile(Icons.dark_mode, 'Dark Mode',
+          _buildTile(Icons.nightlight_round, 'Dark Mode',
               isDark ? 'Enabled' : 'Disabled', isDark,
               trailing: Switch(
                   value: isDark,
                   onChanged: (v) => ref.read(themeProvider.notifier).state = v,
-                  activeColor: Colors.teal)),
-          _buildTile(Icons.palette, 'Theme', isDark ? 'Dark' : 'Light', isDark,
-              trailing: Icon(isDark ? Icons.dark_mode : Icons.light_mode,
-                  color: AppTheme.getListItemFont(isDark))),
+                  activeColor: widgetColor)),
+          GestureDetector(
+            onTap: onThemeTap,
+            child: _buildTile(
+                Icons.palette, 'Theme', 'Change widget color', isDark,
+                trailing: Icon(Icons.chevron_right,
+                    color: AppTheme.getListItemFont(isDark))),
+          ),
           const SizedBox(height: 20),
         ],
       ),
@@ -655,12 +806,7 @@ class SettingsSheet extends ConsumerWidget {
       color: AppTheme.getTile(isDark),
       child: Row(
         children: [
-          Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                  color: isDark ? Colors.white12 : Colors.black12,
-                  borderRadius: BorderRadius.circular(8))),
+          Icon(icon, color: AppTheme.getListItemFont(isDark), size: 24),
           const SizedBox(width: 12),
           Expanded(
               child: Column(

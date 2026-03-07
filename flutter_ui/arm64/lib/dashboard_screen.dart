@@ -56,7 +56,12 @@ class DashboardScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => SettingsSheet(),
+      builder: (context) => SettingsSheet(
+        onThemeTap: () {
+          Navigator.pop(context);
+          _navigateTo(context, '/theme');
+        },
+      ),
     );
   }
 
@@ -80,6 +85,9 @@ class DashboardScreen extends ConsumerWidget {
         break;
       case '/contributors':
         page = const ContributorsPage();
+        break;
+      case '/theme':
+        page = const ThemePage();
         break;
       default:
         return;
@@ -130,34 +138,26 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildMagiskCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final tileColor = tileColorIndex == 0
+        ? (isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC))
+        : AppTheme.tileColors[tileColorIndex];
+    final tileColorLight = tileColorIndex == 0
+        ? const Color(0xFF4DB6AC)
+        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/magisk'),
       child: Container(
-        color: isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC),
+        color: isDark ? tileColor : tileColorLight,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
             children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    'M',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 32,
-                      color: isDark
-                          ? const Color(0xFF009688)
-                          : const Color(0xFF00796B),
-                    ),
-                  ),
-                ),
+              Icon(
+                Icons.face,
+                size: 60,
+                color: isDark ? Colors.black : Colors.white,
               ),
               const SizedBox(height: 8),
               Text(
@@ -216,11 +216,18 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildDenyListCard(BuildContext context, WidgetRef ref, bool isDark) {
     final isEnabled = ref.watch(denyListEnabledProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final tileColor = tileColorIndex == 0
+        ? (isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F))
+        : AppTheme.tileColors[tileColorIndex];
+    final tileColorLight = tileColorIndex == 0
+        ? const Color(0xFFFFD54F)
+        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/denylist'),
       child: Container(
-        color: isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F),
+        color: isDark ? tileColor : tileColorLight,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Align(
@@ -242,11 +249,18 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildContributorCard(
       BuildContext context, WidgetRef ref, bool isDark) {
     final contributors = ref.watch(contributorsProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final tileColor = tileColorIndex == 0
+        ? (isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8))
+        : AppTheme.tileColors[tileColorIndex];
+    final tileColorLight = tileColorIndex == 0
+        ? const Color(0xFFBA68C8)
+        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/contributors'),
       child: Container(
-        color: isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8),
+        color: isDark ? tileColor : tileColorLight,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -288,11 +302,18 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildModulesCard(BuildContext context, WidgetRef ref, bool isDark) {
     final modules = ref.watch(modulesProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final tileColor = tileColorIndex == 0
+        ? (isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6))
+        : AppTheme.tileColors[tileColorIndex];
+    final tileColorLight = tileColorIndex == 0
+        ? const Color(0xFF64B5F6)
+        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/modules'),
       child: Container(
-        color: isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6),
+        color: isDark ? tileColor : tileColorLight,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -342,11 +363,18 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildAppsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final apps = ref.watch(appsProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final tileColor = tileColorIndex == 0
+        ? (isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350))
+        : AppTheme.tileColors[tileColorIndex];
+    final tileColorLight = tileColorIndex == 0
+        ? const Color(0xFFEF5350)
+        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/apps'),
       child: Container(
-        color: isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350),
+        color: isDark ? tileColor : tileColorLight,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(

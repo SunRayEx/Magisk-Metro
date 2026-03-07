@@ -8,16 +8,40 @@ final themeProvider = StateProvider<bool>((ref) => false);
 
 final isDarkModeProvider = Provider<bool>((ref) => ref.watch(themeProvider));
 
+final tileColorProvider = StateProvider<int>((ref) => 0);
+
 class AppTheme {
   static const Color darkBackground = Color(0xFF000000);
-  static const Color darkTile = Color(0xFF1A1A1A);
+  static const Color darkTile = Color(0xFF000000);
   static const Color darkFont = Colors.white;
-  static const Color darkListItem = Color(0xFF1A1A1A);
+  static const Color darkListItem = Color(0xFF000000);
 
-  static const Color lightBackground = Color(0xFFE0E0E0);
-  static const Color lightTile = Color(0xFFE0E0E0);
+  static const Color lightBackground = Colors.white;
+  static const Color lightTile = Colors.white;
   static const Color lightFont = Colors.black;
   static const Color lightListItem = Colors.white;
+
+  static const List<Color> tileColors = [
+    Color(0xFF009688),
+    Color(0xFF2196F3),
+    Color(0xFFF44336),
+    Color(0xFF4CAF50),
+    Color(0xFF9C27B0),
+    Color(0xFFFFEB3B),
+    Color(0xFFFF9800),
+    Color(0xFF00BCD4),
+  ];
+
+  static const List<String> tileColorNames = [
+    'Default',
+    'Monet Blue',
+    'Red',
+    'Green',
+    'Purple',
+    'Yellow',
+    'Orange',
+    'Cyan',
+  ];
 
   static Color getBackground(bool isDark) =>
       isDark ? darkBackground : lightBackground;
@@ -26,6 +50,33 @@ class AppTheme {
   static Color getListItem(bool isDark) =>
       isDark ? darkListItem : lightListItem;
   static Color getListItemFont(bool isDark) => isDark ? darkFont : lightFont;
+
+  static Color getWidgetColor(int colorIndex, bool isDark) {
+    if (colorIndex == 0) {
+      return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+    }
+    return tileColors[colorIndex];
+  }
+
+  static Color getTileWidgetColor(int tileIndex, int colorIndex, bool isDark) {
+    if (colorIndex == 0) {
+      switch (tileIndex) {
+        case 0:
+          return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+        case 1:
+          return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
+        case 2:
+          return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
+        case 3:
+          return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
+        case 4:
+          return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
+        default:
+          return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+      }
+    }
+    return tileColors[colorIndex];
+  }
 }
 
 final magiskStatusProvider =
@@ -94,9 +145,16 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
 
   Future<void> _loadModules() async {
     try {
-      final moduleNames = await AndroidDataService.getModules();
-      if (moduleNames.isNotEmpty) {
-        state = moduleNames.map((name) => Module(name: name)).toList();
+      final modules = await AndroidDataService.getModules();
+      if (modules.isNotEmpty) {
+        state = modules
+            .map((m) => Module(
+                  name: m['name']?.toString() ?? 'Unknown',
+                  version: m['version']?.toString() ?? 'Unknown',
+                  author: m['author']?.toString() ?? 'Unknown',
+                  isEnabled: m['isEnabled'] as bool? ?? false,
+                ))
+            .toList();
       }
     } catch (e) {
       // Keep empty list on error
@@ -109,6 +167,19 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
 
   void removeModule(String name) {
     state = state.where((m) => m.name != name).toList();
+  }
+
+  Future<void> toggleModule(String name, bool enabled) async {
+    state = state
+        .map((m) => m.name == name
+            ? Module(
+                name: m.name,
+                version: m.version,
+                author: m.author,
+                isEnabled: enabled,
+              )
+            : m)
+        .toList();
   }
 }
 
@@ -123,9 +194,15 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
 
   Future<void> _loadApps() async {
     try {
-      final appNames = await AndroidDataService.getApps();
-      if (appNames.isNotEmpty) {
-        state = appNames.map((name) => AppInfo(name: name)).toList();
+      final apps = await AndroidDataService.getApps();
+      if (apps.isNotEmpty) {
+        state = apps
+            .map((app) => AppInfo(
+                  name: app['name']?.toString() ?? 'Unknown',
+                  packageName: app['packageName']?.toString() ?? '',
+                  isActive: app['isActive'] as bool? ?? true,
+                ))
+            .toList();
       }
     } catch (e) {
       // Keep empty list on error
@@ -138,6 +215,20 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
 
   void removeApp(String name) {
     state = state.where((a) => a.name != name).toList();
+  }
+
+  Future<void> toggleApp(String packageName, bool active) async {
+    if (active) {
+      await AndroidDataService.removeFromDenyList(packageName);
+    } else {
+      await AndroidDataService.addToDenyList(packageName);
+    }
+    state = state.map((app) {
+      if (app.packageName == packageName) {
+        return app.copyWith(isActive: active);
+      }
+      return app;
+    }).toList();
   }
 }
 

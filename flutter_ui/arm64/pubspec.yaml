@@ -1,5 +1,5 @@
-name: magisk_dashboard
-description: Metro UI style dashboard for Magisk fork
+name: magiskube
+description: MagisKube - Metro UI style dashboard for Magisk
 publish_to: 'none'
 version: 1.0.0+0
 
