@@ -153,6 +153,8 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
                   version: m['version']?.toString() ?? 'Unknown',
                   author: m['author']?.toString() ?? 'Unknown',
                   isEnabled: m['isEnabled'] as bool? ?? false,
+                  description: m['description']?.toString() ?? '',
+                  path: m['path']?.toString() ?? '',
                 ))
             .toList();
       }
@@ -177,6 +179,8 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
                 version: m.version,
                 author: m.author,
                 isEnabled: enabled,
+                description: m.description,
+                path: m.path,
               )
             : m)
         .toList();
@@ -201,6 +205,7 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
                   name: app['name']?.toString() ?? 'Unknown',
                   packageName: app['packageName']?.toString() ?? '',
                   isActive: app['isActive'] as bool? ?? true,
+                  hasRootAccess: app['hasRootAccess'] as bool? ?? false,
                 ))
             .toList();
       }
@@ -226,6 +231,20 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
     state = state.map((app) {
       if (app.packageName == packageName) {
         return app.copyWith(isActive: active);
+      }
+      return app;
+    }).toList();
+  }
+
+  Future<void> toggleRootAccess(String packageName, bool hasRootAccess) async {
+    if (hasRootAccess) {
+      await AndroidDataService.grantRootAccess(packageName);
+    } else {
+      await AndroidDataService.revokeRootAccess(packageName);
+    }
+    state = state.map((app) {
+      if (app.packageName == packageName) {
+        return app.copyWith(hasRootAccess: hasRootAccess);
       }
       return app;
     }).toList();
@@ -282,6 +301,10 @@ final denyListEnabledProvider = StateProvider<bool>((ref) => true);
 final contributorsProvider = Provider<List<Contributor>>((ref) {
   return const [
     Contributor(
+        name: 'SunRayEx',
+        platform: 'GitHub',
+        github: 'https://github.com/SunRayEx'),
+        Contributor(
         name: 'topjohnwu',
         platform: 'GitHub',
         github: 'https://github.com/topjohnwu'),
@@ -291,7 +314,7 @@ final contributorsProvider = Provider<List<Contributor>>((ref) {
         github: 'https://github.com/vvb2060'),
     Contributor(
         name: '[HuskyDG]',
-        platform: 'GitHub',
-        github: 'https://github.com/HuskyDG'),
+        platform: 'runAway',
+        github: 'none'),
   ];
 });

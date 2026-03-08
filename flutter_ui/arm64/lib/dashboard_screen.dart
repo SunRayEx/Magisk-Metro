@@ -127,11 +127,11 @@ class DashboardScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 4, child: _buildModulesCard(context, ref, isDark)),
+        Expanded(flex: 3, child: _buildModulesCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 4, child: _buildAppsCard(context, ref, isDark)),
+        Expanded(flex: 3, child: _buildAppsCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 4, child: _buildLogsCard(context, ref, isDark)),
+        Expanded(flex: 6, child: _buildLogsCard(context, ref, isDark)),
       ],
     );
   }

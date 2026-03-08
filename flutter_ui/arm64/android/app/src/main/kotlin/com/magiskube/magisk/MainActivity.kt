@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -15,10 +16,18 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.BufferedReader
+import java.io.DataOutputStream
 import java.io.File
 import java.io.InputStreamReader
 
 class MainActivity : FlutterActivity() {
+    private var rootAccessGranted = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Get root access status from MagiskApplication
+        rootAccessGranted = MagiskApplication.isRootAvailable
+    }
     private val CHANNEL = "magisk_manager/data"
     private val MAGISK_CHANNEL = "magisk_manager/magisk"
     private val DENYLIST_CHANNEL = "magisk_manager/denylist"
@@ -87,6 +96,14 @@ class MainActivity : FlutterActivity() {
                     val packageName = call.argument<String>("packageName")
                     result.success(isInDenyList(packageName ?: ""))
                 }
+                "grantRootAccess" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(grantRootAccess(packageName ?: ""))
+                }
+                "revokeRootAccess" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(revokeRootAccess(packageName ?: ""))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -130,88 +147,217 @@ class MainActivity : FlutterActivity() {
     private fun getModulesList(): List<Map<String, Any>> {
         val modules = mutableListOf<Map<String, Any>>()
         try {
-            val modulesDir = File("/data/adb/modules")
-            if (modulesDir.exists() && modulesDir.isDirectory) {
-                modulesDir.listFiles()?.filter { it.isDirectory && it.name != ".core" }?.forEach { moduleDir ->
-                    val moduleJson = File(moduleDir, "module.json")
-                    val propsFile = File(moduleDir, "prop")
+            // Use root shell to list modules directory
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls /data/adb/modules"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = StringBuilder()
+            var line: String?
+            
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            
+            process.waitFor()
+            
+            if (process.exitValue() == 0) {
+                val lines = output.toString().split("\n").filter { it.trim().isNotEmpty() }
+                
+                for (moduleName in lines) {
+                    val name = moduleName.trim()
+                    if (name.isEmpty() || name == ".core" || name == ".") continue
                     
-                    var name = moduleDir.name
-                    var version = "Unknown"
-                    var author = "Unknown"
-                    var description = ""
-                    
-                    if (moduleJson.exists()) {
-                        try {
-                            val json = moduleJson.readText()
-                            val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                            val versionMatch = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                            val authorMatch = Regex("\"author\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                            val descMatch = Regex("\"description\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                            
-                            name = nameMatch?.groupValues?.get(1) ?: moduleDir.name
-                            version = versionMatch?.groupValues?.get(1) ?: "Unknown"
-                            author = authorMatch?.groupValues?.get(1) ?: "Unknown"
-                            description = descMatch?.groupValues?.get(1) ?: ""
-                        } catch (e: Exception) {}
+                    // Get module info using root shell
+                    val moduleInfo = getModuleInfo(name)
+                    modules.add(moduleInfo)
+                }
+            } else {
+                // Fallback: try direct file access
+                val modulesDir = File("/data/adb/modules")
+                if (modulesDir.exists() && modulesDir.isDirectory) {
+                    modulesDir.listFiles()?.filter { it.isDirectory && it.name != ".core" }?.forEach { moduleDir ->
+                        val moduleInfo = getModuleInfoWithoutRoot(moduleDir)
+                        modules.add(moduleInfo)
                     }
-                    
-                    val isEnabled = File(moduleDir, "disable").exists() == false
-                    
-                    modules.add(mapOf(
-                        "name" to name,
-                        "version" to version,
-                        "author" to author,
-                        "description" to description,
-                        "isEnabled" to isEnabled,
-                        "path" to moduleDir.absolutePath
-                    ))
                 }
             }
         } catch (e: Exception) {
-            modules.add(mapOf(
-                "name" to "Error",
-                "version" to "Error",
-                "author" to (e.message ?: "Error"),
-                "description" to "",
-                "isEnabled" to false,
-                "path" to ""
-            ))
+            // Fallback: try direct file access
+            try {
+                val modulesDir = File("/data/adb/modules")
+                if (modulesDir.exists() && modulesDir.isDirectory) {
+                    modulesDir.listFiles()?.filter { it.isDirectory && it.name != ".core" }?.forEach { moduleDir ->
+                        val moduleInfo = getModuleInfoWithoutRoot(moduleDir)
+                        modules.add(moduleInfo)
+                    }
+                }
+            } catch (e2: Exception) {
+                val errorMsg: String = e.message?.toString() ?: "Error accessing modules"
+                val errorModule: Map<String, Any> = LinkedHashMap<String, Any>().apply {
+                    put("name", "Error")
+                    put("version", "Error")
+                    put("author", errorMsg)
+                    put("description", "")
+                    put("isEnabled", false)
+                    put("path", "")
+                }
+                modules.add(errorModule)
+            }
         }
         return modules
     }
 
+    private fun getModuleInfo(moduleName: String): Map<String, Any> {
+        try {
+            // Read module.json using root shell
+            val jsonProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/modules/$moduleName/module.json"))
+            val jsonReader = BufferedReader(InputStreamReader(jsonProcess.inputStream))
+            val jsonOutput = StringBuilder()
+            var line: String?
+            
+            while (jsonReader.readLine().also { line = it } != null) {
+                jsonOutput.append(line).append("\n")
+            }
+            
+            jsonProcess.waitFor()
+            
+            var name = moduleName
+            var version = "Unknown"
+            var author = "Unknown"
+            var description = ""
+            
+            if (jsonProcess.exitValue() == 0 && jsonOutput.isNotEmpty()) {
+                val json = jsonOutput.toString()
+                val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val versionMatch = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val authorMatch = Regex("\"author\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val descMatch = Regex("\"description\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                
+                name = nameMatch?.groupValues?.get(1) ?: moduleName
+                version = versionMatch?.groupValues?.get(1) ?: "Unknown"
+                author = authorMatch?.groupValues?.get(1) ?: "Unknown"
+                description = descMatch?.groupValues?.get(1) ?: ""
+            }
+            
+            // Check if module is enabled using root shell
+            val disableProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "[ -f /data/adb/modules/$moduleName/disable ] && echo 'disabled' || echo 'enabled'"))
+            val disableReader = BufferedReader(InputStreamReader(disableProcess.inputStream))
+            val disableStatus = disableReader.readLine()
+            val isEnabled = disableStatus?.trim() != "disabled"
+            
+            return mapOf<String, Any>(
+                "name" to name,
+                "version" to version,
+                "author" to author,
+                "description" to description,
+                "isEnabled" to isEnabled,
+                "path" to "/data/adb/modules/$moduleName"
+            )
+        } catch (e: Exception) {
+            val errorMsg: String = e.message?.toString() ?: "Error reading module info"
+            return LinkedHashMap<String, Any>().apply {
+                put("name", moduleName)
+                put("version", "Error")
+                put("author", "Error")
+                put("description", errorMsg)
+                put("isEnabled", false)
+                put("path", "/data/adb/modules/$moduleName")
+            }
+        }
+    }
+
+    private fun getModuleInfoWithoutRoot(moduleDir: File): Map<String, Any> {
+        var name = moduleDir.name
+        var version = "Unknown"
+        var author = "Unknown"
+        var description = ""
+        
+        val moduleJson = File(moduleDir, "module.json")
+        if (moduleJson.exists()) {
+            try {
+                val json = moduleJson.readText()
+                val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val versionMatch = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val authorMatch = Regex("\"author\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val descMatch = Regex("\"description\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                
+                name = nameMatch?.groupValues?.get(1) ?: moduleDir.name
+                version = versionMatch?.groupValues?.get(1) ?: "Unknown"
+                author = authorMatch?.groupValues?.get(1) ?: "Unknown"
+                description = descMatch?.groupValues?.get(1) ?: ""
+            } catch (e: Exception) {}
+        }
+        
+        val isEnabled = File(moduleDir, "disable").exists() == false
+        
+        return mapOf<String, Any>(
+            "name" to name,
+            "version" to version,
+            "author" to author,
+            "description" to description,
+            "isEnabled" to isEnabled,
+            "path" to moduleDir.absolutePath
+        )
+    }
+
     private fun getInstalledApps(): List<Map<String, Any>> {
         val apps = mutableListOf<Map<String, Any>>()
+        val pm = packageManager
+        val denyList = getDenyList()
+        val rootAllowedPackages = getRootAllowedPackages()
+        
         try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pm list packages -3"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                line?.let {
-                    val packageName = it.replace("package:", "").trim()
-                    if (packageName.isNotEmpty()) {
-                        apps.add(mapOf(
-                            "name" to packageName.substringAfterLast("."),
-                            "packageName" to packageName,
-                            "isActive" to !isInDenyList(packageName)
-                        ))
-                    }
+            // Get all installed packages using PackageManager
+            val packages = pm.getInstalledPackages(0)
+            
+            for (packageInfo in packages) {
+                val packageName = packageInfo.packageName
+                
+                // Skip system packages that we don't want to show
+                if (packageName == "android" || packageName == "com.android.systemui") continue
+                
+                // Get app name from PackageManager
+                val appName = try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+                } catch (e: Exception) {
+                    packageName
                 }
+                
+                // Check if app is in denylist (isActive = false if in denylist)
+                val isActive = !denyList.contains(packageName)
+                
+                // Check if app has root access granted
+                val hasRootAccess = rootAllowedPackages.contains(packageName)
+                
+                apps.add(mapOf<String, Any>(
+                    "name" to appName,
+                    "packageName" to packageName,
+                    "isActive" to isActive,
+                    "hasRootAccess" to hasRootAccess
+                ))
             }
         } catch (e: Exception) {
+            // Fallback: try using pm list packages command
             try {
-                val pm = packageManager
-                val intent = Intent(Intent.ACTION_MAIN, null).apply {
-                    addCategory(Intent.CATEGORY_LAUNCHER)
-                }
-                pm.queryIntentActivities(intent, 0).forEach { resolveInfo ->
-                    val packageName = resolveInfo.activityInfo.packageName
-                    apps.add(mapOf(
-                        "name" to resolveInfo.loadLabel(pm).toString(),
-                        "packageName" to packageName,
-                        "isActive" to !isInDenyList(packageName)
-                    ))
+                val process = Runtime.getRuntime().exec(arrayOf("pm", "list", "packages", "-3"))
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val packageName = line?.replace("package:", "")?.trim() ?: continue
+                    if (packageName.isNotEmpty()) {
+                        val appName = try {
+                            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+                        } catch (e2: Exception) {
+                            packageName
+                        }
+                        val isActive = !denyList.contains(packageName)
+                        val hasRootAccess = rootAllowedPackages.contains(packageName)
+                        apps.add(mapOf<String, Any>(
+                            "name" to appName,
+                            "packageName" to packageName,
+                            "isActive" to isActive,
+                            "hasRootAccess" to hasRootAccess
+                        ))
+                    }
                 }
             } catch (e2: Exception) {}
         }
@@ -220,13 +366,35 @@ class MainActivity : FlutterActivity() {
 
     private fun checkRootAccess(): Boolean {
         return try {
+            // Method 1: Check if su binary exists and works
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
+            val output = reader.readLine()
             process.waitFor()
-            output.contains("uid=0")
-        } catch (e: Exception) {
+            
+            if (output != null && output.contains("uid=0")) {
+                return true
+            }
+            
+            // Method 2: Check if Magisk binary exists
+            val magiskCheck = Runtime.getRuntime().exec(arrayOf("su", "-c", "which magisk"))
+            val magiskReader = BufferedReader(InputStreamReader(magiskCheck.inputStream))
+            val magiskPath = magiskReader.readLine()
+            magiskCheck.waitFor()
+            
+            if (magiskPath != null && magiskPath.contains("magisk")) {
+                return true
+            }
+            
+            // Method 3: Check if /data/adb/magisk directory exists
+            if (File("/data/adb/magisk").exists()) {
+                return true
+            }
+            
             false
+        } catch (e: Exception) {
+            // Fallback: check if Magisk directory exists
+            File("/data/adb/magisk").exists()
         }
     }
 
@@ -253,13 +421,44 @@ class MainActivity : FlutterActivity() {
 
     private fun isRamdiskLoaded(): Boolean {
         return try {
-            val file = File("/proc/cmdline")
-            if (file.exists()) {
-                val cmdline = file.readText()
-                !cmdline.contains("skip_initramfs")
-            } else {
-                false
+            // Method 1: Check if Magisk is properly installed and active
+            val magiskDir = File("/data/adb/magisk")
+            if (magiskDir.exists() && magiskDir.isDirectory) {
+                // Check if core files exist
+                val stubFile = File("/data/adb/magisk/stub.apk")
+                val utilFile = File("/data/adb/magisk/util_functions.sh")
+                if (stubFile.exists() || utilFile.exists()) {
+                    return true
+                }
             }
+            
+            // Method 2: Check /proc/cmdline for skip_initramfs (original method)
+            val cmdlineFile = File("/proc/cmdline")
+            if (cmdlineFile.exists()) {
+                val cmdline = cmdlineFile.readText()
+                if (!cmdline.contains("skip_initramfs")) {
+                    return true
+                }
+            }
+            
+            // Method 3: Check if Magisk daemon is running
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ps -A | grep magiskd"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = reader.readText()
+            if (output.contains("magiskd")) {
+                return true
+            }
+            
+            // Method 4: Check for Magisk boot image backup
+            val backupDir = File("/data/adb/boot-backup")
+            if (backupDir.exists() && backupDir.isDirectory) {
+                val backupFiles = backupDir.listFiles()
+                if (backupFiles != null && backupFiles.isNotEmpty()) {
+                    return true
+                }
+            }
+            
+            false
         } catch (e: Exception) {
             false
         }
@@ -267,7 +466,7 @@ class MainActivity : FlutterActivity() {
 
     private fun getMagiskConfig(): Map<String, Any> {
         return try {
-            mapOf(
+            mapOf<String, Any>(
                 "version" to getMagiskVersion(),
                 "isRooted" to checkRootAccess(),
                 "isZygiskEnabled" to isZygiskEnabled(),
@@ -276,7 +475,7 @@ class MainActivity : FlutterActivity() {
                 "isSuDaemonActive" to isSuDaemonActive()
             )
         } catch (e: Exception) {
-            emptyMap()
+            emptyMap<String, Any>() 
         }
     }
 
@@ -346,58 +545,126 @@ class MainActivity : FlutterActivity() {
         return getDenyList().contains(packageName)
     }
 
+    private fun grantRootAccess(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        return try {
+            // Add to Magisk SU allow list (if using Magisk's built-in SU manager)
+            // Note: This requires Magisk's SU functionality to be enabled
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"))
+            process.waitFor()
+            // For Magisk SU, we track this in a simple file-based list
+            val suListFile = File("/data/adb/su_allowed_packages.txt")
+            val currentList = if (suListFile.exists()) suListFile.readText().split("\n").filter { it.isNotEmpty() } else emptyList()
+            if (!currentList.contains(packageName)) {
+                suListFile.appendText("$packageName\n")
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun revokeRootAccess(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        return try {
+            // Revoke secure settings permission
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pm revoke $packageName android.permission.WRITE_SECURE_SETTINGS"))
+            process.waitFor()
+            // Remove from allowed list
+            val suListFile = File("/data/adb/su_allowed_packages.txt")
+            if (suListFile.exists()) {
+                val currentList = suListFile.readText().split("\n").filter { it.isNotEmpty() && it != packageName }
+                suListFile.writeText(currentList.joinToString("\n") + if (currentList.isNotEmpty()) "\n" else "")
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun getRootAllowedPackages(): List<String> {
+        return try {
+            val suListFile = File("/data/adb/su_allowed_packages.txt")
+            if (suListFile.exists()) {
+                suListFile.readText().split("\n").filter { it.isNotEmpty() }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun installMagisk(bootImage: String): Boolean {
         return try {
+            // Create temporary directory for Magisk files
+            val tmpDir = "/data/local/tmp/magisk_install"
+            val processMkdir = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p $tmpDir"))
+            processMkdir.waitFor()
+            
             if (bootImage.isNotEmpty()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskboot unpack $bootImage"))
-                process.waitFor()
-                val process2 = Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskboot patch ramdisk.cpio"))
-                process2.waitFor()
-                val process3 = Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskboot repack $bootImage"))
-                process3.waitFor()
-                true
+                // Copy boot image to tmp directory
+                val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $bootImage $tmpDir/boot.img"))
+                processCp.waitFor()
+                
+                // Copy necessary Magisk files to tmp directory
+                val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "init-ld", "stub.apk", "util_functions.sh", "boot_patch.sh")
+                for (file in magiskFiles) {
+                    val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/$file $tmpDir/"))
+                    processCopy.waitFor()
+                }
+                
+                // Make files executable
+                val processChmod = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $tmpDir/*"))
+                processChmod.waitFor()
+                
+                // Execute boot patch script
+                val processPatch = Runtime.getRuntime().exec(arrayOf("su", "-c", "cd $tmpDir && ./boot_patch.sh boot.img"))
+                processPatch.waitFor()
+                
+                if (processPatch.exitValue() == 0) {
+                    // Flash the patched image
+                    val processFlash = Runtime.getRuntime().exec(arrayOf("su", "-c", "dd if=$tmpDir/new-boot.img of=$bootImage"))
+                    processFlash.waitFor()
+                    processFlash.exitValue() == 0
+                } else {
+                    false
+                }
             } else {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --install"))
-                process.waitFor()
-                process.exitValue() == 0
+                // Find boot image automatically
+                val bootImageAuto = findBootImage()
+                if (bootImageAuto.isEmpty()) {
+                    return false
+                }
+                
+                // Copy boot image to tmp directory
+                val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $bootImageAuto $tmpDir/boot.img"))
+                processCp.waitFor()
+                
+                // Copy necessary Magisk files to tmp directory
+                val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "init-ld", "stub.apk", "util_functions.sh", "boot_patch.sh")
+                for (file in magiskFiles) {
+                    val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/$file $tmpDir/"))
+                    processCopy.waitFor()
+                }
+                
+                // Make files executable
+                val processChmod = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $tmpDir/*"))
+                processChmod.waitFor()
+                
+                // Execute boot patch script
+                val processPatch = Runtime.getRuntime().exec(arrayOf("su", "-c", "cd $tmpDir && ./boot_patch.sh boot.img"))
+                processPatch.waitFor()
+                
+                if (processPatch.exitValue() == 0) {
+                    // Flash the patched image
+                    val processFlash = Runtime.getRuntime().exec(arrayOf("su", "-c", "dd if=$tmpDir/new-boot.img of=$bootImageAuto"))
+                    processFlash.waitFor()
+                    processFlash.exitValue() == 0
+                } else {
+                    false
+                }
             }
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun uninstallMagisk(restoreImages: Boolean): Boolean {
-        return try {
-            val cmd = if (restoreImages) {
-                arrayOf("su", "-c", "magisk --restore-images")
-            } else {
-                arrayOf("su", "-c", "magisk --uninstall")
-            }
-            val process = Runtime.getRuntime().exec(cmd)
-            process.waitFor()
-            process.exitValue() == 0
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun patchBootImage(bootImage: String): String? {
-        return try {
-            if (bootImage.isEmpty()) return null
-            val outputFile = bootImage.replace(".img", "_patched.img")
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskboot patch $bootImage $outputFile"))
-            process.waitFor()
-            if (process.exitValue() == 0) outputFile else null
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun updateMagiskManager(): Boolean {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pm install -r /data/local/tmp/MagiskManager.apk"))
-            process.waitFor()
-            process.exitValue() == 0
         } catch (e: Exception) {
             false
         }
@@ -417,7 +684,7 @@ class MainActivity : FlutterActivity() {
 
     private fun getDeviceInfo(): Map<String, Any> {
         return try {
-            mapOf(
+            mapOf<String, Any>(
                 "androidVersion" to android.os.Build.VERSION.RELEASE,
                 "sdkVersion" to android.os.Build.VERSION.SDK_INT,
                 "device" to android.os.Build.DEVICE,
@@ -427,7 +694,7 @@ class MainActivity : FlutterActivity() {
                 "hasMagisk" to File("/data/adb/magisk").exists()
             )
         } catch (e: Exception) {
-            emptyMap()
+            emptyMap<String, Any>()
         }
     }
 
@@ -438,6 +705,160 @@ class MainActivity : FlutterActivity() {
             try {
                 Runtime.getRuntime().exec("reboot")
             } catch (e2: Exception) {}
+        }
+    }
+
+    private fun findBootImage(): String {
+        try {
+            // Check for init_boot first (for newer devices)
+            val initBoot = "/dev/block/by-name/init_boot"
+            if (File(initBoot).exists()) {
+                return initBoot
+            }
+            
+            // Check standard boot locations
+            val bootLocations = listOf(
+                "/dev/block/by-name/boot",
+                "/dev/block/platform/*/*/by-name/boot",
+                "/dev/block/platform/*/*/*/by-name/boot",
+                "/dev/block/bootdevice/by-name/boot"
+            )
+            
+            for (location in bootLocations) {
+                if (location.contains("*")) {
+                    // Handle wildcard paths
+                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls $location"))
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        if (line?.isNotEmpty() == true && File(line).exists()) {
+                            return line
+                        }
+                    }
+                } else {
+                    if (File(location).exists()) {
+                        return location
+                    }
+                }
+            }
+            
+            // Fallback: try to find using find_block logic
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "find /dev/block -name '*boot*' | grep -v 'recovery' | head -n 1"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val result = reader.readLine()
+            if (result?.isNotEmpty() == true) {
+                return result
+            }
+            
+        } catch (e: Exception) {
+            // Ignore errors and return empty
+        }
+        return ""
+    }
+
+    private fun uninstallMagisk(restoreImages: Boolean): Boolean {
+        return try {
+            // Create temporary directory for uninstaller
+            val tmpDir = "/data/local/tmp/magisk_uninstall"
+            val processMkdir = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p $tmpDir"))
+            processMkdir.waitFor()
+            
+            // Copy uninstaller script and necessary files
+            val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/uninstaller.sh $tmpDir/"))
+            processCp.waitFor()
+            
+            // Copy Magisk binaries
+            val magiskFiles = listOf("magisk", "magiskboot", "util_functions.sh")
+            for (file in magiskFiles) {
+                val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/$file $tmpDir/"))
+                processCopy.waitFor()
+            }
+            
+            // Make files executable
+            val processChmod = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $tmpDir/*"))
+            processChmod.waitFor()
+            
+            // Execute uninstaller script
+            val cmd = if (restoreImages) {
+                "$tmpDir/uninstaller.sh --restore-images"
+            } else {
+                "$tmpDir/uninstaller.sh"
+            }
+            
+            val processUninstall = Runtime.getRuntime().exec(arrayOf("su", "-c", "cd $tmpDir && $cmd"))
+            processUninstall.waitFor()
+            processUninstall.exitValue() == 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun patchBootImage(bootImage: String): String? {
+        return try {
+            if (bootImage.isEmpty()) return null
+            
+            // Create temporary directory
+            val tmpDir = "/data/local/tmp/magisk_patch"
+            val processMkdir = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p $tmpDir"))
+            processMkdir.waitFor()
+            
+            // Copy boot image to tmp directory
+            val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $bootImage $tmpDir/boot.img"))
+            processCp.waitFor()
+            
+            // Copy necessary Magisk files
+            val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "init-ld", "stub.apk", "util_functions.sh", "boot_patch.sh")
+            for (file in magiskFiles) {
+                val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/$file $tmpDir/"))
+                processCopy.waitFor()
+            }
+            
+            // Make files executable
+            val processChmod = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $tmpDir/*"))
+            processChmod.waitFor()
+            
+            // Execute boot patch script
+            val processPatch = Runtime.getRuntime().exec(arrayOf("su", "-c", "cd $tmpDir && ./boot_patch.sh boot.img"))
+            processPatch.waitFor()
+            
+            if (processPatch.exitValue() == 0) {
+                val outputFile = bootImage.replace(".img", "_patched.img")
+                // Copy patched image back
+                val processCopyOut = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $tmpDir/new-boot.img $outputFile"))
+                processCopyOut.waitFor()
+                if (processCopyOut.exitValue() == 0) {
+                    outputFile
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun updateMagiskManager(): Boolean {
+        return try {
+            // Download latest Magisk Manager from GitHub
+            val downloadUrl = "https://github.com/topjohnwu/Magisk/releases/latest/download/app-release.apk"
+            val apkPath = "/data/local/tmp/MagiskManager.apk"
+            
+            // Download the APK
+            val processDownload = Runtime.getRuntime().exec(arrayOf("su", "-c", "curl -L -o $apkPath $downloadUrl"))
+            processDownload.waitFor()
+            
+            if (processDownload.exitValue() == 0) {
+                // Install the APK
+                val processInstall = Runtime.getRuntime().exec(arrayOf("su", "-c", "pm install -r $apkPath"))
+                processInstall.waitFor()
+                processInstall.exitValue() == 0
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 

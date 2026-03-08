@@ -32,6 +32,7 @@ class Module {
   final String author;
   final bool isEnabled;
   final String description;
+  final String path;
 
   const Module({
     required this.name,
@@ -39,6 +40,7 @@ class Module {
     this.author = 'Unknown',
     this.isEnabled = true,
     this.description = '',
+    this.path = '',
   });
 
   Module copyWith({
@@ -47,6 +49,7 @@ class Module {
     String? author,
     bool? isEnabled,
     String? description,
+    String? path,
   }) {
     return Module(
       name: name ?? this.name,
@@ -54,6 +57,7 @@ class Module {
       author: author ?? this.author,
       isEnabled: isEnabled ?? this.isEnabled,
       description: description ?? this.description,
+      path: path ?? this.path,
     );
   }
 }
@@ -61,23 +65,27 @@ class Module {
 class AppInfo {
   final String name;
   final String packageName;
-  final bool isActive;
+  final bool isActive;  // For denylist: true = not in denylist (root visible),false = in denylist (root hidden)
+  final bool hasRootAccess;  // true = app has been granted root access
 
   const AppInfo({
     required this.name,
     required this.packageName,
     this.isActive = true,
+    this.hasRootAccess = false,
   });
 
   AppInfo copyWith({
     String? name,
     String? packageName,
     bool? isActive,
+    bool? hasRootAccess,
   }) {
     return AppInfo(
       name: name ?? this.name,
       packageName: packageName ?? this.packageName,
       isActive: isActive ?? this.isActive,
+      hasRootAccess: hasRootAccess ?? this.hasRootAccess,
     );
   }
 }

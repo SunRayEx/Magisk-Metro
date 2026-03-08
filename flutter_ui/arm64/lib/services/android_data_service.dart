@@ -212,6 +212,30 @@ class AndroidDataService {
     }
   }
 
+  static Future<bool> grantRootAccess(String packageName) async {
+    try {
+      final result =
+          await _denyListChannel.invokeMethod<bool>('grantRootAccess', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> revokeRootAccess(String packageName) async {
+    try {
+      final result =
+          await _denyListChannel.invokeMethod<bool>('revokeRootAccess', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Stream<String> getLogcatStream() {
     try {
       return EventChannel('magisk_manager/logs')

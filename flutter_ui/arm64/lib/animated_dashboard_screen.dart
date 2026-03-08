@@ -201,17 +201,17 @@ class _AnimatedDashboardScreenState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          flex: 4,
+          flex: 3,
           child: _buildAnimatedModulesCard(context, ref, isDark, 3),
         ),
         const SizedBox(height: 4),
         Expanded(
-          flex: 4,
+          flex: 3,
           child: _buildAnimatedAppsCard(context, ref, isDark, 4),
         ),
         const SizedBox(height: 4),
         Expanded(
-          flex: 4,
+          flex: 6,
           child: _buildAnimatedLogsCard(context, ref, isDark, 5),
         ),
       ],
