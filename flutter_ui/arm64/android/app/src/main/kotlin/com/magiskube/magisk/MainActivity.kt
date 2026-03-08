@@ -32,6 +32,7 @@ class MainActivity : FlutterActivity() {
     private val MAGISK_CHANNEL = "magisk_manager/magisk"
     private val DENYLIST_CHANNEL = "magisk_manager/denylist"
     private val LOGS_CHANNEL = "magisk_manager/logs"
+    private val FILEPICKER_CHANNEL = "magisk_manager/filepicker"
     private val uiHandler = Handler(Looper.getMainLooper())
     
     private var pendingResult: Result? = null
@@ -56,7 +57,8 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "installMagisk" -> {
                     val bootImage = call.argument<String>("bootImage")
-                    result.success(installMagisk(bootImage ?: ""))
+                    val isPatchMode = call.argument<Boolean>("isPatchMode") ?: false
+                    result.success(installMagisk(bootImage ?: "", isPatchMode))
                 }
                 "uninstallMagisk" -> {
                     val restoreImages = call.argument<Boolean>("restoreImages") ?: true
@@ -142,6 +144,15 @@ class MainActivity : FlutterActivity() {
                 }
             }
         )
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILEPICKER_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pickFile" -> {
+                    pickFile(result)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun getModulesList(): List<Map<String, Any>> {
@@ -208,34 +219,35 @@ class MainActivity : FlutterActivity() {
 
     private fun getModuleInfo(moduleName: String): Map<String, Any> {
         try {
-            // Read module.json using root shell
-            val jsonProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/modules/$moduleName/module.json"))
-            val jsonReader = BufferedReader(InputStreamReader(jsonProcess.inputStream))
-            val jsonOutput = StringBuilder()
+            // Read module.prop using root shell (Magisk modules use .prop files, not .json)
+            val propProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/modules/$moduleName/module.prop"))
+            val propReader = BufferedReader(InputStreamReader(propProcess.inputStream))
+            val propOutput = StringBuilder()
             var line: String?
             
-            while (jsonReader.readLine().also { line = it } != null) {
-                jsonOutput.append(line).append("\n")
+            while (propReader.readLine().also { line = it } != null) {
+                propOutput.append(line).append("\n")
             }
             
-            jsonProcess.waitFor()
+            propProcess.waitFor()
             
             var name = moduleName
             var version = "Unknown"
             var author = "Unknown"
             var description = ""
             
-            if (jsonProcess.exitValue() == 0 && jsonOutput.isNotEmpty()) {
-                val json = jsonOutput.toString()
-                val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val versionMatch = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val authorMatch = Regex("\"author\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val descMatch = Regex("\"description\"\\s*:\\s*\"([^\"]+)\"").find(json)
+            if (propProcess.exitValue() == 0 && propOutput.isNotEmpty()) {
+                val propContent = propOutput.toString()
+                // Parse module.prop key-value pairs
+                val nameMatch = Regex("name\\s*=\\s*([^\\n]+)").find(propContent)
+                val versionMatch = Regex("version\\s*=\\s*([^\\n]+)").find(propContent)
+                val authorMatch = Regex("author\\s*=\\s*([^\\n]+)").find(propContent)
+                val descMatch = Regex("description\\s*=\\s*([^\\n]+)").find(propContent)
                 
-                name = nameMatch?.groupValues?.get(1) ?: moduleName
-                version = versionMatch?.groupValues?.get(1) ?: "Unknown"
-                author = authorMatch?.groupValues?.get(1) ?: "Unknown"
-                description = descMatch?.groupValues?.get(1) ?: ""
+                name = nameMatch?.groupValues?.get(1)?.trim() ?: moduleName
+                version = versionMatch?.groupValues?.get(1)?.trim() ?: "Unknown"
+                author = authorMatch?.groupValues?.get(1)?.trim() ?: "Unknown"
+                description = descMatch?.groupValues?.get(1)?.trim() ?: ""
             }
             
             // Check if module is enabled using root shell
@@ -271,19 +283,19 @@ class MainActivity : FlutterActivity() {
         var author = "Unknown"
         var description = ""
         
-        val moduleJson = File(moduleDir, "module.json")
-        if (moduleJson.exists()) {
+        val moduleProp = File(moduleDir, "module.prop")
+        if (moduleProp.exists()) {
             try {
-                val json = moduleJson.readText()
-                val nameMatch = Regex("\"name\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val versionMatch = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val authorMatch = Regex("\"author\"\\s*:\\s*\"([^\"]+)\"").find(json)
-                val descMatch = Regex("\"description\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                val propContent = moduleProp.readText()
+                val nameMatch = Regex("name\\s*=\\s*([^\\n]+)").find(propContent)
+                val versionMatch = Regex("version\\s*=\\s*([^\\n]+)").find(propContent)
+                val authorMatch = Regex("author\\s*=\\s*([^\\n]+)").find(propContent)
+                val descMatch = Regex("description\\s*=\\s*([^\\n]+)").find(propContent)
                 
-                name = nameMatch?.groupValues?.get(1) ?: moduleDir.name
-                version = versionMatch?.groupValues?.get(1) ?: "Unknown"
-                author = authorMatch?.groupValues?.get(1) ?: "Unknown"
-                description = descMatch?.groupValues?.get(1) ?: ""
+                name = nameMatch?.groupValues?.get(1)?.trim() ?: moduleDir.name
+                version = versionMatch?.groupValues?.get(1)?.trim() ?: "Unknown"
+                author = authorMatch?.groupValues?.get(1)?.trim() ?: "Unknown"
+                description = descMatch?.groupValues?.get(1)?.trim() ?: ""
             } catch (e: Exception) {}
         }
         
@@ -595,7 +607,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun installMagisk(bootImage: String): Boolean {
+    private fun installMagisk(bootImage: String, isPatchMode: Boolean): Boolean {
         return try {
             // Create temporary directory for Magisk files
             val tmpDir = "/data/local/tmp/magisk_install"
@@ -623,15 +635,28 @@ class MainActivity : FlutterActivity() {
                 processPatch.waitFor()
                 
                 if (processPatch.exitValue() == 0) {
-                    // Flash the patched image
-                    val processFlash = Runtime.getRuntime().exec(arrayOf("su", "-c", "dd if=$tmpDir/new-boot.img of=$bootImage"))
-                    processFlash.waitFor()
-                    processFlash.exitValue() == 0
+                    if (isPatchMode) {
+                        // For patch mode, just copy the patched image to a new location
+                        val outputFile = "/storage/emulated/0/Download/magisk_patched_$(System.currentTimeMillis()).img"
+                        val processCopyOut = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $tmpDir/new-boot.img $outputFile"))
+                        processCopyOut.waitFor()
+                        processCopyOut.exitValue() == 0
+                    } else {
+                        // For install mode, flash the patched image
+                        val processFlash = Runtime.getRuntime().exec(arrayOf("su", "-c", "dd if=$tmpDir/new-boot.img of=$bootImage"))
+                        processFlash.waitFor()
+                        processFlash.exitValue() == 0
+                    }
                 } else {
                     false
                 }
             } else {
-                // Find boot image automatically
+                // Find boot image automatically (only for install mode, not patch mode)
+                if (isPatchMode) {
+                    // Patch mode requires a specific boot image file
+                    return false
+                }
+                
                 val bootImageAuto = findBootImage()
                 if (bootImageAuto.isEmpty()) {
                     return false
@@ -710,34 +735,64 @@ class MainActivity : FlutterActivity() {
 
     private fun findBootImage(): String {
         try {
+            // Get current slot suffix
+            val slotSuffixProcess = Runtime.getRuntime().exec(arrayOf("getprop", "ro.boot.slot_suffix"))
+            val slotReader = BufferedReader(InputStreamReader(slotSuffixProcess.inputStream))
+            val slotSuffix = slotReader.readLine()?.trim() ?: ""
+            
             // Check for init_boot first (for newer devices)
+            if (slotSuffix.isNotEmpty()) {
+                val initBootWithSlot = "/dev/block/by-name/init_boot$slotSuffix"
+                if (File(initBootWithSlot).exists()) {
+                    return initBootWithSlot
+                }
+            }
             val initBoot = "/dev/block/by-name/init_boot"
             if (File(initBoot).exists()) {
                 return initBoot
             }
             
-            // Check standard boot locations
-            val bootLocations = listOf(
-                "/dev/block/by-name/boot",
-                "/dev/block/platform/*/*/by-name/boot",
-                "/dev/block/platform/*/*/*/by-name/boot",
-                "/dev/block/bootdevice/by-name/boot"
-            )
+            // Check standard boot locations with slot support
+            val bootLocations = mutableListOf<String>()
+            if (slotSuffix.isNotEmpty()) {
+                // Add slot-specific locations first
+                bootLocations.add("/dev/block/by-name/boot$slotSuffix")
+                bootLocations.add("/dev/block/platform/*/*/by-name/boot$slotSuffix")
+                bootLocations.add("/dev/block/platform/*/*/*/by-name/boot$slotSuffix")
+                bootLocations.add("/dev/block/bootdevice/by-name/boot$slotSuffix")
+            }
+            // Add non-slot locations as fallback
+            bootLocations.add("/dev/block/by-name/boot")
+            bootLocations.add("/dev/block/platform/*/*/by-name/boot")
+            bootLocations.add("/dev/block/platform/*/*/*/by-name/boot")
+            bootLocations.add("/dev/block/bootdevice/by-name/boot")
             
             for (location in bootLocations) {
                 if (location.contains("*")) {
                     // Handle wildcard paths
-                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls $location"))
+                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls $location 2>/dev/null"))
                     val reader = BufferedReader(InputStreamReader(process.inputStream))
                     var line: String?
                     while (reader.readLine().also { line = it } != null) {
                         if (line?.isNotEmpty() == true && File(line).exists()) {
-                            return line
+                            // Verify it's a valid boot image by checking if it's a block device
+                            val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", line))
+                            val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
+                            val fileType = statReader.readLine()
+                            if (fileType?.contains("block") == true) {
+                                return line
+                            }
                         }
                     }
                 } else {
                     if (File(location).exists()) {
-                        return location
+                        // Verify it's a valid boot image by checking if it's a block device
+                        val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", location))
+                        val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
+                        val fileType = statReader.readLine()
+                        if (fileType?.contains("block") == true) {
+                            return location
+                        }
                     }
                 }
             }
@@ -747,7 +802,13 @@ class MainActivity : FlutterActivity() {
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val result = reader.readLine()
             if (result?.isNotEmpty() == true) {
-                return result
+                // Verify it's a valid boot image
+                val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", result))
+                val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
+                val fileType = statReader.readLine()
+                if (fileType?.contains("block") == true) {
+                    return result
+                }
             }
             
         } catch (e: Exception) {
@@ -763,15 +824,35 @@ class MainActivity : FlutterActivity() {
             val processMkdir = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p $tmpDir"))
             processMkdir.waitFor()
             
+            // Check if uninstaller.sh exists in /data/adb/magisk/, if not, copy from app assets
+            var uninstallerPath = "/data/adb/magisk/uninstaller.sh"
+            val uninstallerFile = File(uninstallerPath)
+            if (!uninstallerFile.exists()) {
+                // Copy from app assets to temporary location
+                val assetUninstallerPath = "/data/local/tmp/uninstaller.sh"
+                // Read uninstaller.sh from app assets and write to temporary location
+                val inputStream = assets.open("uninstaller.sh")
+                val content = inputStream.bufferedReader().readText()
+                inputStream.close()
+                
+                // Write to temporary file
+                val processWrite = Runtime.getRuntime().exec(arrayOf("su", "-c", "echo '$content' > $assetUninstallerPath"))
+                processWrite.waitFor()
+                uninstallerPath = assetUninstallerPath
+            }
+            
             // Copy uninstaller script and necessary files
-            val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/uninstaller.sh $tmpDir/"))
+            val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $uninstallerPath $tmpDir/"))
             processCp.waitFor()
             
-            // Copy Magisk binaries
+            // Copy Magisk binaries if they exist
             val magiskFiles = listOf("magisk", "magiskboot", "util_functions.sh")
             for (file in magiskFiles) {
-                val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp /data/adb/magisk/$file $tmpDir/"))
-                processCopy.waitFor()
+                val sourceFile = "/data/adb/magisk/$file"
+                if (File(sourceFile).exists()) {
+                    val processCopy = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp $sourceFile $tmpDir/"))
+                    processCopy.waitFor()
+                }
             }
             
             // Make files executable
@@ -875,6 +956,55 @@ class MainActivity : FlutterActivity() {
                 }
                 startActivity(intent)
             } catch (e2: Exception) {}
+        }
+    }
+
+    private fun pickFile(result: Result) {
+        pendingResult = result
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        startActivityForResult(intent, 1001)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 1001) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val uri = data.data
+                if (uri != null) {
+                    // Get the file path from URI
+                    val filePath = getFilePathFromUri(uri)
+                    pendingResult?.success(filePath)
+                } else {
+                    pendingResult?.error("FILE_PICKER_ERROR", "No file selected", null)
+                }
+            } else {
+                pendingResult?.error("FILE_PICKER_CANCELLED", "File picker cancelled", null)
+            }
+            pendingResult = null
+        }
+    }
+
+    private fun getFilePathFromUri(uri: Uri): String? {
+        return try {
+            when {
+                uri.scheme == "file" -> uri.path
+                uri.scheme == "content" -> {
+                    val projection = arrayOf("_data")
+                    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            cursor.getString(cursor.getColumnIndexOrThrow("_data"))
+                        } else {
+                            null
+                        }
+                    }
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 }

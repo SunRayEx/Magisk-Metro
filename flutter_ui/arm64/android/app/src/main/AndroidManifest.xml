@@ -33,6 +33,9 @@
     </application>
     <!-- Permission to query all packages (Android 11+) -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Permission for file picker -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -43,6 +46,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- For file picker -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="*/*" />
         </intent>
     </queries>
 </manifest>

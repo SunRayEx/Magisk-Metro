@@ -7,6 +7,8 @@ class AndroidDataService {
       MethodChannel('magisk_manager/magisk');
   static const MethodChannel _denyListChannel =
       MethodChannel('magisk_manager/denylist');
+  static const MethodChannel _filePickerChannel =
+      MethodChannel('magisk_manager/filepicker');
 
   static Future<List<Map<String, dynamic>>> getModules() async {
     try {
@@ -85,10 +87,11 @@ class AndroidDataService {
     }
   }
 
-  static Future<bool> installMagisk(String? bootImage) async {
+  static Future<bool> installMagisk({String? bootImage, bool isPatchMode = false}) async {
     try {
       final result = await _magiskChannel.invokeMethod<bool>('installMagisk', {
         'bootImage': bootImage ?? '',
+        'isPatchMode': isPatchMode,
       });
       return result ?? false;
     } catch (e) {
@@ -233,6 +236,15 @@ class AndroidDataService {
       return result ?? false;
     } catch (e) {
       return false;
+    }
+  }
+
+  static Future<String?> pickFile() async {
+    try {
+      final result = await _filePickerChannel.invokeMethod<String>('pickFile');
+      return result;
+    } catch (e) {
+      return null;
     }
   }
 

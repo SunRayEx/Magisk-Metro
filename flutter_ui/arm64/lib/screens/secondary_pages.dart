@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/dashboard_providers.dart';
 import '../models/models.dart';
+import '../services/android_data_service.dart';
+import 'flash_logs_page.dart';
 
 class MagiskManagerPage extends ConsumerWidget {
   const MagiskManagerPage({super.key});
@@ -27,7 +29,7 @@ class MagiskManagerPage extends ConsumerWidget {
                   _buildMenuTile(
                     context,
                     'Install Magisk',
-                    'Install or upgrade Magisk',
+                    'Install, upgrade, or patch Magisk',
                     Icons.download,
                     widgetColor,
                     () => _showInstallDialog(context),
@@ -40,15 +42,6 @@ class MagiskManagerPage extends ConsumerWidget {
                     Icons.delete_forever,
                     widgetColor,
                     () => _showUninstallDialog(context),
-                    isDark,
-                  ),
-                  _buildMenuTile(
-                    context,
-                    'Patch Boot Image',
-                    'Patch boot image manually',
-                    Icons.construction,
-                    widgetColor,
-                    () => _showPatchDialog(context),
                     isDark,
                   ),
                   _buildMenuTile(
@@ -212,22 +205,22 @@ class MagiskManagerPage extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.smartphone),
               title: const Text('Auto Install'),
-              subtitle: const Text('Automatically detect and install'),
+              subtitle: const Text('Automatically detect and install Magisk'),
               onTap: () {
                 Navigator.pop(context);
-                // Call the actual install function
-                _performInstallMagisk(context, '');
+                _performInstallMagisk(context, '', isPatchMode: false);
               },
             ),
             ListTile(
               leading: const Icon(Icons.sd_card),
-              title: const Text('Manual Install'),
-              subtitle: const Text('Select boot image file'),
-              onTap: () {
+              title: const Text('Patch Boot Image'),
+              subtitle: const Text('Select boot image file to patch with Magisk'),
+              onTap: () async {
                 Navigator.pop(context);
-                // This would typically open a file picker
-                // For now, we'll just show a message
-                _showMessage(context, 'Manual install would open file picker');
+                final filePath = await AndroidDataService.pickFile();
+                if (filePath != null) {
+                  _performInstallMagisk(context, filePath, isPatchMode: true);
+                }
               },
             ),
           ],
@@ -282,47 +275,6 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  void _showPatchDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Patch Boot Image'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Choose patching method:'),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.sd_card),
-              title: const Text('Select Boot Image'),
-              subtitle: const Text('Choose boot image file to patch'),
-              onTap: () {
-                Navigator.pop(context);
-                // This would typically open a file picker
-                _showMessage(context, 'File picker would open for boot image selection');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.auto_fix_high),
-              title: const Text('Auto Detect'),
-              subtitle: const Text('Automatically detect and patch boot image'),
-              onTap: () {
-                Navigator.pop(context);
-                _performPatchBootImage(context, '');
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showUpdateDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -363,22 +315,97 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  void _performInstallMagisk(BuildContext context, String bootImage) {
-    // This would call the actual AndroidDataService method
-    // For now, we'll just show a message
-    _showMessage(context, 'Install Magisk initiated with boot image: $bootImage');
+  void _performInstallMagisk(BuildContext context, String bootImage, {bool isPatchMode = false}) {
+    final title = isPatchMode ? 'Patching Boot Image' : 'Installing Magisk';
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
+          title: title,
+          onExecute: () async {
+            try {
+              final result = await AndroidDataService.installMagisk(
+                bootImage: bootImage.isEmpty ? null : bootImage,
+                isPatchMode: isPatchMode,
+              );
+              return result;
+            } catch (e) {
+              return false;
+            }
+          },
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
   void _performUninstallMagisk(BuildContext context, bool restoreImages) {
-    _showMessage(context, 'Uninstall Magisk initiated with restoreImages: $restoreImages');
+    final title = restoreImages ? 'Full Uninstall Magisk' : 'Remove Magisk Only';
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
+          title: title,
+          onExecute: () async {
+            try {
+              final result = await AndroidDataService.uninstallMagisk(restoreImages: restoreImages);
+              return result;
+            } catch (e) {
+              return false;
+            }
+          },
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
-  void _performPatchBootImage(BuildContext context, String bootImage) {
-    _showMessage(context, 'Patch Boot Image initiated with boot image: $bootImage');
-  }
 
   void _performUpdateManager(BuildContext context) {
-    _showMessage(context, 'Update Manager initiated');
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
+          title: 'Updating Magisk Manager',
+          onExecute: () async {
+            try {
+              final result = await AndroidDataService.updateManager();
+              return result;
+            } catch (e) {
+              return false;
+            }
+          },
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
   void _checkLatestVersion(BuildContext context) {
