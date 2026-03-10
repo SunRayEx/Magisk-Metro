@@ -94,19 +94,13 @@ force_out = False
 
 
 def mv(source: Path, target: Path):
-    try:
-        shutil.move(source, target)
-        vprint(f"mv {source} -> {target}")
-    except:
-        pass
+    shutil.move(source, target)
+    vprint(f"mv {source} -> {target}")
 
 
 def cp(source: Path, target: Path):
-    try:
-        shutil.copyfile(source, target)
-        vprint(f"cp {source} -> {target}")
-    except:
-        pass
+    shutil.copyfile(source, target)
+    vprint(f"cp {source} -> {target}")
 
 
 def rm(file: Path):

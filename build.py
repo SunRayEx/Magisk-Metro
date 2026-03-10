@@ -444,6 +444,64 @@ def build_app():
     cp(source, target)
 
 
+def build_flutter_app():
+    header("* Building the Flutter Magisk app")
+    ensure_paths()
+    env = find_jdk()
+    
+    # Change to flutter_ui/arm64 directory
+    os.chdir("flutter_ui/arm64")
+    
+    # Run flutter build
+    build_type = "release" if args.release else "debug"
+    proc = execv(["flutter", "build", "apk", "--" + build_type], env=env)
+    os.chdir("../..")
+    
+    if proc.returncode != 0:
+        error("Build Flutter app failed!")
+    
+    # Copy the built APK to output directory
+    source = Path("flutter_ui", "arm64", "build", "app", "outputs", "flutter-apk", f"app-{build_type}.apk")
+    target = config["outdir"] / f"magiskube-{build_type}.apk"
+    mv(source, target)
+    header(f"Output: {target}")
+
+
+def build_flutter_magisk():
+    header("* Building Flutter Magisk with native binaries")
+    # First build native binaries
+    build_native()
+    
+    # Copy necessary files to Flutter assets
+    flutter_assets = Path("flutter_ui", "arm64", "android", "app", "src", "main", "assets")
+    flutter_assets.mkdir(parents=True, exist_ok=True)
+    
+    # Copy native binaries
+    native_out = Path("native", "out", "arm64-v8a")
+    binaries = ["magisk", "magiskboot", "magiskinit", "magiskpolicy"]
+    for binary in binaries:
+        source = native_out / binary
+        target = flutter_assets / binary
+        if source.exists():
+            cp(source, target)
+    
+    # Copy stub.apk
+    stub_source = Path("temp_apk", "assets", "stub.apk")
+    if stub_source.exists():
+        cp(stub_source, flutter_assets / "stub.apk")
+    
+    # Copy scripts
+    scripts = ["util_functions.sh", "boot_patch.sh", "uninstaller.sh"]
+    for script in scripts:
+        source = Path("scripts", script)
+        target = flutter_assets / script
+        if source.exists():
+            cp(source, target)
+    
+    # Build Flutter app
+    build_flutter_app()
+
+
 def build_stub():
     header("* Building the stub app")
     apk = build_apk(":stub")
@@ -829,6 +887,10 @@ def parse_args():
 
     app_parser = subparsers.add_parser("app", help="build the Magisk app")
 
+    flutter_app_parser = subparsers.add_parser("flutter_app", help="build the Flutter Magisk app")
+
+    flutter_magisk_parser = subparsers.add_parser("flutter_magisk", help="build Flutter Magisk with native binaries")
+
     stub_parser = subparsers.add_parser("stub", help="build the stub app")
 
     test_parser = subparsers.add_parser("test", help="build the test app")
@@ -888,6 +950,8 @@ def parse_args():
     rustup_parser.set_defaults(func=setup_rustup)
     gen_parser.set_defaults(func=gen_ide)
     app_parser.set_defaults(func=build_app)
+    flutter_app_parser.set_defaults(func=build_flutter_app)
+    flutter_magisk_parser.set_defaults(func=build_flutter_magisk)
     stub_parser.set_defaults(func=build_stub)
     test_parser.set_defaults(func=build_test)
     emu_parser.set_defaults(func=setup_avd)

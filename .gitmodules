@@ -16,3 +16,6 @@
 [submodule "crt0"]
 	path = native/src/external/crt0
 	url = https://github.com/topjohnwu/crt0.git
+[submodule "selinux"]
+	path = native/src/external/selinux
+	url = https://android.googlesource.com/platform/external/selinux
