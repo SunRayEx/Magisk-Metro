@@ -6,7 +6,7 @@
 
 ## Introduction
 
-Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 6.0.<br>
+MagisKube is a Magisk fork suite of open source software for customizing Android, supporting devices higher than Android 6.0.<br>
 Some highlight features:
 
 - **MagiskSU**: Provide root access for applications
@@ -45,8 +45,7 @@ Translate each and place them in the respective locations (`[module]/src/main/re
 
 ## Upstream Link
 
-- Magisk
-- [GitHub](https://github.com/topjohnwu/Magisk)
+- [Magisk](https://github.com/topjohnwu/Magisk)
 
 ## License
 
