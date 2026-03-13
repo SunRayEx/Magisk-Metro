@@ -5,6 +5,8 @@ import '../providers/dashboard_providers.dart';
 import '../models/models.dart';
 import '../services/android_data_service.dart';
 import 'flash_logs_page.dart';
+import '../navigation/flip_page_route.dart';
+import '../l10n/app_localizations.dart';
 
 class MagiskManagerPage extends ConsumerWidget {
   const MagiskManagerPage({super.key});
@@ -15,46 +17,48 @@ class MagiskManagerPage extends ConsumerWidget {
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(0, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Magisk Manager', isDark),
+            _buildHeader(context, localizations.magiskManager, isDark),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(4),
                 children: [
                   _buildMenuTile(
                     context,
-                    'Install Magisk',
-                    'Install, upgrade, or patch Magisk',
+                    localizations.installMagisk,
+                    localizations.installMagiskDesc,
                     Icons.download,
                     widgetColor,
-                    () => _showInstallDialog(context),
+                    () => _showInstallDialog(context, status),
                     isDark,
                   ),
+                  if (status.isRooted)
+                    _buildMenuTile(
+                      context,
+                      localizations.uninstallMagisk,
+                      localizations.uninstallMagiskDesc,
+                      Icons.delete_forever,
+                      widgetColor,
+                      () => _showUninstallDialog(context),
+                      isDark,
+                    ),
                   _buildMenuTile(
                     context,
-                    'Uninstall Magisk',
-                    'Remove Magisk from device',
-                    Icons.delete_forever,
-                    widgetColor,
-                    () => _showUninstallDialog(context),
-                    isDark,
-                  ),
-                  _buildMenuTile(
-                    context,
-                    'Update Manager',
-                    'Check for updates',
+                    localizations.updateManager,
+                    localizations.updateManagerDesc,
                     Icons.system_update,
                     widgetColor,
                     () => _showUpdateDialog(context),
                     isDark,
                   ),
                   const SizedBox(height: 8),
-                  _buildInfoCard(status, isDark, widgetColor),
+                  _buildInfoCard(status, isDark, widgetColor, localizations),
                 ],
               ),
             ),
@@ -144,7 +148,7 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoCard(MagiskStatus status, bool isDark, Color widgetColor) {
+  Widget _buildInfoCard(MagiskStatus status, bool isDark, Color widgetColor, AppLocalizations localizations) {
     return Container(
       padding: const EdgeInsets.all(16),
       color: widgetColor,
@@ -152,7 +156,7 @@ class MagiskManagerPage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Magisk Information',
+            localizations.magiskInfo,
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w900,
               fontSize: 18,
@@ -160,12 +164,12 @@ class MagiskManagerPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _buildInfoRow('Version', status.versionCode),
-          _buildInfoRow('Root', status.isRooted ? 'Yes' : 'No'),
+          _buildInfoRow(localizations.version, status.versionCode),
+          _buildInfoRow(localizations.root, status.isRooted ? localizations.yes : localizations.no),
           _buildInfoRow(
-              'Zygisk', status.isZygiskEnabled ? 'Enabled' : 'Disabled'),
+              localizations.zygisk, status.isZygiskEnabled ? localizations.enabled : localizations.disabled),
           _buildInfoRow(
-              'Ramdisk', status.isRamdiskLoaded ? 'Loaded' : 'Not Loaded'),
+              localizations.ramdisk, status.isRamdiskLoaded ? localizations.loaded : localizations.notLoaded),
         ],
       ),
     );
@@ -192,43 +196,76 @@ class MagiskManagerPage extends ConsumerWidget {
     );
   }
 
-  void _showInstallDialog(BuildContext context) {
+  void _showInstallDialog(BuildContext context, MagiskStatus status) {
+    final localizations = AppLocalizations.of(context)!;
+    final hasRoot = status.isRooted;
+    
+    List<Widget> menuItems = [
+      ListTile(
+        leading: const Icon(Icons.smartphone),
+        title: Text(localizations.autoInstall),
+        subtitle: Text(localizations.autoInstallDesc),
+        onTap: () {
+          Navigator.pop(context);
+          _performInstallMagisk(context, '', isPatchMode: false);
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.sd_card),
+        title: Text(localizations.patchBootImage),
+        subtitle: Text(localizations.patchBootImageDesc),
+        onTap: () async {
+          Navigator.pop(context);
+          try {
+            // Check if we have root access before proceeding
+            if (!hasRoot) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(localizations.rootRequired)),
+              );
+              return;
+            }
+            
+            final filePath = await AndroidDataService.pickFile();
+            if (filePath != null) {
+              _performInstallMagisk(context, filePath, isPatchMode: true);
+            }
+          } catch (e) {
+            // Handle file picker error
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error selecting file: $e')),
+            );
+          }
+        },
+      ),
+    ];
+    
+    // Only show OTA slot switch if we have root access
+    if (hasRoot) {
+      menuItems.add(
+        ListTile(
+          leading: const Icon(Icons.swap_horiz),
+          title: Text(localizations.otaSlotSwitch),
+          subtitle: Text(localizations.otaSlotSwitchDesc),
+          onTap: () {
+            Navigator.pop(context);
+            _performOtaSlotSwitch(context);
+          },
+        ),
+      );
+    }
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Install Magisk'),
+        title: Text(localizations.installMagisk),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Choose installation method:'),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.smartphone),
-              title: const Text('Auto Install'),
-              subtitle: const Text('Automatically detect and install Magisk'),
-              onTap: () {
-                Navigator.pop(context);
-                _performInstallMagisk(context, '', isPatchMode: false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.sd_card),
-              title: const Text('Patch Boot Image'),
-              subtitle: const Text('Select boot image file to patch with Magisk'),
-              onTap: () async {
-                Navigator.pop(context);
-                final filePath = await AndroidDataService.pickFile();
-                if (filePath != null) {
-                  _performInstallMagisk(context, filePath, isPatchMode: true);
-                }
-              },
-            ),
-          ],
+          children: menuItems,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
         ],
       ),
@@ -236,19 +273,18 @@ class MagiskManagerPage extends ConsumerWidget {
   }
 
   void _showUninstallDialog(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Uninstall Magisk'),
+        title: Text(localizations.uninstallMagisk),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Choose uninstall option:'),
-            const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.restore),
-              title: const Text('Full Uninstall'),
-              subtitle: const Text('Remove Magisk and restore images'),
+              title: Text(localizations.fullUninstall),
+              subtitle: Text(localizations.fullUninstallDesc),
               onTap: () {
                 Navigator.pop(context);
                 _performUninstallMagisk(context, true);
@@ -256,8 +292,8 @@ class MagiskManagerPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete),
-              title: const Text('Remove Only'),
-              subtitle: const Text('Remove Magisk without restoring images'),
+              title: Text(localizations.removeOnly),
+              subtitle: Text(localizations.removeOnlyDesc),
               onTap: () {
                 Navigator.pop(context);
                 _performUninstallMagisk(context, false);
@@ -268,7 +304,7 @@ class MagiskManagerPage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
         ],
       ),
@@ -276,19 +312,18 @@ class MagiskManagerPage extends ConsumerWidget {
   }
 
   void _showUpdateDialog(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Update Manager'),
+        title: Text(localizations.updateManager),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Choose update method:'),
-            const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.download),
-              title: const Text('Download & Install'),
-              subtitle: const Text('Download latest version and install'),
+              title: Text(localizations.downloadInstall),
+              subtitle: Text(localizations.downloadInstallDesc),
               onTap: () {
                 Navigator.pop(context);
                 _performUpdateManager(context);
@@ -296,8 +331,8 @@ class MagiskManagerPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.info),
-              title: const Text('Check Version'),
-              subtitle: const Text('Check latest available version'),
+              title: Text(localizations.checkVersion),
+              subtitle: Text(localizations.checkVersionDesc),
               onTap: () {
                 Navigator.pop(context);
                 _checkLatestVersion(context);
@@ -308,7 +343,7 @@ class MagiskManagerPage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
         ],
       ),
@@ -316,11 +351,13 @@ class MagiskManagerPage extends ConsumerWidget {
   }
 
   void _performInstallMagisk(BuildContext context, String bootImage, {bool isPatchMode = false}) {
-    final title = isPatchMode ? 'Patching Boot Image' : 'Installing Magisk';
+    final localizations = AppLocalizations.of(context)!;
+    final title = isPatchMode ? localizations.patchBootImage : localizations.installMagisk;
+    
     Navigator.push(
       context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
+      FlipPageRoute(
+        page: FlashLogsPage(
           title: title,
           onExecute: () async {
             try {
@@ -334,26 +371,17 @@ class MagiskManagerPage extends ConsumerWidget {
             }
           },
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
       ),
     );
   }
 
   void _performUninstallMagisk(BuildContext context, bool restoreImages) {
-    final title = restoreImages ? 'Full Uninstall Magisk' : 'Remove Magisk Only';
+    final localizations = AppLocalizations.of(context)!;
+    final title = restoreImages ? localizations.fullUninstall : localizations.removeOnly;
     Navigator.push(
       context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
+      FlipPageRoute(
+        page: FlashLogsPage(
           title: title,
           onExecute: () async {
             try {
@@ -364,27 +392,18 @@ class MagiskManagerPage extends ConsumerWidget {
             }
           },
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
       ),
     );
   }
 
 
   void _performUpdateManager(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
     Navigator.push(
       context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => FlashLogsPage(
-          title: 'Updating Magisk Manager',
+      FlipPageRoute(
+        page: FlashLogsPage(
+          title: localizations.updateManager,
           onExecute: () async {
             try {
               final result = await AndroidDataService.updateManager();
@@ -394,27 +413,38 @@ class MagiskManagerPage extends ConsumerWidget {
             }
           },
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
       ),
     );
   }
 
   void _checkLatestVersion(BuildContext context) {
-    _showMessage(context, 'Checking latest version...');
+    final localizations = AppLocalizations.of(context)!;
+    _showMessage(context, localizations.checkVersion);
   }
 
   void _showMessage(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+
+  void _performOtaSlotSwitch(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
+    Navigator.push(
+      context,
+      FlipPageRoute(
+        page: FlashLogsPage(
+          title: localizations.otaSlotSwitch,
+          onExecute: () async {
+            try {
+              final result = await AndroidDataService.otaSlotSwitch();
+              return result;
+            } catch (e) {
+              return false;
+            }
+          },
+        ),
+      ),
     );
   }
 }
@@ -427,60 +457,459 @@ class DenyListPage extends ConsumerStatefulWidget {
 }
 
 class _DenyListPageState extends ConsumerState<DenyListPage> {
+  bool _isZygiskEnabled = false;
+  bool _isDenyListEnabled = false;
+  bool _isLoading = true;
+  Map<String, bool> _expandedApps = {};
+  Map<String, List<ActivityInfo>> _appActivities = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final zygiskEnabled = await AndroidDataService.isZygiskEnabled();
+      final denyListEnabled = await AndroidDataService.isDenyListEnabled();
+      setState(() {
+        _isZygiskEnabled = zygiskEnabled;
+        _isDenyListEnabled = denyListEnabled;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleZygisk(bool enabled) async {
+    try {
+      final success = await AndroidDataService.setZygiskEnabled(enabled);
+      if (success) {
+        setState(() {
+          _isZygiskEnabled = enabled;
+        });
+        // Refresh the app list by creating a new AppsNotifier
+        ref.refresh(appsProvider);
+        // Show restart dialog
+        if (enabled) {
+          _showRestartDialog();
+        }
+      }
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  Future<void> _toggleDenyList(bool enabled) async {
+    try {
+      final success = await AndroidDataService.setDenyListEnabled(enabled);
+      if (success) {
+        setState(() {
+          _isDenyListEnabled = enabled;
+          // Clear expanded state and activities when DenyList is disabled
+          if (!enabled) {
+            _expandedApps.clear();
+            _appActivities.clear();
+          }
+        });
+        // Refresh the app list by creating a new AppsNotifier
+        ref.refresh(appsProvider);
+        // Show restart dialog
+        if (enabled) {
+          _showRestartDialog();
+        }
+      }
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  Future<void> _loadAppActivities(String packageName) async {
+    if (_appActivities.containsKey(packageName)) {
+      return;
+    }
+    
+    try {
+      final activities = await AndroidDataService.getAppActivities(packageName);
+      final activityInfos = <ActivityInfo>[];
+      
+      for (final activity in activities) {
+        final isInDenyList = await AndroidDataService.isInDenyListActivity(activity);
+        activityInfos.add(ActivityInfo(
+          name: activity,
+          isInDenyList: isInDenyList,
+        ));
+      }
+      
+      setState(() {
+        _appActivities[packageName] = activityInfos;
+      });
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  Future<void> _toggleAppActivity(String packageName, String activityName, bool value) async {
+    try {
+      bool success;
+      if (value) {
+        success = await AndroidDataService.addToDenyListActivity(activityName);
+      } else {
+        success = await AndroidDataService.removeFromDenyListActivity(activityName);
+      }
+      
+      if (success) {
+        // Update local state
+        final activities = _appActivities[packageName] ?? [];
+        for (var i = 0; i < activities.length; i++) {
+          if (activities[i].name == activityName) {
+            activities[i] = ActivityInfo(
+              name: activityName,
+              isInDenyList: value,
+            );
+            break;
+          }
+        }
+        setState(() {
+          _appActivities[packageName] = activities;
+        });
+        // Refresh app list
+        ref.refresh(appsProvider);
+      }
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  Future<void> _toggleAppAllActivities(String packageName, bool value) async {
+    try {
+      // Toggle the main app switch
+      ref.read(appsProvider.notifier).toggleApp(packageName, !value);
+      
+      // If enabling all activities, collapse the expansion
+      if (value) {
+        setState(() {
+          _expandedApps[packageName] = false;
+        });
+      } else {
+        // If disabling all activities, load activities for individual control
+        await _loadAppActivities(packageName);
+        setState(() {
+          _expandedApps[packageName] = true;
+        });
+      }
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  void _toggleAppExpansion(String packageName) {
+    if (!_isDenyListEnabled) return;
+    
+    setState(() {
+      final currentExpanded = _expandedApps[packageName] ?? false;
+      _expandedApps[packageName] = !currentExpanded;
+      if (_expandedApps[packageName]!) {
+        _loadAppActivities(packageName);
+      }
+    });
+  }
+
+  void _showRestartDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Restart Required'),
+        content: Text('The changes require a device restart to take effect.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Later'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              AndroidDataService.rebootDevice();
+            },
+            child: Text('Restart Now'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final apps = ref.watch(appsProvider);
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(1, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
+
+    // Only show apps if DenyList is enabled
+    final filteredApps = _isDenyListEnabled ? apps : <AppInfo>[];
+    
+    // Sort apps: denylist apps (isActive = false) first, then non-denylist apps
+    final sortedApps = List<AppInfo>.from(filteredApps)..sort((a, b) {
+      if (!a.isActive && b.isActive) return -1; // a is in denylist, b is not
+      if (a.isActive && !b.isActive) return 1;  // a is not in denylist, b is
+      return a.name.compareTo(b.name); // both in same category, sort by name
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'DenyList', isDark),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(4),
-                itemCount: apps.length,
-                itemBuilder: (context, index) {
-                  final app = apps[index];
-                  // isActive = false means app is in denylist (root hidden)
-                  // isActive = true means app is not in denylist (root visible)
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    color: AppTheme.getListItem(isDark),
-                    child: ListTile(
-                      leading: Icon(Icons.apps, color: widgetColor),
-                      title: Text(
-                        app.name,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.getListItemFont(isDark),
-                        ),
-                      ),
-                      subtitle: Text(
-                        app.packageName,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppTheme.getListItemFont(isDark)
-                              .withValues(alpha: 0.6),
-                        ),
-                      ),
-                      trailing: Switch(
-                        value: !app.isActive, // Show ON when in denylist (root hidden)
-                        onChanged: (value) {
-                          // value = true means add to denylist (hide root)
-                          // value = false means remove from denylist (show root)
-                          ref.read(appsProvider.notifier).toggleApp(app.packageName, !value);
-                        },
-                        activeColor: widgetColor,
-                      ),
-                    ),
-                  );
-                },
+            _buildHeader(context, localizations.denyList, isDark),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              Column(
+                children: [
+                  _buildSettingTile(
+                    context,
+                    localizations.zygisk,
+                    localizations.zygiskDesc,
+                    Icons.security,
+                    widgetColor,
+                    _isZygiskEnabled,
+                    _toggleZygisk,
+                    isDark,
+                  ),
+                  _buildSettingTile(
+                    context,
+                    localizations.denyList,
+                    localizations.denyListDesc,
+                    Icons.visibility_off,
+                    widgetColor,
+                    _isDenyListEnabled,
+                    _toggleDenyList,
+                    isDark,
+                  ),
+                  const Divider(height: 1),
+                ],
               ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return ScaleTransition(
+                  scale: animation,
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                );
+              },
+              child: !_isDenyListEnabled
+                  ? Expanded(
+                      key: const ValueKey('disabled'),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'DenyList is disabled. Enable it above to manage apps.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Expanded(
+                      key: const ValueKey('enabled'),
+                      child: sortedApps.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No apps found',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  color: AppTheme.getFont(isDark),
+                                ),
+                              ),
+                            )
+                          : AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              transitionBuilder: (Widget child, Animation<double> animation) {
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0, 0.1),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: ListView.builder(
+                                key: ValueKey(_isDenyListEnabled.toString() + sortedApps.length.toString()),
+                                padding: const EdgeInsets.all(4),
+                                itemCount: sortedApps.length,
+                                itemBuilder: (context, index) {
+                                  final app = sortedApps[index];
+                                  final isExpanded = _expandedApps[app.packageName] ?? false;
+                                  final activities = _appActivities[app.packageName] ?? [];
+                                  
+                                  // isActive = false means app is in denylist (root hidden)
+                                  // isActive = true means app is not in denylist (root visible)
+                                  return Column(
+                                    key: ValueKey(app.packageName + isExpanded.toString()),
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () => _toggleAppExpansion(app.packageName),
+                                        child: Container(
+                                          margin: const EdgeInsets.only(bottom: 4),
+                                          color: AppTheme.getListItem(isDark),
+                                          child: ListTile(
+                                            leading: Icon(Icons.apps, color: widgetColor),
+                                            title: Text(
+                                              app.name,
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.w900,
+                                                color: AppTheme.getListItemFont(isDark),
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              app.packageName,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                color: AppTheme.getListItemFont(isDark)
+                                                    .withValues(alpha: 0.6),
+                                              ),
+                                            ),
+                                            trailing: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (!isExpanded)
+                                                  Switch(
+                                                    value: !app.isActive,
+                                                    onChanged: (value) {
+                                                      _toggleAppAllActivities(app.packageName, value);
+                                                    },
+                                                    activeColor: widgetColor,
+                                                  ),
+                                                Icon(
+                                                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                                                  color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isExpanded)
+                                        AnimatedContainer(
+                                          duration: const Duration(milliseconds: 200),
+                                          margin: const EdgeInsets.only(left: 16, right: 4, bottom: 4),
+                                          child: Column(
+                                            children: activities.asMap().entries.map((entry) {
+                                              final index = entry.key;
+                                              final activity = entry.value;
+                                              return AnimatedContainer(
+                                                duration: Duration(milliseconds: 100 + (index * 50)),
+                                                margin: const EdgeInsets.only(bottom: 2),
+                                                color: AppTheme.getListItem(isDark).withValues(alpha: 0.8),
+                                                child: ListTile(
+                                                  title: Text(
+                                                    activity.name.split('.').last,
+                                                    style: GoogleFonts.poppins(
+                                                      fontSize: 14,
+                                                      color: AppTheme.getListItemFont(isDark),
+                                                    ),
+                                                  ),
+                                                  subtitle: Text(
+                                                    activity.name,
+                                                    style: GoogleFonts.poppins(
+                                                      fontSize: 10,
+                                                      color: AppTheme.getListItemFont(isDark)
+                                                          .withValues(alpha: 0.6),
+                                                    ),
+                                                  ),
+                                                  trailing: Switch(
+                                                    value: activity.isInDenyList,
+                                                    onChanged: (value) {
+                                                      _toggleAppActivity(app.packageName, activity.name, value);
+                                                    },
+                                                    activeColor: widgetColor,
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingTile(
+    BuildContext context,
+    String title,
+    String subtitle,
+    IconData icon,
+    Color widgetColor,
+    bool value,
+    Function(bool) onToggle,
+    bool isDark,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        onToggle(!value);
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.all(12),
+        color: AppTheme.getListItem(isDark),
+        child: Row(
+          children: [
+            Icon(icon, color: widgetColor, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: AppTheme.getListItemFont(isDark),
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      color: AppTheme.getListItemFont(isDark)
+                          .withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onToggle,
+              activeColor: widgetColor,
             ),
           ],
         ),
@@ -527,18 +956,19 @@ class ModulesPage extends ConsumerWidget {
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(3, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Modules', isDark),
+            _buildHeader(context, localizations.modules, isDark, widgetColor, ref),
             Expanded(
               child: modules.isEmpty
                   ? Center(
                       child: Text(
-                        'No modules installed',
+                        localizations.noModules,
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           color: AppTheme.getFont(isDark),
@@ -625,7 +1055,7 @@ class ModulesPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String title, bool isDark) {
+  Widget _buildHeader(BuildContext context, String title, bool isDark, Color widgetColor, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       color: AppTheme.getTile(isDark),
@@ -649,7 +1079,41 @@ class ModulesPage extends ConsumerWidget {
               ),
             ),
           ),
+          // Load icon button for module installation
+          GestureDetector(
+            onTap: () async {
+              final filePath = await AndroidDataService.pickFile();
+              if (filePath != null && context.mounted) {
+                _performInstallModule(context, filePath);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.system_update_alt,
+                  color: widgetColor, size: 24),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+  
+  void _performInstallModule(BuildContext context, String zipPath) {
+    final localizations = AppLocalizations.of(context)!;
+    Navigator.push(
+      context,
+      FlipPageRoute(
+        page: FlashLogsPage(
+          title: localizations.installModule,
+          onExecute: () async {
+            try {
+              final result = await AndroidDataService.installModule(zipPath);
+              return result;
+            } catch (e) {
+              return false;
+            }
+          },
+        ),
       ),
     );
   }
@@ -663,74 +1127,291 @@ class AppsPage extends ConsumerStatefulWidget {
 }
 
 class _AppsPageState extends ConsumerState<AppsPage> {
+  bool _showOnlyRootApps = false;
+  String _searchQuery = '';
+  
+  @override
+  void initState() {
+    super.initState();
+    // Initialize app functions script when page opens
+    AndroidDataService.initialize();
+  }
+
   @override
   Widget build(BuildContext context) {
     final apps = ref.watch(appsProvider);
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(4, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
-    // Filter apps to show only those with root access granted
-    final rootApps = apps.where((app) => app.hasRootAccess).toList();
+    // Filter apps based on search query and filter toggle
+    var filteredApps = apps.where((app) {
+      if (_searchQuery.isNotEmpty) {
+        return app.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+               app.packageName.toLowerCase().contains(_searchQuery.toLowerCase());
+      }
+      return true;
+    }).toList();
+    
+    // Apply root apps filter if enabled
+    if (_showOnlyRootApps) {
+      filteredApps = filteredApps.where((app) => app.hasRootAccess).toList();
+    }
+    
+    // Sort apps: apps with root access first, then alphabetically
+    final sortedApps = List<AppInfo>.from(filteredApps)..sort((a, b) {
+      if (a.hasRootAccess && !b.hasRootAccess) return -1;
+      if (!a.hasRootAccess && b.hasRootAccess) return 1;
+      return a.name.compareTo(b.name);
+    });
+
+    // Count apps with root access
+    final rootAppsCount = apps.where((app) => app.hasRootAccess).length;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Root Access', isDark),
-            rootApps.isEmpty
+            // Custom header with filter button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              color: AppTheme.getTile(isDark),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(Icons.chevron_left,
+                          color: AppTheme.getFont(isDark), size: 28),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      localizations.apps,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        color: AppTheme.getFont(isDark),
+                      ),
+                    ),
+                  ),
+                  // Filter button in top right corner
+                  Tooltip(
+                    message: _showOnlyRootApps ? 'Showing root apps only' : 'Show all apps',
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _showOnlyRootApps = !_showOnlyRootApps;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _showOnlyRootApps
+                              ? widgetColor.withValues(alpha: 0.2)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Stack(
+                          children: [
+                            Icon(
+                              Icons.filter_list,
+                              color: _showOnlyRootApps
+                                  ? widgetColor
+                                  : AppTheme.getFont(isDark).withValues(alpha: 0.7),
+                              size: 24,
+                            ),
+                            if (_showOnlyRootApps)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: widgetColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    '$rootAppsCount',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Search bar
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: AppTheme.getTile(isDark),
+              child: TextField(
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search apps...',
+                  hintStyle: GoogleFonts.poppins(
+                    color: AppTheme.getFont(isDark).withValues(alpha: 0.5),
+                  ),
+                  prefixIcon: Icon(Icons.search, color: widgetColor),
+                  filled: true,
+                  fillColor: AppTheme.getListItem(isDark),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                style: GoogleFonts.poppins(
+                  color: AppTheme.getListItemFont(isDark),
+                ),
+              ),
+            ),
+            // App list
+            sortedApps.isEmpty
                 ? Expanded(
                     child: Center(
-                      child: Text(
-                        'No apps with root access',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: AppTheme.getFont(isDark),
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _showOnlyRootApps ? Icons.security : Icons.apps,
+                            size: 64,
+                            color: AppTheme.getFont(isDark).withValues(alpha: 0.3),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _showOnlyRootApps 
+                                ? 'No apps with root access'
+                                : (_searchQuery.isNotEmpty 
+                                    ? 'No apps found matching "$_searchQuery"'
+                                    : localizations.noApps),
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (_showOnlyRootApps || _searchQuery.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _showOnlyRootApps = false;
+                                  _searchQuery = '';
+                                });
+                              },
+                              child: Text(
+                                'Show all apps',
+                                style: GoogleFonts.poppins(
+                                  color: widgetColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   )
                 : Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(4),
-                      itemCount: rootApps.length,
-                      itemBuilder: (context, index) {
-                        final app = rootApps[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          color: AppTheme.getListItem(isDark),
-                          child: ListTile(
-                            leading: Icon(Icons.security, color: widgetColor),
-                            title: Text(
-                              app.name,
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w900,
-                                color: AppTheme.getListItemFont(isDark),
-                              ),
-                            ),
-                            subtitle: Text(
-                              app.packageName,
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: AppTheme.getListItemFont(isDark)
-                                    .withValues(alpha: 0.6),
-                              ),
-                            ),
-                            trailing: Switch(
-                              value: app.hasRootAccess,
-                              onChanged: (value) {
-                                ref.read(appsProvider.notifier)
-                                    .toggleRootAccess(app.packageName, value);
-                              },
-                              activeColor: widgetColor,
-                            ),
-                          ),
-                        );
+                    child: RefreshIndicator(
+                      onRefresh: () async {
+                        await ref.read(appsProvider.notifier).refreshApps();
                       },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(4),
+                        itemCount: sortedApps.length,
+                        itemBuilder: (context, index) {
+                          final app = sortedApps[index];
+                          return _buildAppTile(app, widgetColor, isDark, localizations);
+                        },
+                      ),
                     ),
                   ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppTile(AppInfo app, Color widgetColor, bool isDark, AppLocalizations localizations) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      color: AppTheme.getListItem(isDark),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: app.hasRootAccess 
+                ? widgetColor.withValues(alpha: 0.2)
+                : AppTheme.getListItem(isDark).withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            app.hasRootAccess ? Icons.verified_user : Icons.security,
+            color: app.hasRootAccess ? widgetColor : widgetColor.withValues(alpha: 0.5),
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                app.name,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.getListItemFont(isDark),
+                ),
+              ),
+            ),
+            if (app.hasRootAccess)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: widgetColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'ROOT',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: widgetColor,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        subtitle: Text(
+          app.packageName,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+          ),
+        ),
+        trailing: Switch(
+          value: app.hasRootAccess,
+          onChanged: (value) async {
+            // Use script-based toggle for root access management
+            await ref.read(appsProvider.notifier)
+                .toggleRootAccessViaScript(app.packageName, value);
+          },
+          activeColor: widgetColor,
         ),
       ),
     );
@@ -766,20 +1447,59 @@ class _AppsPageState extends ConsumerState<AppsPage> {
   }
 }
 
-class LogsPage extends ConsumerWidget {
+class LogsPage extends ConsumerStatefulWidget {
   const LogsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LogsPage> createState() => _LogsPageState();
+}
+
+class _LogsPageState extends ConsumerState<LogsPage> {
+  Future<void> _saveLogsToFile() async {
+    try {
+      final logsAsync = ref.read(logsProvider);
+      if (logsAsync.value != null) {
+        final logs = logsAsync.value!;
+        final logContent = logs.join('\n');
+        
+        // Get current date and time for filename
+        final now = DateTime.now();
+        final timestamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+        final filename = 'MagisKube_logs_$timestamp.log';
+        
+        // Save to Downloads directory
+        final result = await AndroidDataService.saveLogToFile(logContent, filename);
+        if (result) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Logs saved successfully!')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to save logs!')),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving logs: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final logsAsync = ref.watch(logsProvider);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(2, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Logs', isDark),
+            _buildHeader(context, localizations.logs, isDark, widgetColor, localizations),
             Expanded(
               child: logsAsync.when(
                 data: (logs) => ListView.builder(
@@ -812,7 +1532,7 @@ class LogsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String title, bool isDark) {
+  Widget _buildHeader(BuildContext context, String title, bool isDark, Color widgetColor, AppLocalizations localizations) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       color: AppTheme.getTile(isDark),
@@ -836,6 +1556,17 @@ class LogsPage extends ConsumerWidget {
               ),
             ),
           ),
+          ElevatedButton.icon(
+            onPressed: _saveLogsToFile,
+            icon: Icon(Icons.save, size: 18),
+            label: Text(localizations.save, style: TextStyle(fontSize: 14)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widgetColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
     );
@@ -851,13 +1582,14 @@ class ContributorsPage extends ConsumerWidget {
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(2, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Contributors', isDark),
+            _buildHeader(context, localizations.contributors, isDark),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(4),
@@ -932,13 +1664,14 @@ class ThemePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(themeProvider);
     final selectedColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(context, 'Theme', isDark),
+            _buildHeader(context, localizations.theme, isDark),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(4),
@@ -958,11 +1691,7 @@ class ThemePage extends ConsumerWidget {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: index == 0
-                                  ? (isDark
-                                      ? const Color(0xFF009688)
-                                      : const Color(0xFF4DB6AC))
-                                  : AppTheme.tileColors[index],
+                              color: _getTileColor(index, isDark),
                               borderRadius: BorderRadius.circular(4),
                               border: isSelected
                                   ? Border.all(color: Colors.white, width: 2)
@@ -1002,6 +1731,17 @@ class ThemePage extends ConsumerWidget {
     );
   }
 
+  Color _getTileColor(int index, bool isDark) {
+    if (index == AppTheme.tileColorNames.length - 1) {
+      // Monet Theme - use a special color to indicate it's dynamic
+      return isDark ? Colors.grey[700]! : Colors.grey[300]!;
+    }
+    if (index == 0) {
+      return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+    }
+    return AppTheme.tileColors[index];
+  }
+
   Widget _buildHeader(BuildContext context, String title, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -1032,6 +1772,14 @@ class ThemePage extends ConsumerWidget {
   }
 }
 
+// Activity info model
+class ActivityInfo {
+  final String name;
+  final bool isInDenyList;
+  
+  ActivityInfo({required this.name, required this.isInDenyList});
+}
+
 class SettingsSheet extends ConsumerWidget {
   final VoidCallback? onThemeTap;
 
@@ -1042,6 +1790,7 @@ class SettingsSheet extends ConsumerWidget {
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getWidgetColor(tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
 
     return Container(
       decoration: BoxDecoration(
@@ -1056,7 +1805,7 @@ class SettingsSheet extends ConsumerWidget {
             color: AppTheme.getTile(isDark),
             child: Row(
               children: [
-                Text('Settings',
+                Text(localizations.settings,
                     style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w900,
                         fontSize: 20,
@@ -1068,8 +1817,8 @@ class SettingsSheet extends ConsumerWidget {
               ],
             ),
           ),
-          _buildTile(Icons.nightlight_round, 'Dark Mode',
-              isDark ? 'Enabled' : 'Disabled', isDark,
+          _buildTile(Icons.nightlight_round, localizations.darkMode,
+              isDark ? localizations.enabled : localizations.disabled, isDark,
               trailing: Switch(
                   value: isDark,
                   onChanged: (v) => ref.read(themeProvider.notifier).state = v,
@@ -1077,7 +1826,7 @@ class SettingsSheet extends ConsumerWidget {
           GestureDetector(
             onTap: onThemeTap,
             child: _buildTile(
-                Icons.palette, 'Theme', 'Change widget color', isDark,
+                Icons.palette, localizations.theme, 'Change widget color', isDark,
                 trailing: Icon(Icons.chevron_right,
                     color: AppTheme.getListItemFont(isDark))),
           ),

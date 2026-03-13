@@ -248,3 +248,178 @@ app_init() {
 }
 
 export BOOTMODE=true
+
+##########################
+# Root Access Management
+##########################
+
+# Get list of apps with root access granted
+# Returns: package_name per line
+get_root_access_apps() {
+  local db_file="/data/adb/magisk.db"
+  
+  if [ -f "$db_file" ]; then
+    # Method 1: Use magisk --sqlite command
+    local result
+    result=$(magisk --sqlite "SELECT package FROM policies WHERE policy > 0" 2>/dev/null)
+    if [ -n "$result" ]; then
+      echo "$result"
+      return 0
+    fi
+    
+    # Method 2: Use sqlite3 directly
+    if command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 "$db_file" "SELECT package FROM policies WHERE policy > 0" 2>/dev/null
+      return 0
+    fi
+  fi
+  
+  return 1
+}
+
+# Grant root access to an app
+# $1 = package name
+# Returns: 0 on success, 1 on failure
+grant_root_access() {
+  local pkg="$1"
+  [ -z "$pkg" ] && return 1
+  
+  local db_file="/data/adb/magisk.db"
+  
+  # Method 1: Use magisk --su command
+  if magisk --su add "$pkg" 2>/dev/null; then
+    return 0
+  fi
+  
+  # Method 2: Use magisk --sqlite command
+  if magisk --sqlite "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null; then
+    return 0
+  fi
+  
+  # Method 3: Direct database manipulation
+  if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null
+    return $?
+  fi
+  
+  return 1
+}
+
+# Revoke root access from an app
+# $1 = package name
+# Returns: 0 on success, 1 on failure
+revoke_root_access() {
+  local pkg="$1"
+  [ -z "$pkg" ] && return 1
+  
+  local db_file="/data/adb/magisk.db"
+  
+  # Method 1: Use magisk --su command
+  if magisk --su remove "$pkg" 2>/dev/null; then
+    return 0
+  fi
+  
+  # Method 2: Use magisk --sqlite command
+  if magisk --sqlite "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null; then
+    return 0
+  fi
+  
+  # Method 3: Direct database manipulation
+  if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null
+    return $?
+  fi
+  
+  return 1
+}
+
+# Check if an app has root access
+# $1 = package name
+# Returns: 0 if has root access, 1 if not
+has_root_access() {
+  local pkg="$1"
+  [ -z "$pkg" ] && return 1
+  
+  local db_file="/data/adb/magisk.db"
+  
+  if [ -f "$db_file" ]; then
+    # Method 1: Use magisk --sqlite command
+    local policy
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
+      return 0
+    fi
+    
+    # Method 2: Use sqlite3 directly
+    if command -v sqlite3 >/dev/null 2>&1; then
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
+        return 0
+      fi
+    fi
+  fi
+  
+  return 1
+}
+
+# Get root access policy for an app
+# $1 = package name
+# Returns: policy value (0=deny, 1=allow, 2=allow_forever, 3=allow_session)
+get_root_policy() {
+  local pkg="$1"
+  [ -z "$pkg" ] && echo "0" && return
+  
+  local db_file="/data/adb/magisk.db"
+  
+  if [ -f "$db_file" ]; then
+    # Method 1: Use magisk --sqlite command
+    local policy
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    if [ -n "$policy" ]; then
+      echo "$policy"
+      return
+    fi
+    
+    # Method 2: Use sqlite3 directly
+    if command -v sqlite3 >/dev/null 2>&1; then
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      if [ -n "$policy" ]; then
+        echo "$policy"
+        return
+      fi
+    fi
+  fi
+  
+  echo "0"
+}
+
+# Get all root access policies (for logging/debugging)
+# Returns: package_name:policy per line
+list_root_policies() {
+  local db_file="/data/adb/magisk.db"
+  
+  if [ -f "$db_file" ]; then
+    # Method 1: Use magisk --sqlite command
+    local result
+    result=$(magisk --sqlite "SELECT package_name || ':' || policy FROM policies" 2>/dev/null)
+    if [ -n "$result" ]; then
+      echo "$result"
+      return 0
+    fi
+    
+    # Method 2: Use sqlite3 directly
+    if command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 "$db_file" "SELECT package_name || ':' || policy FROM policies" 2>/dev/null
+      return 0
+    fi
+  fi
+  
+  return 1
+}
+
+# Notify Magisk daemon of policy changes
+notify_policy_change() {
+  # Restart magiskd to reload policies
+  killall magiskd 2>/dev/null || true
+  return 0
+}

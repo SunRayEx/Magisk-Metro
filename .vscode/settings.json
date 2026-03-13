@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/home/sunray/模板/flutter_ui/arm64/linux"
+    "cmake.sourceDirectory": "/home/sunray/模板/flutter_ui/arm64/linux",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }

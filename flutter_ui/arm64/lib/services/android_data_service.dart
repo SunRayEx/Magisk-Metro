@@ -7,8 +7,19 @@ class AndroidDataService {
       MethodChannel('magisk_manager/magisk');
   static const MethodChannel _denyListChannel =
       MethodChannel('magisk_manager/denylist');
+  static const MethodChannel _rootAccessChannel =
+      MethodChannel('magisk_manager/root_access');
   static const MethodChannel _filePickerChannel =
       MethodChannel('magisk_manager/filepicker');
+  
+  // Initialize app functions script on startup
+  static Future<void> initialize() async {
+    try {
+      await _rootAccessChannel.invokeMethod<bool>('setupAppFunctionsScript');
+    } catch (e) {
+      // Ignore initialization errors
+    }
+  }
 
   static Future<List<Map<String, dynamic>>> getModules() async {
     try {
@@ -74,6 +85,84 @@ class AndroidDataService {
     }
   }
 
+  static Future<bool> setZygiskEnabled(bool enabled) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('setZygiskEnabled', {
+        'enabled': enabled,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> setDenyListEnabled(bool enabled) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('setDenyListEnabled', {
+        'enabled': enabled,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> isDenyListEnabled() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isDenyListEnabled');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<List<String>> getAppActivities(String packageName) async {
+    try {
+      final result = await _channel.invokeMethod<List<dynamic>>('getAppActivities', {
+        'packageName': packageName,
+      });
+      if (result != null) {
+        return result.cast<String>();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static Future<bool> addToDenyListActivity(String activityName) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('addToDenyListActivity', {
+        'activityName': activityName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> removeFromDenyListActivity(String activityName) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('removeFromDenyListActivity', {
+        'activityName': activityName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> isInDenyListActivity(String activityName) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isInDenyListActivity', {
+        'activityName': activityName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<Map<String, dynamic>> getMagiskConfig() async {
     try {
       final result =
@@ -93,6 +182,15 @@ class AndroidDataService {
         'bootImage': bootImage ?? '',
         'isPatchMode': isPatchMode,
       });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> otaSlotSwitch() async {
+    try {
+      final result = await _magiskChannel.invokeMethod<bool>('otaSlotSwitch');
       return result ?? false;
     } catch (e) {
       return false;
@@ -239,6 +337,98 @@ class AndroidDataService {
     }
   }
 
+  static Future<bool> hasRootAccess(String packageName) async {
+    try {
+      // Get all apps and check if this package has root access
+      final apps = await getApps();
+      final app = apps.firstWhere(
+        (app) => app['packageName'] == packageName,
+        orElse: () => {'hasRootAccess': false},
+      );
+      return app['hasRootAccess'] as bool? ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================== Root Access Management via app_functions.sh ====================
+  
+  /// Get list of apps with root access granted using app_functions.sh script
+  static Future<List<String>> getRootAccessApps() async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<List<dynamic>>('getRootAccessApps');
+      if (result != null) {
+        return result.cast<String>();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Grant root access to an app using app_functions.sh script
+  static Future<bool> grantRootAccessViaScript(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('grantRootAccess', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Revoke root access from an app using app_functions.sh script
+  static Future<bool> revokeRootAccessViaScript(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('revokeRootAccess', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Check if an app has root access using app_functions.sh script
+  static Future<bool> hasRootAccessViaScript(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('hasRootAccess', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get root policy for an app using app_functions.sh script
+  /// Returns: 0=deny, 1=allow, 2=allow_forever, 3=allow_session
+  static Future<int> getRootPolicy(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<int>('getRootPolicy', {
+        'packageName': packageName,
+      });
+      return result ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// List all root policies using app_functions.sh script
+  /// Returns: List of "package_name:policy" strings
+  static Future<List<String>> listRootPolicies() async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<List<dynamic>>('listRootPolicies');
+      if (result != null) {
+        return result.cast<String>();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   static Future<String?> pickFile() async {
     try {
       final result = await _filePickerChannel.invokeMethod<String>('pickFile');
@@ -254,10 +444,38 @@ class AndroidDataService {
           .receiveBroadcastStream()
           .map((event) => event.toString())
           .handleError((error) {
-        return '[E] Log error: $error';
-      });
+            return '[E] Log error: $error';
+          });
     } catch (e) {
       return Stream.error(e);
+    }
+  }
+
+  static Future<bool> saveLogToFile(String logContent, String filename) async {
+    try {
+      final result = await _filePickerChannel.invokeMethod<bool>('saveLogToFile', {
+        'logContent': logContent,
+        'filename': filename,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================== Module Installation ====================
+  
+  /// Install a Magisk module from a zip file
+  /// @param zipPath The path to the module zip file
+  /// @return true if installation was successful, false otherwise
+  static Future<bool> installModule(String zipPath) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<bool>('installModule', {
+        'zipPath': zipPath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
     }
   }
 }

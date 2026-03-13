@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'providers/dashboard_providers.dart';
 import 'navigation/flip_page_route.dart' hide AnimatedBuilder;
 import 'screens/secondary_pages.dart';
+import 'l10n/app_localizations.dart';
 
 class AnimatedDashboardScreen extends ConsumerStatefulWidget {
   const AnimatedDashboardScreen({super.key});
@@ -249,6 +250,7 @@ class _AnimatedDashboardScreenState
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final status = ref.watch(magiskStatusProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC))
         : AppTheme.tileColors[tileColorIndex];
@@ -315,7 +317,7 @@ class _AnimatedDashboardScreenState
                   ),
                   Center(
                     child: Text(
-                      '[${status.isRooted ? "enable" : "disable"}]',
+                      '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
@@ -326,9 +328,9 @@ class _AnimatedDashboardScreenState
                   ),
                   const SizedBox(height: 8),
                   const Spacer(),
-                  _buildAnimatedStatusRow('Root', status.isRooted),
-                  _buildAnimatedStatusRow('Zygisk', status.isZygiskEnabled),
-                  _buildAnimatedStatusRow('Ramdisk', status.isRamdiskLoaded),
+                  _buildAnimatedStatusRow(localizations.root, status.isRooted, localizations),
+                  _buildAnimatedStatusRow(localizations.zygisk, status.isZygiskEnabled, localizations),
+                  _buildAnimatedStatusRow(localizations.ramdisk, status.isRamdiskLoaded, localizations),
                 ],
               ),
             ),
@@ -338,7 +340,7 @@ class _AnimatedDashboardScreenState
     );
   }
 
-  Widget _buildAnimatedStatusRow(String label, bool value) {
+  Widget _buildAnimatedStatusRow(String label, bool value, AppLocalizations localizations) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.0),
       child: Row(
@@ -355,7 +357,7 @@ class _AnimatedDashboardScreenState
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: Text(
-              value ? 'Yes' : 'No',
+              value ? localizations.yes : localizations.no,
               key: ValueKey(value),
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w900,
@@ -373,6 +375,7 @@ class _AnimatedDashboardScreenState
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final isEnabled = ref.watch(denyListEnabledProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F))
         : AppTheme.tileColors[tileColorIndex];
@@ -422,7 +425,7 @@ class _AnimatedDashboardScreenState
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: Text(
-                    isEnabled ? 'DenyList' : 'DenyList [OFF]',
+                    isEnabled ? localizations.denyList : '${localizations.denyList} [OFF]',
                     key: ValueKey(isEnabled),
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w900,
@@ -443,6 +446,7 @@ class _AnimatedDashboardScreenState
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final contributors = ref.watch(contributorsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8))
         : AppTheme.tileColors[tileColorIndex];
@@ -491,7 +495,7 @@ class _AnimatedDashboardScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Contributor',
+                    localizations.contributors,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w900,
                       fontSize: 20,
@@ -534,6 +538,7 @@ class _AnimatedDashboardScreenState
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final modules = ref.watch(modulesProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6))
         : AppTheme.tileColors[tileColorIndex];
@@ -582,7 +587,7 @@ class _AnimatedDashboardScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Modules',
+                    localizations.modules,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w900,
                       fontSize: 20,
@@ -637,6 +642,7 @@ class _AnimatedDashboardScreenState
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final apps = ref.watch(appsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350))
         : AppTheme.tileColors[tileColorIndex];
@@ -685,7 +691,7 @@ class _AnimatedDashboardScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Apps',
+                    localizations.apps,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w900,
                       fontSize: 20,
@@ -739,6 +745,7 @@ class _AnimatedDashboardScreenState
   Widget _buildAnimatedLogsCard(
       BuildContext context, WidgetRef ref, bool isDark, int index) {
     final logsAsync = ref.watch(logsProvider);
+    final localizations = AppLocalizations.of(context)!;
 
     final delay = _cardDelays[index];
     final slideAnimation = Tween<Offset>(
@@ -782,7 +789,7 @@ class _AnimatedDashboardScreenState
                   Align(
                     alignment: Alignment.topRight,
                     child: Text(
-                      'Logs',
+                      localizations.logs,
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w900,
                         fontSize: 20,
@@ -801,7 +808,7 @@ class _AnimatedDashboardScreenState
                         ),
                       ),
                       error: (error, stack) => Text(
-                        '[E] Error: $error',
+                        '[E] ${localizations.error}: $error',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w500,
                           fontSize: 8,

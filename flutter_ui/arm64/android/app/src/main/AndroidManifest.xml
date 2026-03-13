@@ -36,6 +36,9 @@
     <!-- Permission for file picker -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Required permissions for Magisk operations -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.REBOOT" />
     
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/dashboard_providers.dart';
+import '../l10n/app_localizations.dart';
+import '../services/android_data_service.dart';
 
 class FlashLogsPage extends ConsumerStatefulWidget {
   final String title;
@@ -22,6 +26,9 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
   bool _isRunning = false;
   bool _isCompleted = false;
   bool _isSuccess = false;
+  StreamSubscription<String>? _logSubscription;
+  final ScrollController _scrollController = ScrollController();
+  final Completer<void> _logStreamCompleter = Completer<void>();
 
   @override
   void initState() {
@@ -29,26 +36,83 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
     _startExecution();
   }
 
-  void _startExecution() async {
+  @override
+  void dispose() {
+    _logSubscription?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+  }
+
+  Future<void> _startExecution() async {
+    final localizations = AppLocalizations.of(context)!;
     setState(() {
       _isRunning = true;
       _logs.clear();
-      _addLog('Starting ${widget.title}...');
+      
+      // Add MagisKube ASCII art banner
+      _addMagisKubeBanner();
+      _addLog(localizations.starting + ' ${widget.title}...');
     });
+
+    // Subscribe to log stream with completer to ensure it's established
+    bool streamListening = false;
+    _logSubscription = AndroidDataService.getLogcatStream().listen(
+      (log) {
+        _addLog(log, timestamp: false);
+        _scrollToBottom();
+        // Mark stream as listening on first log received
+        if (!streamListening) {
+          streamListening = true;
+          if (!_logStreamCompleter.isCompleted) {
+            _logStreamCompleter.complete();
+          }
+        }
+      },
+      onDone: () {
+        if (!_logStreamCompleter.isCompleted) {
+          _logStreamCompleter.complete();
+        }
+      },
+      onError: (error) {
+        if (!_logStreamCompleter.isCompleted) {
+          _logStreamCompleter.complete();
+        }
+      },
+    );
+    
+    // Wait for log stream to be established with timeout
+    try {
+      await _logStreamCompleter.future.timeout(const Duration(milliseconds: 500));
+    } catch (e) {
+      // Continue anyway even if stream doesn't establish
+    }
 
     try {
       final result = await widget.onExecute();
       if (result) {
-        _addLog('Operation completed successfully!');
+        _addLog(localizations.operationCompleted);
         _isSuccess = true;
       } else {
-        _addLog('Operation failed!');
+        _addLog(localizations.operationFailed);
         _isSuccess = false;
       }
     } catch (e) {
-      _addLog('Error: $e');
+      _addLog('${localizations.error}: $e');
       _isSuccess = false;
     } finally {
+      await _logSubscription?.cancel();
       setState(() {
         _isRunning = false;
         _isCompleted = true;
@@ -56,14 +120,34 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
     }
   }
 
-  void _addLog(String message) {
+  void _addMagisKubeBanner() {
+    final banner = '''
+            __     __             __   ___ 
+ |\/|  /\  / _` | /__` |__/ |  | |__) |__  
+ |  | /~~\ \__> | .__/ |  \ \__/ |__) |___ 
+                                           
+''';
+    final lines = banner.split('\n');
+    for (final line in lines) {
+      if (line.trim().isNotEmpty) {
+        _logs.add(line);
+      }
+    }
+  }
+
+  void _addLog(String message, {bool timestamp = true}) {
     setState(() {
-      _logs.add('[${DateTime.now().toIso8601String().split('.')[0]}] $message');
+      if (timestamp) {
+        _logs.add('[${DateTime.now().toIso8601String().split('.')[0]}] $message');
+      } else {
+        _logs.add(message);
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context)!;
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(0, tileColorIndex, isDark);
@@ -76,19 +160,21 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
             _buildHeader(context, widget.title, isDark),
             Expanded(
               child: ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(8),
                 itemCount: _logs.length,
                 itemBuilder: (context, index) {
                   final log = _logs[index];
-                  final isError = log.contains('Error') || log.contains('failed');
-                  final isWarning = log.contains('Warning') || log.contains('warn');
-                  Color textColor = Colors.white;
+                  final isError = log.contains('[ERROR]') || log.contains('Error') || log.contains('failed');
+                  final isWarning = log.contains('[WARN]') || log.contains('Warning') || log.contains('warn');
+                  final isSuccess = log.contains('[INFO]') && (log.contains('success') || log.contains('completed'));
+                  Color textColor = AppTheme.getListItemFont(isDark);
                   
                   if (isError) {
                     textColor = Colors.red;
                   } else if (isWarning) {
                     textColor = Colors.yellow;
-                  } else if (log.contains('success') || log.contains('completed')) {
+                  } else if (isSuccess) {
                     textColor = Colors.green;
                   }
 
@@ -118,7 +204,7 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        _isSuccess ? 'Operation completed successfully!' : 'Operation failed!',
+                        _isSuccess ? localizations.operationCompleted : localizations.operationFailed,
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
@@ -135,7 +221,7 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
                         backgroundColor: widgetColor,
                         foregroundColor: Colors.white,
                       ),
-                      child: const Text('Close'),
+                      child: Text(localizations.close),
                     ),
                   ],
                 ),
@@ -148,14 +234,14 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(width: 16),
-                    const Text('Operation in progress...'),
+                    Text(localizations.operationInProgress),
                     const Spacer(),
                     TextButton(
                       onPressed: () {
                         // Cancel operation logic would go here
                         Navigator.pop(context);
                       },
-                      child: const Text('Cancel'),
+                      child: Text(localizations.cancel),
                     ),
                   ],
                 ),

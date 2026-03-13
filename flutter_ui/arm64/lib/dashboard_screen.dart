@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'providers/dashboard_providers.dart';
 import 'navigation/flip_page_route.dart';
 import 'screens/secondary_pages.dart';
+import 'l10n/app_localizations.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -139,6 +140,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildMagiskCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC))
         : AppTheme.tileColors[tileColorIndex];
@@ -169,7 +171,7 @@ class DashboardScreen extends ConsumerWidget {
                 ),
               ),
               Text(
-                '[${status.isRooted ? "enable" : "disable"}]',
+                '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
@@ -177,9 +179,9 @@ class DashboardScreen extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
-              _buildStatusRow('Root', status.isRooted),
-              _buildStatusRow('Zygisk', status.isZygiskEnabled),
-              _buildStatusRow('Ramdisk', status.isRamdiskLoaded),
+              _buildStatusRow(localizations.root, status.isRooted, localizations),
+              _buildStatusRow(localizations.zygisk, status.isZygiskEnabled, localizations),
+              _buildStatusRow(localizations.ramdisk, status.isRamdiskLoaded, localizations),
             ],
           ),
         ),
@@ -187,7 +189,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusRow(String label, bool value) {
+  Widget _buildStatusRow(String label, bool value, AppLocalizations localizations) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.0),
       child: Row(
@@ -202,7 +204,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ),
           Text(
-            value ? 'Yes' : 'No',
+            value ? localizations.yes : localizations.no,
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w900,
               fontSize: 10,
@@ -217,6 +219,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildDenyListCard(BuildContext context, WidgetRef ref, bool isDark) {
     final isEnabled = ref.watch(denyListEnabledProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F))
         : AppTheme.tileColors[tileColorIndex];
@@ -233,7 +236,7 @@ class DashboardScreen extends ConsumerWidget {
           child: Align(
             alignment: Alignment.topRight,
             child: Text(
-              isEnabled ? 'DenyList' : 'DenyList [OFF]',
+              isEnabled ? localizations.denyList : '${localizations.denyList} [OFF]',
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w900,
                 fontSize: 20,
@@ -250,6 +253,7 @@ class DashboardScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, bool isDark) {
     final contributors = ref.watch(contributorsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8))
         : AppTheme.tileColors[tileColorIndex];
@@ -267,7 +271,7 @@ class DashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'Contributor',
+                localizations.contributors,
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
@@ -303,6 +307,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildModulesCard(BuildContext context, WidgetRef ref, bool isDark) {
     final modules = ref.watch(modulesProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6))
         : AppTheme.tileColors[tileColorIndex];
@@ -320,7 +325,7 @@ class DashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'Modules',
+                localizations.modules,
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
@@ -364,6 +369,7 @@ class DashboardScreen extends ConsumerWidget {
   Widget _buildAppsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final apps = ref.watch(appsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
         ? (isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350))
         : AppTheme.tileColors[tileColorIndex];
@@ -381,7 +387,7 @@ class DashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'Apps',
+                localizations.apps,
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
@@ -424,6 +430,7 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildLogsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final logsAsync = ref.watch(logsProvider);
+    final localizations = AppLocalizations.of(context)!;
 
     return GestureDetector(
       onTap: () => _navigateTo(context, '/logs'),
@@ -436,7 +443,7 @@ class DashboardScreen extends ConsumerWidget {
               Align(
                 alignment: Alignment.topRight,
                 child: Text(
-                  'Logs',
+                  localizations.logs,
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w900,
                     fontSize: 20,
@@ -454,7 +461,7 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
                   error: (error, stack) => Text(
-                    '[E] Error: $error',
+                    '[E] ${localizations.error}: $error',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w500,
                       fontSize: 8,

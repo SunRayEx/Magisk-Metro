@@ -22,19 +22,19 @@ class AppTheme {
   static const Color lightListItem = Colors.white;
 
   static const List<Color> tileColors = [
-    Color(0xFF009688),
-    Color(0xFF2196F3),
-    Color(0xFFF44336),
-    Color(0xFF4CAF50),
-    Color(0xFF9C27B0),
-    Color(0xFFFFEB3B),
-    Color(0xFFFF9800),
-    Color(0xFF00BCD4),
+    Color(0xFF009688), // Green (keep original)
+    Color(0xFF2196F3), // Blue
+    Color(0xFFF44336), // Red
+    Color(0xFF4CAF50), // Green
+    Color(0xFF9C27B0), // Purple
+    Color(0xFFFFEB3B), // Yellow
+    Color(0xFFFF9800), // Orange
+    Color(0xFF00BCD4), // Cyan
   ];
 
   static const List<String> tileColorNames = [
     'Default',
-    'Monet Blue',
+    'Blue',
     'Red',
     'Green',
     'Purple',
@@ -55,6 +55,17 @@ class AppTheme {
     if (colorIndex == 0) {
       return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
     }
+    
+    // For dark mode, darken all colors except green (index 0 and 3)
+    if (isDark) {
+      if (colorIndex == 3) {
+        // Green - keep original
+        return const Color(0xFF4CAF50);
+      } else {
+        // Darken other colors by 30%
+        return _darkenColor(tileColors[colorIndex], 0.3);
+      }
+    }
     return tileColors[colorIndex];
   }
 
@@ -64,18 +75,37 @@ class AppTheme {
         case 0:
           return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
         case 1:
-          return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
+          return isDark ? _darkenColor(const Color(0xFFFFC107), 0.3) : const Color(0xFFFFD54F);
         case 2:
-          return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
+          return isDark ? _darkenColor(const Color(0xFF9C27B0), 0.3) : const Color(0xFFBA68C8);
         case 3:
-          return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
+          return isDark ? _darkenColor(const Color(0xFF4285F4), 0.3) : const Color(0xFF64B5F6);
         case 4:
-          return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
+          return isDark ? _darkenColor(const Color(0xFFD32F2F), 0.3) : const Color(0xFFEF5350);
         default:
           return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
       }
     }
+    
+    // For dark mode, darken all colors except green (index 0 and 3)
+    if (isDark) {
+      if (colorIndex == 3) {
+        // Green - keep original
+        return const Color(0xFF4CAF50);
+      } else {
+        // Darken other colors by 30%
+        return _darkenColor(tileColors[colorIndex], 0.3);
+      }
+    }
     return tileColors[colorIndex];
+  }
+
+  static Color _darkenColor(Color color, double factor) {
+    // Convert to HSL
+    final hsl = HSLColor.fromColor(color);
+    // Reduce lightness by factor
+    final newLightness = (hsl.lightness * (1 - factor)).clamp(0.0, 100.0);
+    return hsl.withLightness(newLightness).toColor();
   }
 }
 
@@ -248,6 +278,40 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
       }
       return app;
     }).toList();
+  }
+
+  /// Toggle root access using app_functions.sh script
+  Future<void> toggleRootAccessViaScript(String packageName, bool hasRootAccess) async {
+    if (hasRootAccess) {
+      await AndroidDataService.grantRootAccessViaScript(packageName);
+    } else {
+      await AndroidDataService.revokeRootAccessViaScript(packageName);
+    }
+    state = state.map((app) {
+      if (app.packageName == packageName) {
+        return app.copyWith(hasRootAccess: hasRootAccess);
+      }
+      return app;
+    }).toList();
+  }
+
+  /// Refresh the app list to get updated root access status
+  Future<void> refreshApps() async {
+    await _loadApps();
+  }
+
+  Future<bool> checkRootAccess(String packageName) async {
+    // Use the existing getApps method to check root access
+    final apps = await AndroidDataService.getApps();
+    final app = apps.firstWhere(
+      (app) => app['packageName'] == packageName,
+      orElse: () => {'hasRootAccess': false},
+    );
+    return app['hasRootAccess'] as bool? ?? false;
+  }
+
+  Future<bool> checkDenyListStatus(String packageName) async {
+    return await AndroidDataService.isInDenyList(packageName);
   }
 }
 
