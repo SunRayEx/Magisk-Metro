@@ -251,7 +251,63 @@ export BOOTMODE=true
 
 ##########################
 # Root Access Management
+# Note: Magisk policies table uses UID, not package name
 ##########################
+
+# Get UID from package name
+# $1 = package name
+# Returns: UID or empty string if not found
+get_uid_from_package() {
+  local pkg="$1"
+  [ -z "$pkg" ] && return 1
+  
+  # Use dumpsys package to get userId (which is the UID for user 0)
+  local uid
+  uid=$(dumpsys package "$pkg" 2>/dev/null | grep "userId=" | head -1 | sed 's/.*userId=//')
+  
+  if [ -n "$uid" ]; then
+    echo "$uid"
+    return 0
+  fi
+  
+  # Fallback: use pm list packages -U
+  uid=$(pm list packages -U 2>/dev/null | grep "package:$pkg " | sed 's/.*uid://')
+  if [ -n "$uid" ]; then
+    echo "$uid"
+    return 0
+  fi
+  
+  return 1
+}
+
+# Get package name from UID
+# $1 = UID
+# Returns: package name or empty string if not found
+get_package_from_uid() {
+  local uid="$1"
+  [ -z "$uid" ] && return 1
+  
+  # Use pm list packages -U to find package by UID
+  local pkg
+  pkg=$(pm list packages -U 2>/dev/null | grep "uid:$uid " | sed 's/package://' | sed 's/ uid:.*//')
+  
+  if [ -n "$pkg" ]; then
+    echo "$pkg"
+    return 0
+  fi
+  
+  # Fallback: use dumpsys package for all packages
+  for p in $(pm list packages 2>/dev/null | sed 's/package://'); do
+    local puid
+    puid=$(dumpsys package "$p" 2>/dev/null | grep "userId=" | head -1 | sed 's/.*userId=//')
+    if [ "$puid" = "$uid" ]; then
+      echo "$p"
+      return 0
+    fi
+  done
+  
+  return 1
+}
 
 # Get list of apps with root access granted
 # Returns: package_name per line
@@ -259,17 +315,28 @@ get_root_access_apps() {
   local db_file="/data/adb/magisk.db"
   
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
-    local result
-    result=$(magisk --sqlite "SELECT package FROM policies WHERE policy > 0" 2>/dev/null)
-    if [ -n "$result" ]; then
-      echo "$result"
-      return 0
+    # Get UIDs with root access from policies table
+    local uids
+    uids=$(magisk --sqlite "SELECT uid FROM policies WHERE policy > 0" 2>/dev/null)
+    
+    if [ -z "$uids" ]; then
+      # Fallback to sqlite3
+      uids=$(sqlite3 "$db_file" "SELECT uid FROM policies WHERE policy > 0" 2>/dev/null)
     fi
     
-    # Method 2: Use sqlite3 directly
-    if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$db_file" "SELECT package FROM policies WHERE policy > 0" 2>/dev/null
+    # Convert UIDs to package names
+    if [ -n "$uids" ]; then
+      for uid in $uids; do
+        # Skip empty or invalid UIDs
+        [ -z "$uid" ] && continue
+        [ "$uid" -lt 10000 ] 2>/dev/null && continue  # Skip system UIDs
+        
+        local pkg
+        pkg=$(get_package_from_uid "$uid")
+        if [ -n "$pkg" ]; then
+          echo "$pkg"
+        fi
+      done
       return 0
     fi
   fi
@@ -286,19 +353,19 @@ grant_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
-  # Method 1: Use magisk --su command
-  if magisk --su add "$pkg" 2>/dev/null; then
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
+  # Method 1: Use magisk --sqlite command with UID
+  if magisk --sqlite "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)" 2>/dev/null; then
     return 0
   fi
   
-  # Method 2: Use magisk --sqlite command
-  if magisk --sqlite "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null; then
-    return 0
-  fi
-  
-  # Method 3: Direct database manipulation
+  # Method 2: Direct database manipulation with UID
   if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$db_file" "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)" 2>/dev/null
     return $?
   fi
   
@@ -314,19 +381,19 @@ revoke_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
-  # Method 1: Use magisk --su command
-  if magisk --su remove "$pkg" 2>/dev/null; then
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
+  # Method 1: Use magisk --sqlite command with UID
+  if magisk --sqlite "DELETE FROM policies WHERE uid = $uid" 2>/dev/null; then
     return 0
   fi
   
-  # Method 2: Use magisk --sqlite command
-  if magisk --sqlite "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null; then
-    return 0
-  fi
-  
-  # Method 3: Direct database manipulation
+  # Method 2: Direct database manipulation with UID
   if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$db_file" "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null
+    sqlite3 "$db_file" "DELETE FROM policies WHERE uid = $uid" 2>/dev/null
     return $?
   fi
   
@@ -342,17 +409,22 @@ has_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
+    # Method 1: Use magisk --sqlite command with UID
     local policy
-    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
     if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
       return 0
     fi
     
-    # Method 2: Use sqlite3 directly
+    # Method 2: Use sqlite3 directly with UID
     if command -v sqlite3 >/dev/null 2>&1; then
-      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
       if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
         return 0
       fi
@@ -371,18 +443,23 @@ get_root_policy() {
   
   local db_file="/data/adb/magisk.db"
   
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && echo "0" && return
+  
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
+    # Method 1: Use magisk --sqlite command with UID
     local policy
-    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
     if [ -n "$policy" ]; then
       echo "$policy"
       return
     fi
     
-    # Method 2: Use sqlite3 directly
+    # Method 2: Use sqlite3 directly with UID
     if command -v sqlite3 >/dev/null 2>&1; then
-      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
       if [ -n "$policy" ]; then
         echo "$policy"
         return
@@ -394,22 +471,35 @@ get_root_policy() {
 }
 
 # Get all root access policies (for logging/debugging)
-# Returns: package_name:policy per line
+# Returns: package_name:uid:policy per line
 list_root_policies() {
   local db_file="/data/adb/magisk.db"
   
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
-    local result
-    result=$(magisk --sqlite "SELECT package_name || ':' || policy FROM policies" 2>/dev/null)
-    if [ -n "$result" ]; then
-      echo "$result"
-      return 0
+    # Get all policies with UID
+    local policies
+    policies=$(magisk --sqlite "SELECT uid || ':' || policy FROM policies" 2>/dev/null)
+    
+    if [ -z "$policies" ]; then
+      policies=$(sqlite3 "$db_file" "SELECT uid || ':' || policy FROM policies" 2>/dev/null)
     fi
     
-    # Method 2: Use sqlite3 directly
-    if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$db_file" "SELECT package_name || ':' || policy FROM policies" 2>/dev/null
+    # Convert UIDs to package names
+    if [ -n "$policies" ]; then
+      for entry in $policies; do
+        local uid=$(echo "$entry" | cut -d':' -f1)
+        local policy=$(echo "$entry" | cut -d':' -f2)
+        
+        [ -z "$uid" ] && continue
+        
+        local pkg
+        pkg=$(get_package_from_uid "$uid")
+        if [ -n "$pkg" ]; then
+          echo "$pkg:$uid:$policy"
+        else
+          echo "unknown:$uid:$policy"
+        fi
+      done
       return 0
     fi
   fi

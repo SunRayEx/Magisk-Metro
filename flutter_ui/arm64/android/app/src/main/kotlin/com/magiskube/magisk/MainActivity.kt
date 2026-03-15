@@ -630,47 +630,73 @@ class MainActivity : FlutterActivity() {
         return try {
             android.util.Log.d("MainActivity", "isZygiskEnabled: checking status")
             
-            // Method 1: Use magisk --sqlite to query zygisk_enabled from settings table (most reliable)
+            // Method 1: Check Magisk internal state using magisk --sqlite
+            // Query the settings table for zygisk setting
             val magiskConfigFile = File("/data/adb/magisk.db")
             android.util.Log.d("MainActivity", "magisk.db exists: ${magiskConfigFile.exists()}")
             
             if (magiskConfigFile.exists()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = 'zygisk_enabled'\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val result = reader.readLine()
-                process.waitFor()
-                val exitCode = process.exitValue()
-                android.util.Log.d("MainActivity", "magisk --sqlite result: $result, exit code: $exitCode")
+                // Try using magisk --sqlite command first (most reliable)
+                val sqliteResult = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='zygisk'\"")
+                android.util.Log.d("MainActivity", "SQLite query result for zygisk: '$sqliteResult'")
                 
-                if (result != null && result.trim() == "1") {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk.db")
+                if (sqliteResult.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk --sqlite (zygisk=1)")
+                    return true
+                }
+                
+                // Also try zygisk_enabled key for older versions
+                val sqliteResult2 = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='zygisk_enabled'\"")
+                android.util.Log.d("MainActivity", "SQLite query result for zygisk_enabled: '$sqliteResult2'")
+                
+                if (sqliteResult2.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk --sqlite (zygisk_enabled=1)")
+                    return true
+                }
+                
+                // Fallback: Use sqlite3 directly
+                val directSqliteResult = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='zygisk'\"")
+                android.util.Log.d("MainActivity", "Direct SQLite result: '$directSqliteResult'")
+                
+                if (directSqliteResult.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via direct sqlite3")
                     return true
                 }
             }
             
-            // Method 2: Check /data/adb/zygisk file (older Magisk versions)
-            val zygiskFile = File("/data/adb/zygisk")
-            android.util.Log.d("MainActivity", "zygisk file exists: ${zygiskFile.exists()}")
+            // Method 2: Check if Zygisk is loaded by checking for zygiskd process
+            val zygiskdCheck = executeRootCommand("ps -A | grep zygiskd")
+            if (zygiskdCheck.isNotEmpty() && zygiskdCheck.contains("zygiskd")) {
+                android.util.Log.d("MainActivity", "isZygiskEnabled: true via zygiskd process")
+                return true
+            }
             
-            if (zygiskFile.exists()) {
-                val content = zygiskFile.readText().trim()
-                android.util.Log.d("MainActivity", "zygisk file content: $content")
-                if (content == "1") {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via zygisk file")
+            // Method 3: Check /data/adb/zygisk directory structure
+            val zygiskDir = File("/data/adb/zygisk")
+            android.util.Log.d("MainActivity", "zygisk dir exists: ${zygiskDir.exists()}")
+            
+            if (zygiskDir.exists() && zygiskDir.isDirectory) {
+                // Check if zygisk is active by looking for active files
+                val zygiskActive = executeRootCommand("ls -la /data/adb/zygisk/")
+                android.util.Log.d("MainActivity", "zygisk directory contents: $zygiskActive")
+                
+                // Check for uninstaller file which indicates zygisk is installed
+                val uninstallerFile = File("/data/adb/zygisk/uninstaller.sh")
+                if (uninstallerFile.exists()) {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via uninstaller.sh presence")
                     return true
                 }
             }
             
-            // Method 3: Check if Zygisk modules directory exists and has content
-            val zygiskModulesDir = File("/data/adb/zygisk/modules")
-            android.util.Log.d("MainActivity", "zygisk/modules dir exists: ${zygiskModulesDir.exists()}")
-            
+            // Method 4: Check if any Zygisk modules are installed
+            val zygiskModulesDir = File("/data/adb/modules")
             if (zygiskModulesDir.exists() && zygiskModulesDir.isDirectory) {
-                val modules = zygiskModulesDir.listFiles()
-                android.util.Log.d("MainActivity", "zygisk modules count: ${modules?.size ?: 0}")
-                if (modules != null && modules.isNotEmpty()) {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via modules directory")
-                    return true
+                zygiskModulesDir.listFiles()?.forEach { moduleDir ->
+                    val zygiskDir = File(moduleDir, "zygisk")
+                    if (zygiskDir.exists()) {
+                        android.util.Log.d("MainActivity", "isZygiskEnabled: true via module ${moduleDir.name} having zygisk folder")
+                        return true
+                    }
                 }
             }
             
@@ -679,6 +705,26 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error checking Zygisk status: ${e.message}", e)
             false
+        }
+    }
+    
+    /**
+     * Execute a root command and return the output
+     */
+    private fun executeRootCommand(command: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            process.waitFor()
+            output.toString().trim()
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error executing command: $command - ${e.message}")
+            ""
         }
     }
 
@@ -774,16 +820,44 @@ class MainActivity : FlutterActivity() {
 
     private fun isDenyListEnabled(): Boolean {
         return try {
-            // Check if DenyList is enabled by checking if the denylist table exists or has entries
+            android.util.Log.d("MainActivity", "isDenyListEnabled: checking status")
+            
+            // Method 1: Use magisk --denylist status command
+            val statusProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist status"))
+            val statusReader = BufferedReader(InputStreamReader(statusProcess.inputStream))
+            val statusOutput = StringBuilder()
+            var statusLine: String?
+            while (statusReader.readLine().also { statusLine = it } != null) {
+                statusOutput.append(statusLine).append("\n")
+            }
+            statusProcess.waitFor()
+            val statusResult = statusOutput.toString().trim()
+            android.util.Log.d("MainActivity", "magisk --denylist status output: $statusResult")
+            
+            // Check if denylist is enabled (output contains "enabled" or "true")
+            if (statusResult.contains("enabled", ignoreCase = true) || statusResult.contains("true", ignoreCase = true)) {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: true via magisk --denylist status")
+                return true
+            }
+            
+            // Method 2: Check settings table in magisk.db
             val magiskConfigFile = File("/data/adb/magisk.db")
             if (magiskConfigFile.exists()) {
-                // Use magisk --sqlite to check if denylist is enabled
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = 'denylist'\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val result = reader.readLine()
-                process.waitFor()
-                if (result != null && result.trim() == "1") {
-                    return true
+                // Try multiple possible key names
+                val keys = listOf("denylist", "magiskhide")
+                for (key in keys) {
+                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = '$key'\""))
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    val result = reader.readLine()
+                    process.waitFor()
+                    android.util.Log.d("MainActivity", "SQLite query for key '$key': $result")
+                    
+                    // Parse output - handle format like "value|1" or just "1"
+                    val value = result?.trim()?.split("|")?.lastOrNull()?.trim() ?: result?.trim()
+                    if (value == "1") {
+                        android.util.Log.d("MainActivity", "isDenyListEnabled: true via settings table key '$key'")
+                        return true
+                    }
                 }
                 
                 // Fallback: check if denylist table has any entries
@@ -791,52 +865,78 @@ class MainActivity : FlutterActivity() {
                 val denylistReader = BufferedReader(InputStreamReader(denylistProcess.inputStream))
                 val countResult = denylistReader.readLine()
                 denylistProcess.waitFor()
-                if (countResult != null && countResult.trim().toIntOrNull() ?: 0 > 0) {
+                android.util.Log.d("MainActivity", "denylist table count: $countResult")
+                
+                val count = countResult?.trim()?.split("|")?.lastOrNull()?.trim()?.toIntOrNull() ?: 0
+                if (count > 0) {
+                    android.util.Log.d("MainActivity", "isDenyListEnabled: true via denylist table entries ($count)")
                     return true
                 }
             }
             
-            // Check if /data/adb/denylist file exists (older versions)
-            val denylistFile = File("/data/adb/denylist")
-            if (denylistFile.exists()) {
-                return true
-            }
-            
+            android.util.Log.d("MainActivity", "isDenyListEnabled: false")
             false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error checking denylist status: ${e.message}")
             false
         }
     }
 
     private fun setDenyListEnabled(enabled: Boolean): Boolean {
         return try {
-            // Method 1: Update Magisk config in database (newer Magisk versions)
+            android.util.Log.d("MainActivity", "setDenyListEnabled: enabled=$enabled")
+            
+            // Method 1: Use magisk --denylist command
+            val cmd = if (enabled) "magisk --denylist enable" else "magisk --denylist disable"
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.waitFor()
+            val exitCode = process.exitValue()
+            
+            // Read output for debugging
+            val outputReader = BufferedReader(InputStreamReader(process.inputStream))
+            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+            val output = outputReader.readText().trim()
+            val error = errorReader.readText().trim()
+            android.util.Log.d("MainActivity", "$cmd output: $output, error: $error, exitCode: $exitCode")
+            
+            if (exitCode == 0) {
+                android.util.Log.d("MainActivity", "setDenyListEnabled: success via magisk --denylist command")
+                return true
+            }
+            
+            // Method 2: Update settings table directly
             val magiskConfigFile = File("/data/adb/magisk.db")
             if (magiskConfigFile.exists()) {
-                // Use magisk --sqlite to update denylist setting in settings table
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '${if (enabled) "1" else "0"}')\""))
-                process.waitFor()
-                if (process.exitValue() == 0) {
-                    // Restart Magisk daemon to apply changes
-                    val restartProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "killall magiskd"))
-                    restartProcess.waitFor()
-                    return true
+                // Try both key names for compatibility
+                val keys = listOf("denylist", "magiskhide")
+                for (key in keys) {
+                    val sqliteCmd = "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('$key', '${if (enabled) "1" else "0"}')\""
+                    android.util.Log.d("MainActivity", "Executing: $sqliteCmd")
+                    
+                    val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", sqliteCmd))
+                    sqliteProcess.waitFor()
+                    
+                    if (sqliteProcess.exitValue() == 0) {
+                        // Verify the setting was applied
+                        val verifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = '$key'\""))
+                        val verifyReader = BufferedReader(InputStreamReader(verifyProcess.inputStream))
+                        val verifyResult = verifyReader.readLine()
+                        verifyProcess.waitFor()
+                        android.util.Log.d("MainActivity", "Verification for key '$key': $verifyResult")
+                        
+                        val value = verifyResult?.trim()?.split("|")?.lastOrNull()?.trim()
+                        if (value == if (enabled) "1" else "0") {
+                            android.util.Log.d("MainActivity", "setDenyListEnabled: success via settings table key '$key'")
+                            return true
+                        }
+                    }
                 }
             }
             
-            // Method 2: Create/remove /data/adb/denylist file (older versions)
-            if (enabled) {
-                val createProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "touch /data/adb/denylist"))
-                createProcess.waitFor()
-                return createProcess.exitValue() == 0
-            } else {
-                val removeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -f /data/adb/denylist"))
-                removeProcess.waitFor()
-                return removeProcess.exitValue() == 0
-            }
-            
+            android.util.Log.e("MainActivity", "setDenyListEnabled: failed - all methods failed")
             false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error setting denylist: ${e.message}")
             false
         }
     }
@@ -1086,25 +1186,60 @@ class MainActivity : FlutterActivity() {
     private fun grantRootAccess(packageName: String): Boolean {
         if (packageName.isEmpty()) return false
         return try {
-            // Use Magisk's built-in SU policy management
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su add $packageName"))
-            process.waitFor()
-            if (process.exitValue() == 0) {
+            android.util.Log.d("MainActivity", "grantRootAccess: $packageName")
+            
+            // Step 1: Get UID for the package
+            val uidProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "dumpsys package $packageName | grep userId= | head -1"))
+            val uidReader = BufferedReader(InputStreamReader(uidProcess.inputStream))
+            val uidOutput = uidReader.readText().trim()
+            uidProcess.waitFor()
+            
+            android.util.Log.d("MainActivity", "dumpsys output for $packageName: $uidOutput")
+            
+            // Parse UID from output like "userId=10123"
+            val uidMatch = Regex("userId=(\\d+)").find(uidOutput)
+            val uid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+            
+            if (uid == null || uid < 10000) {
+                android.util.Log.e("MainActivity", "Failed to get valid UID for $packageName (uid=$uid)")
+                return false
+            }
+            
+            android.util.Log.d("MainActivity", "Got UID $uid for package $packageName")
+            
+            // Step 2: Grant root access using magisk --sqlite with UID
+            // policy values: 0=deny, 1=allow, 2=allow_forever
+            val sqliteCmd = "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)"
+            android.util.Log.d("MainActivity", "Executing: magisk --sqlite \"$sqliteCmd\"")
+            
+            val grantProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqliteCmd\""))
+            grantProcess.waitFor()
+            
+            val output = grantProcess.inputStream.bufferedReader().readText().trim()
+            val error = grantProcess.errorStream.bufferedReader().readText().trim()
+            android.util.Log.d("MainActivity", "Grant result: output=$output, error=$error, exitCode=${grantProcess.exitValue()}")
+            
+            if (grantProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully granted root access to $packageName (uid=$uid)")
                 return true
             }
             
-            // Fallback: Use magisk --sqlite command for newer Magisk versions
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('${packageName}', 2, 0)\""))
-            sqliteProcess.waitFor()
-            if (sqliteProcess.exitValue() == 0) {
-                return true
-            }
+            // Fallback: Use sqlite3 directly
+            val dbCmd = "sqlite3 /data/adb/magisk.db \"INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)\""
+            android.util.Log.d("MainActivity", "Fallback: $dbCmd")
             
-            // Fallback: Direct database manipulation for older Magisk versions
-            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES (\"$packageName\", 2, 0)'"))
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", dbCmd))
             dbProcess.waitFor()
-            dbProcess.exitValue() == 0
+            
+            if (dbProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully granted root access via sqlite3")
+                return true
+            }
+            
+            android.util.Log.e("MainActivity", "Failed to grant root access")
+            false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error granting root access: ${e.message}")
             false
         }
     }
@@ -1112,92 +1247,122 @@ class MainActivity : FlutterActivity() {
     private fun revokeRootAccess(packageName: String): Boolean {
         if (packageName.isEmpty()) return false
         return try {
-            // Use Magisk's built-in SU policy management
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su remove $packageName"))
-            process.waitFor()
-            if (process.exitValue() == 0) {
+            android.util.Log.d("MainActivity", "revokeRootAccess: $packageName")
+            
+            // Step 1: Get UID for the package
+            val uidProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "dumpsys package $packageName | grep userId= | head -1"))
+            val uidReader = BufferedReader(InputStreamReader(uidProcess.inputStream))
+            val uidOutput = uidReader.readText().trim()
+            uidProcess.waitFor()
+            
+            // Parse UID from output
+            val uidMatch = Regex("userId=(\\d+)").find(uidOutput)
+            val uid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+            
+            if (uid == null) {
+                android.util.Log.e("MainActivity", "Failed to get UID for $packageName")
+                return false
+            }
+            
+            android.util.Log.d("MainActivity", "Got UID $uid for package $packageName")
+            
+            // Step 2: Revoke root access using magisk --sqlite with UID
+            val sqliteCmd = "DELETE FROM policies WHERE uid=$uid"
+            val revokeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqliteCmd\""))
+            revokeProcess.waitFor()
+            
+            if (revokeProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully revoked root access from $packageName (uid=$uid)")
                 return true
             }
             
-            // Fallback: Use magisk --sqlite command for newer Magisk versions
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"DELETE FROM policies WHERE package_name = '${packageName}'\""))
-            sqliteProcess.waitFor()
-            if (sqliteProcess.exitValue() == 0) {
-                return true
-            }
-            
-            // Fallback: Direct database manipulation for older Magisk versions
-            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'DELETE FROM policies WHERE package_name = \"$packageName\"'"))
+            // Fallback: Use sqlite3 directly
+            val dbCmd = "sqlite3 /data/adb/magisk.db \"DELETE FROM policies WHERE uid=$uid\""
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", dbCmd))
             dbProcess.waitFor()
+            
             dbProcess.exitValue() == 0
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error revoking root access: ${e.message}")
             false
         }
     }
 
     private fun getRootAllowedPackages(): List<String> {
         return try {
-            // Method 1: Use magisk --sqlite to query package from policies table where policy > 0
-            // This is the most reliable method for getting root-allowed packages
-            val magiskDbFile = File("/data/adb/magisk.db")
-            if (magiskDbFile.exists()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT package FROM policies WHERE policy > 0\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val allowedPackages = mutableListOf<String>()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    val pkg = line?.trim()
-                    if (!pkg.isNullOrEmpty() && !pkg.contains("package")) {
-                        allowedPackages.add(pkg)
-                    }
-                }
-                process.waitFor()
+            android.util.Log.d("MainActivity", "getRootAllowedPackages: starting query")
+            
+            // Magisk policies table uses UID, and policy field indicates the permission level
+            // policy: 0=deny, 1=allow (session), 2=allow (forever), 3=allow (session)
+            // We want to get UIDs where policy > 0
+            
+            // Step 1: Query only UID from policies table where policy > 0
+            // Note: magisk --sqlite output format is typically "uid" per line for single column
+            val queryProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT uid FROM policies WHERE policy>0\""))
+            val queryReader = BufferedReader(InputStreamReader(queryProcess.inputStream))
+            val queryOutput = StringBuilder()
+            var queryLine: String?
+            while (queryReader.readLine().also { queryLine = it } != null) {
+                queryOutput.append(queryLine).append("\n")
+            }
+            queryProcess.waitFor()
+            
+            val rawOutput = queryOutput.toString().trim()
+            android.util.Log.d("MainActivity", "Raw policies query output: '$rawOutput'")
+            
+            // Parse UIDs - output is one UID per line
+            val uids = mutableListOf<Int>()
+            
+            for (line in rawOutput.split("\n")) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
                 
-                if (allowedPackages.isNotEmpty()) {
-                    android.util.Log.d("MainActivity", "Found ${allowedPackages.size} root-allowed packages via magisk --sqlite")
-                    return allowedPackages
+                android.util.Log.d("MainActivity", "Parsing line: '$trimmed'")
+                
+                // Try to parse as integer (UID)
+                val uid = trimmed.toIntOrNull()
+                
+                if (uid != null && uid >= 10000) {
+                    uids.add(uid)
+                    android.util.Log.d("MainActivity", "Found root-granted UID: $uid")
                 }
             }
             
-            // Method 2: Fallback to direct sqlite3 command
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'SELECT package FROM policies WHERE policy > 0'"))
-            val sqliteReader = BufferedReader(InputStreamReader(sqliteProcess.inputStream))
-            val sqlitePackages = mutableListOf<String>()
-            var sqliteLine: String?
-            while (sqliteReader.readLine().also { sqliteLine = it } != null) {
-                if (!sqliteLine.isNullOrEmpty()) {
-                    sqlitePackages.add(sqliteLine.trim())
-                }
-            }
-            sqliteProcess.waitFor()
+            android.util.Log.d("MainActivity", "Found ${uids.size} UIDs with root access: $uids")
             
-            if (sqlitePackages.isNotEmpty()) {
-                return sqlitePackages
-            }
+            // Step 2: Convert UIDs to package names
+            val allowedPackages = mutableListOf<String>()
             
-            // Method 3: Fallback to check magisk --su ls command (for newer Magisk versions)
-            val suProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su ls"))
-            val suReader = BufferedReader(InputStreamReader(suProcess.inputStream))
-            val suPackages = mutableListOf<String>()
-            var suLine: String?
-            while (suReader.readLine().also { suLine = it } != null) {
-                if (!suLine.isNullOrEmpty() && !suLine.contains("allow") && !suLine.contains("deny")) {
-                    // Parse the output format: "package_name allow/deny"
-                    val parts = suLine.trim().split("\\s+".toRegex())
-                    if (parts.size >= 2 && parts[1] == "allow") {
-                        suPackages.add(parts[0])
+            for (uid in uids) {
+                try {
+                    // Use "pm list packages --uid <uid>" to get package name
+                    val pmProcess = Runtime.getRuntime().exec(arrayOf("pm", "list", "packages", "--uid", uid.toString()))
+                    val pmReader = BufferedReader(InputStreamReader(pmProcess.inputStream))
+                    val pmOutput = pmReader.readText().trim()
+                    pmProcess.waitFor()
+                    
+                    android.util.Log.d("MainActivity", "pm list packages --uid $uid: '$pmOutput'")
+                    
+                    // Parse output format: "package:com.example.app" or multiple lines
+                    for (resultLine in pmOutput.split("\n")) {
+                        val trimmedLine = resultLine.trim()
+                        if (trimmedLine.startsWith("package:")) {
+                            val packageName = trimmedLine.removePrefix("package:").split(",").first().trim()
+                            if (packageName.isNotEmpty() && !allowedPackages.contains(packageName)) {
+                                allowedPackages.add(packageName)
+                                android.util.Log.d("MainActivity", "UID $uid -> package: $packageName")
+                            }
+                        }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Failed to get package for UID $uid: ${e.message}")
                 }
             }
-            suProcess.waitFor()
             
-            if (suPackages.isNotEmpty()) {
-                return suPackages
-            }
-            
-            emptyList()
+            android.util.Log.d("MainActivity", "getRootAllowedPackages: returning ${allowedPackages.size} packages: $allowedPackages")
+            allowedPackages
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error getting root allowed packages: ${e.message}")
+            android.util.Log.e("MainActivity", "Error getting root allowed packages: ${e.message}", e)
             emptyList()
         }
     }

@@ -18,6 +18,9 @@ class MagiskManagerPage extends ConsumerWidget {
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(0, tileColorIndex, isDark);
     final localizations = AppLocalizations.of(context)!;
+    
+    // Check if we have proper Magisk root
+    final hasMagiskRoot = status.isRooted;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -29,6 +32,7 @@ class MagiskManagerPage extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.all(4),
                 children: [
+                  // Install Magisk - always available (contains patchBootImage for non-rooted)
                   _buildMenuTile(
                     context,
                     localizations.installMagisk,
@@ -38,7 +42,8 @@ class MagiskManagerPage extends ConsumerWidget {
                     () => _showInstallDialog(context, status),
                     isDark,
                   ),
-                  if (status.isRooted)
+                  // Uninstall Magisk - only if rooted with Magisk
+                  if (hasMagiskRoot)
                     _buildMenuTile(
                       context,
                       localizations.uninstallMagisk,
@@ -48,6 +53,7 @@ class MagiskManagerPage extends ConsumerWidget {
                       () => _showUninstallDialog(context),
                       isDark,
                     ),
+                  // Update Manager - always available
                   _buildMenuTile(
                     context,
                     localizations.updateManager,
@@ -200,71 +206,64 @@ class MagiskManagerPage extends ConsumerWidget {
     final localizations = AppLocalizations.of(context)!;
     final hasRoot = status.isRooted;
     
-    List<Widget> menuItems = [
-      ListTile(
-        leading: const Icon(Icons.smartphone),
-        title: Text(localizations.autoInstall),
-        subtitle: Text(localizations.autoInstallDesc),
-        onTap: () {
-          Navigator.pop(context);
-          _performInstallMagisk(context, '', isPatchMode: false);
-        },
-      ),
-      ListTile(
-        leading: const Icon(Icons.sd_card),
-        title: Text(localizations.patchBootImage),
-        subtitle: Text(localizations.patchBootImageDesc),
-        onTap: () async {
-          Navigator.pop(context);
-          try {
-            // Check if we have root access before proceeding
-            if (!hasRoot) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(localizations.rootRequired)),
-              );
-              return;
-            }
-            
-            final filePath = await AndroidDataService.pickFile();
-            if (filePath != null) {
-              _performInstallMagisk(context, filePath, isPatchMode: true);
-            }
-          } catch (e) {
-            // Handle file picker error
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error selecting file: $e')),
-            );
-          }
-        },
-      ),
-    ];
-    
-    // Only show OTA slot switch if we have root access
-    if (hasRoot) {
-      menuItems.add(
-        ListTile(
-          leading: const Icon(Icons.swap_horiz),
-          title: Text(localizations.otaSlotSwitch),
-          subtitle: Text(localizations.otaSlotSwitchDesc),
-          onTap: () {
-            Navigator.pop(context);
-            _performOtaSlotSwitch(context);
-          },
-        ),
-      );
-    }
-    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(localizations.installMagisk),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: menuItems,
+          children: [
+            // Only show auto install if we have root access
+            if (hasRoot)
+              ListTile(
+                leading: const Icon(Icons.smartphone),
+                title: Text(localizations.autoInstall),
+                subtitle: Text(localizations.autoInstallDesc),
+                onTap: () {
+                  Navigator.pop(dialogContext);
+                  _performInstallMagisk(context, '', isPatchMode: false);
+                },
+              ),
+            // patchBootImage is always available (doesn't require root for selecting file)
+            ListTile(
+              leading: const Icon(Icons.sd_card),
+              title: Text(localizations.patchBootImage),
+              subtitle: Text(localizations.patchBootImageDesc),
+              onTap: () async {
+                Navigator.pop(dialogContext);
+                // Use a small delay to ensure dialog is fully closed
+                await Future.delayed(const Duration(milliseconds: 100));
+                if (!context.mounted) return;
+                try {
+                  final filePath = await AndroidDataService.pickFile();
+                  if (filePath != null && context.mounted) {
+                    _performInstallMagisk(context, filePath, isPatchMode: true);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error selecting file: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            // Only show OTA slot switch if we have root access
+            if (hasRoot)
+              ListTile(
+                leading: const Icon(Icons.swap_horiz),
+                title: Text(localizations.otaSlotSwitch),
+                subtitle: Text(localizations.otaSlotSwitchDesc),
+                onTap: () {
+                  Navigator.pop(dialogContext);
+                  _performOtaSlotSwitch(context);
+                },
+              ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(localizations.cancel),
           ),
         ],
