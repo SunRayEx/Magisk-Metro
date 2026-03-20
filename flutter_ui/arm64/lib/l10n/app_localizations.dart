@@ -443,6 +443,36 @@ abstract class AppLocalizations {
   /// **'Enable or disable DenyList'**
   String get denyListDesc;
 
+  /// No description provided for @suList.
+  ///
+  /// In en, this message translates to:
+  /// **'SuList'**
+  String get suList;
+
+  /// No description provided for @suListDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Whitelist mode - only listed apps get root access'**
+  String get suListDesc;
+
+  /// No description provided for @aggressiveHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Aggressive Hide'**
+  String get aggressiveHide;
+
+  /// No description provided for @aggressiveHideDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Enhanced hiding: spoof props, clear env vars'**
+  String get aggressiveHideDesc;
+
+  /// No description provided for @enableDenyOrSuList.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable DenyList or SuList above to manage apps.'**
+  String get enableDenyOrSuList;
+
   /// No description provided for @installModule.
   ///
   /// In en, this message translates to:
@@ -472,6 +502,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Root access is required for this operation'**
   String get rootRequired;
+
+  /// No description provided for @magiskRootRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Magisk Root permission is required for this feature'**
+  String get magiskRootRequired;
+
+  /// No description provided for @noFileSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No file selected'**
+  String get noFileSelected;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

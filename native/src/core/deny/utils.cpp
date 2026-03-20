@@ -30,6 +30,7 @@ static unique_ptr<map<int, set<string_view>>> app_id_to_pkgs_;
 static pthread_mutex_t data_lock = PTHREAD_MUTEX_INITIALIZER;
 
 atomic<bool> denylist_enforced = false;
+atomic<bool> enforce_sulist = false;
 
 static int get_app_id(const vector<int> &users, const string &pkg) {
     struct stat st{};
@@ -92,7 +93,7 @@ static void crawl_procfs(const F &fn) {
 }
 
 static bool str_eql(string_view a, string_view b) { return a == b; }
-static bool str_starts_with(string_view a, string_view b) { return a.starts_with(b); }
+static bool str_starts_with(string_view a, string_view b) { return a.size() >= b.size() && a.substr(0, b.size()) == b; }
 
 template<bool str_op(string_view, string_view) = str_eql>
 static bool proc_name_match(int pid, string_view name) {
@@ -113,7 +114,8 @@ bool proc_context_match(int pid, string_view context) {
 
     sprintf(buf, "/proc/%d", pid);
     if (lgetfilecon(buf, byte_data{ con, sizeof(con) })) {
-        return string_view(con).starts_with(context);
+        string_view con_view(con);
+        return con_view.size() >= context.size() && con_view.substr(0, context.size()) == context;
     }
     return false;
 }
@@ -353,6 +355,11 @@ int enable_deny() {
     if (denylist_enforced) {
         return DenyResponse::OK;
     } else {
+        // SuList and DenyList are mutually exclusive
+        if (enforce_sulist) {
+            LOGW("SuList mode is enabled, cannot enable DenyList\n");
+            return DenyResponse::ERROR;
+        }
         mutex_guard lock(data_lock);
 
         if (access("/proc/self/ns/mnt", F_OK) != 0) {
@@ -397,8 +404,89 @@ int disable_deny() {
     return DenyResponse::OK;
 }
 
+int enable_sulist() {
+    if (enforce_sulist) {
+        return DenyResponse::OK;
+    } else {
+        // SuList and DenyList are mutually exclusive
+        if (denylist_enforced) {
+            disable_deny();
+        }
+        
+        mutex_guard lock(data_lock);
+
+        if (access("/proc/self/ns/mnt", F_OK) != 0) {
+            LOGW("The kernel does not support mount namespace\n");
+            return DenyResponse::NO_NS;
+        }
+
+        if (procfp == nullptr && (procfp = opendir("/proc")) == nullptr)
+            return DenyResponse::ERROR;
+
+        LOGI("* Enable SuList (Enforce Whitelist Mode)\n");
+
+        if (!ensure_data())
+            return DenyResponse::ERROR;
+
+        enforce_sulist = true;
+
+        if (!MagiskD::Get().zygisk_enabled()) {
+            if (new_daemon_thread(&logcat)) {
+                enforce_sulist = false;
+                return DenyResponse::ERROR;
+            }
+        }
+
+        // On Android Q+, also kill blastula pool and all app zygotes
+        // This forces apps to restart with the new SuList enforcement
+        if (SDK_INT >= 29) {
+            kill_process("usap32", true);
+            kill_process("usap64", true);
+            kill_process<&proc_context_match>("u:r:app_zygote:s0", true);
+        }
+        
+        // Kill all user apps to force re-execution with SuList
+        // Apps not in SuList will have Magisk hidden after restart
+        crawl_procfs([](int pid) -> bool {
+            char buf[PATH_MAX];
+            sprintf(buf, "/proc/%d/cmdline", pid);
+            if (auto fp = open_file(buf, "re")) {
+                fgets(buf, sizeof(buf), fp.get());
+                string_view cmd(buf);
+                // Skip system processes and magiskd
+                if (cmd.empty() || cmd == "magiskd" || cmd.starts_with("/system/"))
+                    return true;
+                // Kill user apps
+                if (cmd.contains(".") && !cmd.starts_with("android.")) {
+                    kill(pid, SIGKILL);
+                    LOGD("SuList: kill PID=[%d] (%s)\n", pid, cmd.data());
+                }
+            }
+            return true;
+        });
+    }
+
+    MagiskD::Get().set_db_setting(DbEntryKey::SulistConfig, true);
+    return DenyResponse::OK;
+}
+
+int disable_sulist() {
+    if (enforce_sulist.exchange(false)) LOGI("* Disable SuList\n");
+    MagiskD::Get().set_db_setting(DbEntryKey::SulistConfig, false);
+    return DenyResponse::OK;
+}
+
 void initialize_denylist() {
-    if (!denylist_enforced) {
+    // Initialize SuList from database
+    if (!enforce_sulist) {
+        if (MagiskD::Get().get_db_setting(DbEntryKey::SulistConfig)) {
+            LOGI("* Initialize SuList from database\n");
+            enforce_sulist = true;
+        }
+    }
+    
+    // Initialize DenyList from database (only if SuList is not enabled)
+    if (!denylist_enforced && !enforce_sulist) {
         if (MagiskD::Get().get_db_setting(DbEntryKey::DenylistConfig))
             enable_deny();
     }
@@ -410,10 +498,50 @@ bool is_deny_target(int uid, string_view process) {
         return false;
 
     int app_id = to_app_id(uid);
+    
+    // Never hide system_server (uid 1000)
+    if (uid == 1000) {
+        return false;
+    }
+    
+    // Never hide system apps (uid < 10000)
+    if (app_id < 10000) {
+        return false;
+    }
+    
+    // SuList mode: invert logic - hide everything NOT in the list
+    // In SuList mode, the list contains apps that should SEE Magisk (whitelist)
+    // So we hide apps NOT in the list, regardless of root access
+    if (enforce_sulist) {
+        if (app_id >= 90000) {
+            // Isolated process: check if parent app is in SuList
+            if (auto it = pkg_to_procs.find(ISOLATED_MAGIC); it != pkg_to_procs.end()) {
+                for (const auto &s : it->second) {
+                    if (process.size() >= s.size() && process.substr(0, s.size()) == s)
+                        return false; // In SuList, do NOT hide
+                }
+            }
+            return true; // Not in SuList, hide
+        }
+        // Regular app: return true if NOT in list (should hide)
+        // DO NOT check uid_granted_root in SuList mode - whitelist takes precedence
+        bool in_sulist = app_id_to_pkgs.find(app_id) != app_id_to_pkgs.end();
+        LOGD("denylist: SuList mode - [%s] app_id=%d in_sulist=%d\n", process.data(), app_id, in_sulist);
+        return !in_sulist; // Hide if NOT in SuList
+    }
+
+    // Original DenyList mode logic
+    // In DenyList mode, check if app has root access - if so, don't hide
+    // This allows apps with root to also see Magisk for proper functionality
+    if (MagiskD::Get().uid_granted_root(uid)) {
+        LOGD("denylist: [%s] has root access, NOT hiding\n", process.data());
+        return false;
+    }
+    
     if (app_id >= 90000) {
         if (auto it = pkg_to_procs.find(ISOLATED_MAGIC); it != pkg_to_procs.end()) {
             for (const auto &s : it->second) {
-                if (process.starts_with(s))
+                if (process.size() >= s.size() && process.substr(0, s.size()) == s)
                     return true;
             }
         }
@@ -431,10 +559,18 @@ bool is_deny_target(int uid, string_view process) {
 }
 
 void update_deny_flags(int uid, rust::Str process, uint32_t &flags) {
-    if (is_deny_target(uid, { process.begin(), process.end() })) {
-        flags |= +ZygiskStateFlags::ProcessOnDenyList;
-    }
+    // Set mode flags
     if (denylist_enforced) {
         flags |= +ZygiskStateFlags::DenyListEnforced;
+    }
+    if (enforce_sulist) {
+        flags |= +ZygiskStateFlags::SuListEnforced;
+    }
+    
+    // Check if this process should be hidden
+    // Convert rust::Str to std::string_view
+    std::string_view process_sv(process.data(), process.size());
+    if (is_deny_target(uid, process_sv)) {
+        flags |= +ZygiskStateFlags::ProcessOnDenyList;
     }
 }

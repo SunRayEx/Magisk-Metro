@@ -183,6 +183,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get denyListDesc => '启用或禁用 DenyList';
 
   @override
+  String get suList => 'SuList';
+
+  @override
+  String get suListDesc => '白名单模式 - 只有列表中的应用才能获取 root 权限';
+
+  @override
+  String get aggressiveHide => '增强隐藏';
+
+  @override
+  String get aggressiveHideDesc => '增强隐藏：伪装属性、清除环境变量';
+
+  @override
+  String get enableDenyOrSuList => '启用上方的拒绝列表或 SuList 来管理应用。';
+
+  @override
   String get installModule => '安装模块';
 
   @override
@@ -196,4 +211,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rootRequired => '此操作需要 Root 权限';
+
+  @override
+  String get magiskRootRequired => '此功能需要 Magisk Root 权限';
+
+  @override
+  String get noFileSelected => '未选择文件';
 }

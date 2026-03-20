@@ -6,6 +6,7 @@ import 'navigation/flip_page_route.dart' hide AnimatedBuilder;
 import 'screens/secondary_pages.dart';
 import 'l10n/app_localizations.dart';
 
+/// Dashboard Screen with rich animations and transitions
 class AnimatedDashboardScreen extends ConsumerStatefulWidget {
   const AnimatedDashboardScreen({super.key});
 
@@ -16,57 +17,64 @@ class AnimatedDashboardScreen extends ConsumerStatefulWidget {
 
 class _AnimatedDashboardScreenState
     extends ConsumerState<AnimatedDashboardScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _staggerController;
-  late AnimationController _gearController;
-  final Map<String, AnimationController> _cardControllers = {};
-
-  // ANIMATION: Staggered entrance delays for each card
-  static const List<Duration> _cardDelays = [
-    Duration(milliseconds: 0),
-    Duration(milliseconds: 100),
-    Duration(milliseconds: 200),
-    Duration(milliseconds: 300),
-    Duration(milliseconds: 400),
-    Duration(milliseconds: 500),
-  ];
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+  
+  // Main entrance animation controller
+  late final AnimationController _entranceController;
+  
+  // Staggered animations for each card
+  late final List<AnimationController> _cardControllers;
+  late final List<Animation<double>> _cardAnimations;
+  
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _staggerController = AnimationController(
+    
+    // Main entrance controller
+    _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 800),
     );
-    _gearController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _startStaggeredAnimation();
-  }
-
-  void _startStaggeredAnimation() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (mounted) {
-      _staggerController.forward();
-    }
-  }
-
-  AnimationController _getCardController(String cardId) {
-    if (!_cardControllers.containsKey(cardId)) {
-      _cardControllers[cardId] = AnimationController(
+    
+    // Initialize 6 card controllers for staggered animation
+    _cardControllers = List.generate(6, (index) {
+      return AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 150),
+        duration: const Duration(milliseconds: 400),
       );
-    }
-    return _cardControllers[cardId]!;
+    });
+    
+    // Create staggered animations with delays
+    _cardAnimations = _cardControllers.map((controller) {
+      return CurvedAnimation(
+        parent: controller,
+        curve: Curves.easeOutBack,
+      );
+    }).toList();
+    
+    // Start entrance animation after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _entranceController.forward();
+        // Stagger card animations
+        for (int i = 0; i < _cardControllers.length; i++) {
+          Future.delayed(Duration(milliseconds: 100 + (i * 80)), () {
+            if (mounted) {
+              _cardControllers[i].forward();
+            }
+          });
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
-    _staggerController.dispose();
-    _gearController.dispose();
-    for (var controller in _cardControllers.values) {
+    _entranceController.dispose();
+    for (final controller in _cardControllers) {
       controller.dispose();
     }
     super.dispose();
@@ -74,7 +82,9 @@ class _AnimatedDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -83,9 +93,9 @@ class _AnimatedDashboardScreenState
           padding: const EdgeInsets.all(8.0),
           child: Column(
             children: [
-              _buildAnimatedTopBar(context, ref, isDark),
+              _buildTopBar(context, isDark),
               Expanded(
-                child: _buildAnimatedMainContent(context, ref, isDark),
+                child: _buildMainContent(context, isDark, tileColorIndex),
               ),
             ],
           ),
@@ -94,740 +104,92 @@ class _AnimatedDashboardScreenState
     );
   }
 
-  Widget _buildAnimatedTopBar(
-      BuildContext context, WidgetRef ref, bool isDark) {
-    // ANIMATION: SlideTransition + FadeTransition for staggered entrance
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -0.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Curves.fastOutSlowIn,
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Curves.fastOutSlowIn,
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  // ANIMATION: RotationTransition on tap (360° in 400ms)
-                  _gearController.forward(from: 0);
-                  _showSettings(context, ref);
-                },
-                child: RotationTransition(
-                  turns: Tween<double>(begin: 0, end: 1).animate(
-                    CurvedAnimation(
-                      parent: _gearController,
-                      curve: Curves.easeInOut,
-                    ),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.settings,
-                      color: AppTheme.getFont(isDark),
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Widget _buildTopBar(BuildContext context, bool isDark) {
+    // Settings icon removed - settings now accessible via Settings tile
+    return const SizedBox.shrink();
   }
 
-  Widget _buildAnimatedMainContent(
-      BuildContext context, WidgetRef ref, bool isDark) {
-    // ANIMATION: Staggered entrance using SlideTransition
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _buildAnimatedLeftColumn(context, ref, isDark),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: _buildAnimatedRightColumn(context, ref, isDark),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnimatedLeftColumn(
-      BuildContext context, WidgetRef ref, bool isDark) {
-    return AnimatedBuilder(
-      animation: _staggerController,
-      builder: (context, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: 6,
-              child: _buildAnimatedMagiskCard(context, ref, isDark, 0),
-            ),
-            const SizedBox(height: 4),
-            Expanded(
-              flex: 3,
-              child: _buildAnimatedDenyListCard(context, ref, isDark, 1),
-            ),
-            const SizedBox(height: 4),
-            Expanded(
-              flex: 3,
-              child: _buildAnimatedContributorCard(context, ref, isDark, 2),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildAnimatedRightColumn(
-      BuildContext context, WidgetRef ref, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          flex: 3,
-          child: _buildAnimatedModulesCard(context, ref, isDark, 3),
-        ),
-        const SizedBox(height: 4),
-        Expanded(
-          flex: 3,
-          child: _buildAnimatedAppsCard(context, ref, isDark, 4),
-        ),
-        const SizedBox(height: 4),
-        Expanded(
-          flex: 6,
-          child: _buildAnimatedLogsCard(context, ref, isDark, 5),
-        ),
-      ],
-    );
-  }
-
-  // ANIMATION: ScaleTransition + spring physics on card tap
-  Widget _buildAnimatedCard({
-    required Widget child,
-    required int index,
-    required VoidCallback onTap,
-  }) {
-    final controller = _getCardController('card_$index');
-
-    return GestureDetector(
-      onTapDown: (_) => controller.forward(),
-      onTapUp: (_) {
-        controller.reverse();
-        onTap();
-      },
-      onTapCancel: () => controller.reverse(),
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 1.0, end: 0.95).animate(
-          CurvedAnimation(
-            parent: controller,
-            curve: Curves.elasticOut,
-          ),
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  Widget _buildAnimatedMagiskCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final status = ref.watch(magiskStatusProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFF4DB6AC)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
-
-    // ANIMATION: Staggered slide + fade
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(-0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/magisk'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? tileColor : tileColorLight,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.face,
-                    size: 60,
-                    color: isDark ? Colors.black : Colors.white,
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Magisk ${status.versionCode}',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        color: Colors.black,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Center(
-                    child: Text(
-                      '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                        color: Colors.black,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Spacer(),
-                  _buildAnimatedStatusRow(localizations.root, status.isRooted, localizations),
-                  _buildAnimatedStatusRow(localizations.zygisk, status.isZygiskEnabled, localizations),
-                  _buildAnimatedStatusRow(localizations.ramdisk, status.isRamdiskLoaded, localizations),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedStatusRow(String label, bool value, AppLocalizations localizations) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.0),
+  Widget _buildMainContent(BuildContext context, bool isDark, int tileColorIndex) {
+    return FadeTransition(
+      opacity: _entranceController,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            '$label:',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 10,
-              color: Colors.black,
-            ),
+          Expanded(
+            child: _buildLeftColumn(context, isDark, tileColorIndex),
           ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: Text(
-              value ? localizations.yes : localizations.no,
-              key: ValueKey(value),
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-                color: Colors.black,
-              ),
-            ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildRightColumn(context, isDark, tileColorIndex),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAnimatedDenyListCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final isEnabled = ref.watch(denyListEnabledProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFFFD54F)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
-
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(-0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/denylist'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? tileColor : tileColorLight,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Align(
-                alignment: Alignment.topRight,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    isEnabled ? localizations.denyList : '${localizations.denyList} [OFF]',
-                    key: ValueKey(isEnabled),
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+  Widget _buildLeftColumn(BuildContext context, bool isDark, int tileColorIndex) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 6,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[0],
+            child: _MagiskCard(isDark: isDark, tileColorIndex: tileColorIndex),
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        Expanded(
+          flex: 3,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[1],
+            child: _SettingsCard(isDark: isDark, tileColorIndex: tileColorIndex),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          flex: 3,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[2],
+            child: _ContributorCard(isDark: isDark, tileColorIndex: tileColorIndex),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildAnimatedContributorCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final contributors = ref.watch(contributorsProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFBA68C8)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
-
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(-0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/contributors'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? tileColor : tileColorLight,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    localizations.contributors,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Text(
-                      contributors.isNotEmpty ? contributors.first.name : '',
-                      key: ValueKey(contributors.isNotEmpty),
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                  if (contributors.length > 1)
-                    Text(
-                      contributors[1].name,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                        color: Colors.black,
-                      ),
-                    ),
-                  const Spacer(),
-                ],
-              ),
-            ),
+  Widget _buildRightColumn(BuildContext context, bool isDark, int tileColorIndex) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 3,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[3],
+            child: _ModulesCard(isDark: isDark, tileColorIndex: tileColorIndex),
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        Expanded(
+          flex: 3,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[4],
+            child: _AppsCard(isDark: isDark, tileColorIndex: tileColorIndex),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          flex: 6,
+          child: _AnimatedCardEntry(
+            animation: _cardAnimations[5],
+            child: _LogsCard(isDark: isDark),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildAnimatedModulesCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final modules = ref.watch(modulesProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFF64B5F6)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
-
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/modules'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? tileColor : tileColorLight,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    localizations.modules,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    modules.isNotEmpty ? modules.first.name : '',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                      color: Colors.black,
-                    ),
-                  ),
-                  if (modules.length > 1)
-                    Text(
-                      modules[1].name,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
-                    ),
-                  const Spacer(),
-                  // ANIMATION: TweenAnimationBuilder<int> for number with 1200ms, easeOutCubic
-                  TweenAnimationBuilder<int>(
-                    tween: IntTween(begin: 0, end: modules.length),
-                    duration: const Duration(milliseconds: 1200),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) {
-                      return Text(
-                        '$value',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 32,
-                          color: Colors.black,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedAppsCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final apps = ref.watch(appsProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFEF5350)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
-
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/apps'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? tileColor : tileColorLight,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    localizations.apps,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    apps.isNotEmpty ? apps.first.name : '',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                      color: Colors.black,
-                    ),
-                  ),
-                  if (apps.length > 1)
-                    Text(
-                      apps[1].name,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
-                    ),
-                  const Spacer(),
-                  // ANIMATION: TweenAnimationBuilder<int> for number with 1200ms, easeOutCubic
-                  TweenAnimationBuilder<int>(
-                    tween: IntTween(begin: 0, end: apps.length),
-                    duration: const Duration(milliseconds: 1200),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, value, child) {
-                      return Text(
-                        '$value',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 32,
-                          color: Colors.black,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedLogsCard(
-      BuildContext context, WidgetRef ref, bool isDark, int index) {
-    final logsAsync = ref.watch(logsProvider);
-    final localizations = AppLocalizations.of(context)!;
-
-    final delay = _cardDelays[index];
-    final slideAnimation = Tween<Offset>(
-      begin: const Offset(0.5, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerController,
-      curve: Interval(
-        delay.inMilliseconds / 1200,
-        (delay.inMilliseconds + 400) / 1200,
-        curve: Curves.fastOutSlowIn,
-      ),
-    ));
-
-    final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          delay.inMilliseconds / 1200,
-          (delay.inMilliseconds + 400) / 1200,
-          curve: Curves.fastOutSlowIn,
-        ),
-      ),
-    );
-
-    return SlideTransition(
-      position: slideAnimation,
-      child: FadeTransition(
-        opacity: fadeAnimation,
-        child: _buildAnimatedCard(
-          index: index,
-          onTap: () => _navigateTo(context, '/logs'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.fastOutSlowIn,
-            color: isDark ? Colors.white : Colors.black,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Text(
-                      localizations.logs,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 20,
-                        color: isDark ? Colors.black : Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Expanded(
-                    child: logsAsync.when(
-                      data: (logs) =>
-                          AnimatedLogsListView(logs: logs, isDark: isDark),
-                      loading: () => Center(
-                        child: CircularProgressIndicator(
-                          color: isDark ? Colors.black : Colors.white,
-                        ),
-                      ),
-                      error: (error, stack) => Text(
-                        '[E] ${localizations.error}: $error',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 8,
-                          color: isDark ? Colors.black : Colors.white,
-                        ),
-                        overflow: TextOverflow.clip,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showSettings(BuildContext context, WidgetRef ref) {
+  void _showSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -846,8 +208,8 @@ class _AnimatedDashboardScreenState
       case '/magisk':
         page = const MagiskManagerPage();
         break;
-      case '/denylist':
-        page = const DenyListPage();
+      case '/settings':
+        page = const SettingsPage();
         break;
       case '/modules':
         page = const ModulesPage();
@@ -871,82 +233,722 @@ class _AnimatedDashboardScreenState
   }
 }
 
-// ANIMATION: AnimatedList with insert animation (FadeTransition + SizeTransition)
-class AnimatedLogsListView extends StatefulWidget {
-  final List<String> logs;
+/// Optimized Magisk Card with minimal rebuilds
+class _MagiskCard extends ConsumerWidget {
   final bool isDark;
+  final int tileColorIndex;
 
-  const AnimatedLogsListView({required this.logs, required this.isDark});
+  const _MagiskCard({required this.isDark, required this.tileColorIndex});
 
   @override
-  State<AnimatedLogsListView> createState() => _AnimatedLogsListViewState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(magiskStatusProvider);
+    final localizations = AppLocalizations.of(context)!;
+    final tileColor = AppTheme.getTileWithIndex(0, tileColorIndex, isDark);
+
+    return _AnimatedTileCard(
+      color: tileColor,
+      onTap: () => _navigateTo(context, ref, '/magisk'),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Icon(
+              Icons.face,
+              size: 60,
+              color: isDark ? Colors.black : Colors.white,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Magisk ${status.versionCode}',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: Colors.black,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: Colors.black,
+              ),
+            ),
+            const Spacer(),
+            _StatusRow(label: localizations.root, value: status.isRooted),
+            _StatusRow(label: localizations.zygisk, value: status.isZygiskEnabled),
+            _StatusRow(label: localizations.ramdisk, value: status.isRamdiskLoaded),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateTo(BuildContext context, WidgetRef ref, String route) {
+    Widget page;
+    switch (route) {
+      case '/magisk':
+        page = const MagiskManagerPage();
+        break;
+      default:
+        return;
+    }
+    Navigator.push(context, FlipPageRoute(page: page));
+  }
 }
 
-class _AnimatedLogsListViewState extends State<AnimatedLogsListView>
-    with AutomaticKeepAliveClientMixin {
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey();
-  final List<String> _displayedLogs = [];
-  int _previousLength = 0;
+/// Optimized Settings Card (replaces DenyList Card)
+class _SettingsCard extends ConsumerWidget {
+  final bool isDark;
+  final int tileColorIndex;
+
+  const _SettingsCard({required this.isDark, required this.tileColorIndex});
 
   @override
-  bool get wantKeepAlive => true;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(magiskStatusProvider);
+    final localizations = AppLocalizations.of(context)!;
+    final tileColor = AppTheme.getTileWithIndex(1, tileColorIndex, isDark);
+
+    return _AnimatedTileCard(
+      color: tileColor,
+      onTap: () => Navigator.push(context, FlipPageRoute(page: const SettingsPage())),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Align(
+          alignment: Alignment.topRight,
+          child: Text(
+            localizations.settings,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w900,
+              fontSize: 20,
+              color: Colors.black,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized Contributor Card with scrolling contributor names
+class _ContributorCard extends ConsumerWidget {
+  final bool isDark;
+  final int tileColorIndex;
+
+  const _ContributorCard({required this.isDark, required this.tileColorIndex});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contributors = ref.watch(contributorsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    final tileColor = AppTheme.getTileWithIndex(2, tileColorIndex, isDark);
+    
+    // Get all contributor names for infinite scrolling
+    final contributorNames = contributors.map((c) => c.name).toList();
+
+    return _AnimatedTileCard(
+      color: tileColor,
+      onTap: () => Navigator.push(context, FlipPageRoute(page: const ContributorsPage())),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              localizations.contributors,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Scrolling contributor names - infinite loop, max 3 items
+            Expanded(
+              child: contributorNames.isNotEmpty
+                  ? _ScrollingTextCarousel(
+                      items: contributorNames,
+                      maxItems: 3,
+                      infinite: true,
+                      duration: const Duration(seconds: 2),
+                      textStyle: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized Modules Card with scrolling enabled module names
+class _ModulesCard extends ConsumerWidget {
+  final bool isDark;
+  final int tileColorIndex;
+
+  const _ModulesCard({required this.isDark, required this.tileColorIndex});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final modules = ref.watch(modulesProvider);
+    final localizations = AppLocalizations.of(context)!;
+    final tileColor = AppTheme.getTileWithIndex(3, tileColorIndex, isDark);
+    
+    // Get only enabled module names for infinite scrolling
+    final enabledModules = modules.where((m) => m.isEnabled).toList();
+    final enabledModuleNames = enabledModules.map((m) => m.name).toList();
+    final enabledCount = enabledModules.length;
+
+    return _AnimatedTileCard(
+      color: tileColor,
+      onTap: () => Navigator.push(context, FlipPageRoute(page: const ModulesPage())),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              localizations.modules,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Scrolling enabled module names - infinite loop, max 3 items
+            Expanded(
+              child: enabledModuleNames.isNotEmpty
+                  ? _ScrollingTextCarousel(
+                      items: enabledModuleNames,
+                      maxItems: 3,
+                      infinite: true,
+                      duration: const Duration(seconds: 2),
+                      textStyle: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$enabledCount',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 32,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized Apps Card with scrolling root-granted app names
+class _AppsCard extends ConsumerWidget {
+  final bool isDark;
+  final int tileColorIndex;
+
+  const _AppsCard({required this.isDark, required this.tileColorIndex});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final apps = ref.watch(appsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    final tileColor = AppTheme.getTileWithIndex(4, tileColorIndex, isDark);
+    
+    // Get only apps with root access granted for infinite scrolling
+    final rootGrantedApps = apps.where((a) => a.hasRootAccess).toList();
+    final rootGrantedAppNames = rootGrantedApps.map((a) => a.name).toList();
+    final rootGrantedCount = rootGrantedApps.length;
+
+    return _AnimatedTileCard(
+      color: tileColor,
+      onTap: () => Navigator.push(context, FlipPageRoute(page: const AppsPage())),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              localizations.apps,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Scrolling root-granted app names - infinite loop, max 3 items
+            Expanded(
+              child: rootGrantedAppNames.isNotEmpty
+                  ? _ScrollingTextCarousel(
+                      items: rootGrantedAppNames,
+                      maxItems: 3,
+                      infinite: true,
+                      duration: const Duration(seconds: 2),
+                      textStyle: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$rootGrantedCount',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 32,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optimized Logs Card with scrolling log entries (E, D, W, I levels)
+class _LogsCard extends ConsumerWidget {
+  final bool isDark;
+
+  const _LogsCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logsAsync = ref.watch(logsProvider);
+    final localizations = AppLocalizations.of(context)!;
+
+    return _AnimatedTileCard(
+      color: isDark ? Colors.white : Colors.black,
+      onTap: () => Navigator.push(context, FlipPageRoute(page: const LogsPage())),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: Text(
+                localizations.logs,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  color: isDark ? Colors.black : Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: logsAsync.when(
+                data: (logs) {
+                  // Filter to show E (Error), D (Debug), W (Warning), I (Info) logs
+                  final filteredLogs = logs.where((log) => 
+                    log.contains('[E]') || 
+                    log.contains('[D]') || 
+                    log.contains('[W]') || 
+                    log.contains('[I]') ||
+                    log.contains('ERROR') || 
+                    log.contains('Error') ||
+                    log.contains('error') ||
+                    log.contains('DEBUG') || 
+                    log.contains('Debug') ||
+                    log.contains('debug') ||
+                    log.contains('WARN') || 
+                    log.contains('Warning') ||
+                    log.contains('warning') ||
+                    log.contains('INFO') || 
+                    log.contains('Info') ||
+                    log.contains('info')
+                  ).take(30).toList();
+                  
+                  return _ScrollingTextCarousel(
+                    items: filteredLogs,
+                    maxItems: 30, // Max 30 logs displayed
+                    infinite: true, // Loop through logs
+                    duration: const Duration(milliseconds: 500), // 0.5s interval
+                    textStyle: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 8,
+                      color: isDark ? Colors.black : Colors.white,
+                    ),
+                  );
+                },
+                loading: () => Center(
+                  child: CircularProgressIndicator(
+                    color: isDark ? Colors.black : Colors.white,
+                  ),
+                ),
+                error: (error, stack) => Text(
+                  '[E] ${localizations.error}: $error',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 8,
+                    color: isDark ? Colors.black : Colors.white,
+                  ),
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Status row widget
+class _StatusRow extends StatelessWidget {
+  final String label;
+  final bool value;
+
+  const _StatusRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$label:',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 10,
+              color: Colors.black,
+            ),
+          ),
+          Text(
+            value ? 'Yes' : 'No',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+              color: Colors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Animated tile card with press feedback (for non-Magisk/DenyList tiles)
+class _AnimatedTileCard extends StatefulWidget {
+  final Color color;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _AnimatedTileCard({
+    required this.color,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  State<_AnimatedTileCard> createState() => _AnimatedTileCardState();
+}
+
+class _AnimatedTileCardState extends State<_AnimatedTileCard> {
+  double _scale = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _scale = 0.95),
+      onTapUp: (_) {
+        setState(() => _scale = 1.0);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _scale = 1.0),
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeInOut,
+        child: Container(
+          color: widget.color,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Animated card entry widget with scale and fade transition
+class _AnimatedCardEntry extends StatelessWidget {
+  final Animation<double> animation;
+  final Widget child;
+
+  const _AnimatedCardEntry({
+    required this.animation,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: 0.8 + (0.2 * animation.value),
+          child: Opacity(
+            opacity: animation.value,
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// Scrolling text carousel widget - queue-style scrolling with smooth transitions
+/// - maxItems: maximum items to display (default 3)
+/// - infinite: true for infinite loop, false for stop at end
+/// - duration: time between item changes (2 seconds)
+class _ScrollingTextCarousel extends StatefulWidget {
+  final List<String> items;
+  final int maxItems;
+  final bool infinite;
+  final Duration duration;
+  final TextStyle? textStyle;
+
+  const _ScrollingTextCarousel({
+    required this.items,
+    this.maxItems = 3,
+    this.infinite = true,
+    this.duration = const Duration(seconds: 2),
+    this.textStyle,
+  });
+
+  @override
+  State<_ScrollingTextCarousel> createState() => _ScrollingTextCarouselState();
+}
+
+class _ScrollingTextCarouselState extends State<_ScrollingTextCarousel> {
+  List<_CarouselItem> _visibleItems = [];
+  int _currentIndex = 0;
+  bool _isAnimating = false;
 
   @override
   void initState() {
     super.initState();
-    _displayedLogs.addAll(widget.logs);
-    _previousLength = widget.logs.length;
+    _startCarousel();
+  }
+
+  void _startCarousel() {
+    if (widget.items.isEmpty) return;
+    
+    Future.delayed(widget.duration, () {
+      if (!mounted) return;
+      _animateNextItem();
+    });
+  }
+
+  void _animateNextItem() {
+    if (!mounted || _isAnimating) return;
+    
+    // Check if we should continue
+    if (!widget.infinite && _currentIndex >= widget.items.length) {
+      return;
+    }
+    
+    setState(() {
+      _isAnimating = true;
+      
+      // Mark oldest item for removal (will animate out first)
+      if (_visibleItems.length >= widget.maxItems) {
+        _visibleItems[0].isRemoving = true;
+      }
+    });
+    
+    // Wait for slide-out animation to complete before sliding in new item
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      
+      setState(() {
+        // Remove items marked for removal
+        _visibleItems = _visibleItems.where((item) => !item.isRemoving).toList();
+        
+        // Add new item (will animate in)
+        final newItem = _CarouselItem(
+          text: widget.items[_currentIndex % widget.items.length],
+          isNew: true,
+        );
+        _visibleItems.add(newItem);
+        
+        // Update index
+        if (widget.infinite) {
+          _currentIndex = (_currentIndex + 1) % widget.items.length;
+        } else {
+          _currentIndex++;
+        }
+      });
+      
+      // Wait for slide-in animation to complete
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        
+        setState(() {
+          // Reset new flags
+          for (var item in _visibleItems) {
+            item.isNew = false;
+          }
+          _isAnimating = false;
+        });
+        
+        // Continue carousel
+        _startCarousel();
+      });
+    });
   }
 
   @override
-  void didUpdateWidget(AnimatedLogsListView oldWidget) {
+  Widget build(BuildContext context) {
+    if (widget.items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: _visibleItems.map((item) {
+        return _AnimatedCarouselItem(
+          key: ValueKey(item.text + _visibleItems.indexOf(item).toString()),
+          text: item.text,
+          isNew: item.isNew,
+          isRemoving: item.isRemoving,
+          textStyle: widget.textStyle,
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// Internal class to track item state
+class _CarouselItem {
+  final String text;
+  bool isNew;
+  bool isRemoving;
+
+  _CarouselItem({
+    required this.text,
+    this.isNew = false,
+    this.isRemoving = false,
+  });
+}
+
+/// Animated item widget using pure implicit animations for flicker-free transitions
+class _AnimatedCarouselItem extends StatefulWidget {
+  final String text;
+  final bool isNew;
+  final bool isRemoving;
+  final TextStyle? textStyle;
+
+  const _AnimatedCarouselItem({
+    super.key,
+    required this.text,
+    this.isNew = false,
+    this.isRemoving = false,
+    this.textStyle,
+  });
+
+  @override
+  State<_AnimatedCarouselItem> createState() => _AnimatedCarouselItemState();
+}
+
+class _AnimatedCarouselItemState extends State<_AnimatedCarouselItem> {
+  double _opacity = 1.0;
+  double _slideY = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isNew) {
+      // Start invisible and below for new items
+      _opacity = 0.0;
+      _slideY = 15.0;
+      // Schedule animation for next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _opacity = 1.0;
+            _slideY = 0.0;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedCarouselItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.logs.length > _previousLength) {
-      // ANIMATION: Add new logs with 100ms interval, FadeTransition + SizeTransition
-      for (int i = _previousLength; i < widget.logs.length; i++) {
-        Future.delayed(Duration(milliseconds: (i - _previousLength) * 100), () {
-          if (mounted && i < widget.logs.length) {
-            _displayedLogs.add(widget.logs[i]);
-            _listKey.currentState?.insertItem(_displayedLogs.length - 1,
-                duration: const Duration(milliseconds: 300));
-          }
-        });
-      }
-      _previousLength = widget.logs.length;
+    if (widget.isRemoving && !oldWidget.isRemoving) {
+      // Animate out - slide up and fade
+      setState(() {
+        _opacity = 0.0;
+        _slideY = -15.0;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    final recentLogs =
-        widget.logs.where((log) => log.contains('[E]')).take(10).toList();
-    final displayLogs = recentLogs.isEmpty ? _displayedLogs : recentLogs;
-
-    return AnimatedList(
-      key: _listKey,
-      initialItemCount: displayLogs.length,
-      itemBuilder: (context, index, animation) {
-        if (index >= displayLogs.length) return const SizedBox.shrink();
-        final log = displayLogs[index];
-        // ANIMATION: FadeTransition + SizeTransition for each log item
-        return FadeTransition(
-          opacity: animation,
-          child: SizeTransition(
-            sizeFactor: animation,
-            child: Text(
-              log,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w500,
-                fontSize: 8,
-                color: widget.isDark ? Colors.black : Colors.white,
-              ),
-              overflow: TextOverflow.clip,
-              maxLines: 1,
-            ),
+    return AnimatedOpacity(
+      opacity: _opacity,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      child: AnimatedSlide(
+        offset: Offset(0, _slideY / 100), // Convert to relative offset
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: Text(
+            widget.text,
+            style: widget.textStyle,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+/// Base tile card without animation (for Magisk and DenyList tiles)
+class _TileCard extends StatelessWidget {
+  final Color color;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _TileCard({
+    required this.color,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        color: color,
+        child: child,
+      ),
     );
   }
 }

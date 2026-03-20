@@ -121,8 +121,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case '/magisk':
         page = const MagiskManagerPage();
         break;
-      case '/denylist':
-        page = const DenyListPage();
+      case '/settings':
+        page = const SettingsPage();
         break;
       case '/modules':
         page = const ModulesPage();
@@ -166,7 +166,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       children: [
         Expanded(flex: 6, child: _buildMagiskCard(context, ref, isDark)),
         const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildDenyListCard(context, ref, isDark)),
+        Expanded(flex: 3, child: _buildSettingsCard(context, ref, isDark)),
         const SizedBox(height: 4),
         Expanded(flex: 3, child: _buildContributorCard(context, ref, isDark)),
       ],
@@ -266,9 +266,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildDenyListCard(BuildContext context, WidgetRef ref, bool isDark) {
+  Widget _buildSettingsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
-    final isEnabled = ref.watch(denyListEnabledProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final localizations = AppLocalizations.of(context)!;
     final tileColor = tileColorIndex == 0
@@ -284,7 +283,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Opacity(
       opacity: isClickable ? 1.0 : 0.5,
       child: GestureDetector(
-        onTap: isClickable ? () => _navigateTo(context, '/denylist') : null,
+        onTap: isClickable ? () => _navigateTo(context, '/settings') : null,
         child: Container(
           color: isDark ? tileColor : tileColorLight,
           child: Padding(
@@ -293,8 +292,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               alignment: Alignment.topRight,
               child: Text(
                 isClickable 
-                    ? (isEnabled ? localizations.denyList : '${localizations.denyList} [OFF]')
-                    : '${localizations.denyList} [N/A]',
+                    ? localizations.settings
+                    : '${localizations.settings} [N/A]',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w900,
                   fontSize: 20,

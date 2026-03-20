@@ -8,9 +8,10 @@ crate-type = ["staticlib"]
 path = "lib.rs"
 
 [features]
-default = ["check-signature", "check-client", "su-check-db"]
+default = ["check-client", "su-check-db"]
 
 # Disable these features for easier debugging during development
+# check-signature disabled for MagiskUbe custom build - prevents signature mismatch issues
 check-signature = []
 check-client = []
 su-check-db = []

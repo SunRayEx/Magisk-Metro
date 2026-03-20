@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class AndroidDataService {
@@ -37,14 +38,27 @@ class AndroidDataService {
 
   static Future<List<Map<String, dynamic>>> getApps() async {
     try {
+      debugPrint('AndroidDataService: getApps() called');
       final result = await _channel.invokeMethod<List<dynamic>>('getApps');
+      debugPrint('AndroidDataService: getApps() result: ${result?.length ?? 0} apps');
+      
       if (result != null) {
-        return result
+        final apps = result
             .map((item) => Map<String, dynamic>.from(item as Map))
             .toList();
+        
+        // Debug: Log apps with root access
+        final rootApps = apps.where((app) => app['hasRootAccess'] == true);
+        debugPrint('AndroidDataService: Apps with root access: ${rootApps.length}');
+        for (final app in rootApps) {
+          debugPrint('AndroidDataService: Root app: ${app['packageName']}');
+        }
+        
+        return apps;
       }
       return [];
     } catch (e) {
+      debugPrint('AndroidDataService: getApps() error: $e');
       return [];
     }
   }
@@ -87,22 +101,26 @@ class AndroidDataService {
 
   static Future<bool> setZygiskEnabled(bool enabled) async {
     try {
-      final result = await _channel.invokeMethod<bool>('setZygiskEnabled', {
+      // Use root access channel with app_functions.sh
+      final result = await _rootAccessChannel.invokeMethod<bool>('setZygiskEnabled', {
         'enabled': enabled,
       });
       return result ?? false;
     } catch (e) {
+      debugPrint('setZygiskEnabled error: $e');
       return false;
     }
   }
 
   static Future<bool> setDenyListEnabled(bool enabled) async {
     try {
-      final result = await _channel.invokeMethod<bool>('setDenyListEnabled', {
+      // Use root access channel with app_functions.sh
+      final result = await _rootAccessChannel.invokeMethod<bool>('setDenyListEnabled', {
         'enabled': enabled,
       });
       return result ?? false;
     } catch (e) {
+      debugPrint('setDenyListEnabled error: $e');
       return false;
     }
   }
@@ -110,6 +128,81 @@ class AndroidDataService {
   static Future<bool> isDenyListEnabled() async {
     try {
       final result = await _channel.invokeMethod<bool>('isDenyListEnabled');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================== SuList (Whitelist Mode) ====================
+
+  static Future<bool> isSuListEnabled() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isSuListEnabled');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> setSuListEnabled(bool enabled) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('setSuListEnabled', {
+        'enabled': enabled,
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('setSuListEnabled error: $e');
+      return false;
+    }
+  }
+
+  /// Get list of apps in SuList whitelist
+  static Future<Set<String>> getSuListApps() async {
+    try {
+      final result = await _channel.invokeMethod<List<dynamic>>('getSuListApps');
+      if (result != null) {
+        return result.cast<String>().toSet();
+      }
+      return {};
+    } catch (e) {
+      debugPrint('getSuListApps error: $e');
+      return {};
+    }
+  }
+
+  /// Add an app to SuList whitelist
+  static Future<bool> addToSuList(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('addToSuList', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('addToSuList error: $e');
+      return false;
+    }
+  }
+
+  /// Remove an app from SuList whitelist
+  static Future<bool> removeFromSuList(String packageName) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('removeFromSuList', {
+        'packageName': packageName,
+      });
+      return result ?? false;
+    } catch (e) {
+      debugPrint('removeFromSuList error: $e');
+      return false;
+    }
+  }
+
+  /// Check if an app is in SuList whitelist
+  static Future<bool> isInSuList(String packageName) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isInSuList', {
+        'packageName': packageName,
+      });
       return result ?? false;
     } catch (e) {
       return false;
@@ -476,6 +569,128 @@ class AndroidDataService {
       return result ?? false;
     } catch (e) {
       return false;
+    }
+  }
+  
+  // ==================== Module Management ====================
+  
+  /// Toggle a module's enabled state
+  /// @param modulePath The path to the module directory
+  /// @param enabled Whether to enable or disable the module
+  /// @return true if successful, false otherwise
+  static Future<bool> toggleModule(String modulePath, bool enabled) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<bool>('toggleModule', {
+        'modulePath': modulePath,
+        'enabled': enabled,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Remove/uninstall a module
+  /// @param modulePath The path to the module directory
+  /// @return true if successful, false otherwise
+  static Future<bool> removeModule(String modulePath) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<bool>('removeModule', {
+        'modulePath': modulePath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Execute a module's action script (action.sh)
+  /// @param modulePath The path to the module directory or a command to execute
+  /// @return the output of the action script, or null if failed
+  static Future<String?> executeModuleAction(String modulePath) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<String>('executeModuleAction', {
+        'modulePath': modulePath,
+      });
+      return result;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /// Read a file as root - optimized for reading module files
+  /// @param filePath The path to the file to read
+  /// @return the file content, or null if failed
+  static Future<String?> readFileAsRoot(String filePath) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<String>('readFileAsRoot', {
+        'filePath': filePath,
+      });
+      return result;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /// Check if a file exists as root
+  /// @param filePath The path to check
+  /// @return true if file exists, false otherwise
+  static Future<bool> fileExistsAsRoot(String filePath) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('fileExistsAsRoot', {
+        'filePath': filePath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Check if a module has a web interface
+  /// @param modulePath The path to the module directory
+  /// @return Map with hasWebUI, webUIUrl, webUIPort
+  static Future<Map<String, dynamic>> checkModuleWebUI(String modulePath) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<Map<dynamic, dynamic>>('checkModuleWebUI', {
+        'modulePath': modulePath,
+      });
+      if (result != null) {
+        return Map<String, dynamic>.from(result);
+      }
+      return {'hasWebUI': false};
+    } catch (e) {
+      return {'hasWebUI': false};
+    }
+  }
+  
+  /// Open a module's web interface in browser
+  /// @param url The web UI URL
+  /// @return true if successful, false otherwise
+  static Future<bool> openModuleWebUI(String url) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<bool>('openModuleWebUI', {
+        'url': url,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Get detailed module info including WebUI and action script status
+  /// @param modulePath The path to the module directory
+  /// @return Map with module details
+  static Future<Map<String, dynamic>> getModuleDetails(String modulePath) async {
+    try {
+      final result = await _magiskChannel.invokeMethod<Map<dynamic, dynamic>>('getModuleDetails', {
+        'modulePath': modulePath,
+      });
+      if (result != null) {
+        return Map<String, dynamic>.from(result);
+      }
+      return {};
+    } catch (e) {
+      return {};
     }
   }
 }

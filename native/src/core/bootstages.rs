@@ -48,6 +48,7 @@ impl MagiskD {
         ];
         for dir in alt_bin_dirs {
             if dir.exists() {
+                info!("* Found alternative binaries at {}", dir);
                 cstr!(DATABIN).remove_all().ok();
                 dir.copy_to(cstr!(DATABIN)).ok();
                 dir.remove_all().ok();
@@ -58,6 +59,8 @@ impl MagiskD {
         // Directories in /data/adb
         cstr!(SECURE_DIR).follow_link().chmod(0o700).log_ok();
         cstr!(DATABIN).mkdir(0o755).log_ok();
+
+        // Create module directories
         cstr!(MODULEROOT).mkdir(0o755).log_ok();
         cstr!(concatcp!(SECURE_DIR, "/post-fs-data.d"))
             .mkdir(0o755)
@@ -67,22 +70,69 @@ impl MagiskD {
             .log_ok();
         restorecon();
 
-        let busybox = cstr!(concatcp!(DATABIN, "/busybox"));
-        if !busybox.exists() {
+        // Check if magisk binary exists
+        let magisk_bin = cstr!(concatcp!(DATABIN, "/magisk"));
+        if !magisk_bin.exists() {
+            // Try to copy from magisk_tmp (extracted by magiskinit)
+            let magisk_tmp = get_magisk_tmp();
+            if !magisk_tmp.is_empty() {
+                info!("* Copying Magisk binaries from {} to {}", magisk_tmp, DATABIN);
+                
+                // Copy magisk binary
+                let mut tmp_magisk_buf = cstr::buf::default();
+                let tmp_magisk = tmp_magisk_buf.append_path(magisk_tmp).append_path("magisk");
+                if tmp_magisk.exists() {
+                    tmp_magisk.copy_to(magisk_bin).log_ok();
+                    info!("* Copied magisk binary");
+                }
+                
+                // Copy busybox if available
+                let mut tmp_busybox_buf = cstr::buf::default();
+                let tmp_busybox = tmp_busybox_buf.append_path(magisk_tmp).append_path("busybox");
+                let databin_busybox = cstr!(concatcp!(DATABIN, "/busybox"));
+                if tmp_busybox.exists() {
+                    tmp_busybox.copy_to(databin_busybox).log_ok();
+                    info!("* Copied busybox binary");
+                }
+                
+                // Copy magisk32 if available (32-bit support)
+                let mut tmp_magisk32_buf = cstr::buf::default();
+                let tmp_magisk32 = tmp_magisk32_buf.append_path(magisk_tmp).append_path("magisk32");
+                let databin_magisk32 = cstr!(concatcp!(DATABIN, "/magisk32"));
+                if tmp_magisk32.exists() {
+                    tmp_magisk32.copy_to(databin_magisk32).log_ok();
+                    info!("* Copied magisk32 binary");
+                }
+            }
+        }
+        
+        // Re-check after attempting to copy from magisk_tmp
+        if !magisk_bin.exists() {
+            error!("* Magisk binary not found in {}", DATABIN);
             return false;
         }
 
-        let tmp_bb = buf.append_path(get_magisk_tmp()).append_path(BBPATH);
-        tmp_bb.mkdirs(0o755).ok();
-        tmp_bb.append_path("busybox");
+        // Setup busybox in magisk tmp
+        let magisk_tmp = get_magisk_tmp();
+        if magisk_tmp.is_empty() {
+            return true;
+        }
+
+        let mut tmp_bb_path_buf = cstr::buf::default();
+        let tmp_bb_path = tmp_bb_path_buf.append_path(magisk_tmp).append_path(BBPATH);
+        tmp_bb_path.mkdirs(0o755).ok();
+
+        let busybox = cstr!(concatcp!(DATABIN, "/busybox"));
+        let mut tmp_bb_buf = cstr::buf::default();
+        let tmp_bb = tmp_bb_buf.append_path(magisk_tmp).append_path(BBPATH).append_path("busybox");
         busybox.copy_to(tmp_bb).ok();
-        tmp_bb.follow_link().chmod(0o755).log_ok();
+        tmp_bb_path.follow_link().chmod(0o755).log_ok();
 
         // Install busybox applets
         Command::new(&tmp_bb)
             .arg("--install")
             .arg("-s")
-            .arg(tmp_bb.parent_dir().unwrap_or_default())
+            .arg(tmp_bb_path.parent_dir().unwrap_or_default())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -92,14 +142,14 @@ impl MagiskD {
         // from data to magisk tmp
         let magisk32 = cstr!(concatcp!(DATABIN, "/magisk32"));
         if magisk32.exists() {
-            let tmp = buf.append_path(get_magisk_tmp()).append_path("magisk32");
+            let mut tmp_buf = cstr::buf::default();
+            let tmp = tmp_buf.append_path(magisk_tmp).append_path("magisk32");
             magisk32.copy_to(tmp).log_ok();
         }
         let magiskpolicy = cstr!(concatcp!(DATABIN, "/magiskpolicy"));
         if magiskpolicy.exists() {
-            let tmp = buf
-                .append_path(get_magisk_tmp())
-                .append_path("magiskpolicy");
+            let mut tmp_buf = cstr::buf::default();
+            let tmp = tmp_buf.append_path(magisk_tmp).append_path("magiskpolicy");
             magiskpolicy.copy_to(tmp).log_ok();
         }
 

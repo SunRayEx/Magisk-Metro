@@ -1,3 +1,4 @@
+
 #include <sys/mount.h>
 #include <libgen.h>
 
@@ -231,31 +232,206 @@ static void recreate_sbin(const char *mirror, bool use_bind_mount) {
     }
 }
 
-static void extract_files(bool sbin) {
-    const char *magisk_xz = sbin ? "/sbin/magisk.xz" : "magisk.xz";
-    const char *stub_xz = sbin ? "/sbin/stub.xz" : "stub.xz";
-    const char *init_ld_xz = sbin ? "/sbin/init-ld.xz" : "init-ld.xz";
+// Helper function to extract a compressed file from multiple possible paths
+static bool extract_xz_file(const char *name, const char **xz_paths, bool sbin, mode_t mode, bool optional = false) {
+    for (int i = 0; xz_paths[i] != nullptr; ++i) {
+        const char *xz_path = xz_paths[i];
+        if (access(xz_path, F_OK) == 0) {
+            LOGD("extract_files: extracting %s from %s\n", name, xz_path);
+            mmap_data data(xz_path);
+            unlink(xz_path);
+            int fd = xopen(name, O_WRONLY | O_CREAT, mode);
+            if (unxz(fd, data)) {
+                LOGD("extract_files: successfully extracted %s\n", name);
+                close(fd);
+                return true;
+            } else {
+                LOGE("extract_files: failed to extract %s\n", name);
+                close(fd);
+                return false;
+            }
+        }
+    }
+    if (!optional) {
+        LOGD("extract_files: %s.xz not found in any path\n", name);
+    }
+    return false;
+}
 
-    if (access(magisk_xz, F_OK) == 0) {
-        mmap_data magisk(magisk_xz);
-        unlink(magisk_xz);
-        int fd = xopen("magisk", O_WRONLY | O_CREAT, 0755);
-        unxz(fd, magisk);
-        close(fd);
+// Helper function to copy a file from overlay.d/sbin to current directory
+static bool copy_overlay_file(const char *name) {
+    char src_path[256];
+    ssprintf(src_path, sizeof(src_path), "overlay.d/sbin/%s", name);
+    if (access(src_path, F_OK) == 0) {
+        char dest_path[256];
+        ssprintf(dest_path, sizeof(dest_path), "%s", name);
+        LOGD("extract_files: copying %s from overlay.d/sbin\n", name);
+        
+        // Read source file
+        int src_fd = xopen(src_path, O_RDONLY | O_CLOEXEC, 0);
+        if (src_fd < 0) {
+            LOGE("extract_files: failed to open %s\n", src_path);
+            return false;
+        }
+        
+        // Get file size
+        struct stat st;
+        fstat(src_fd, &st);
+        
+        // Write to destination
+        int dest_fd = xopen(dest_path, O_WRONLY | O_CREAT | O_TRUNC, st.st_mode & 0777);
+        if (dest_fd < 0) {
+            LOGE("extract_files: failed to create %s\n", dest_path);
+            close(src_fd);
+            return false;
+        }
+        
+        // Copy data
+        char buf[8192];
+        ssize_t n;
+        while ((n = read(src_fd, buf, sizeof(buf))) > 0) {
+            write(dest_fd, buf, n);
+        }
+        
+        close(src_fd);
+        close(dest_fd);
+        unlink(src_path);
+        LOGD("extract_files: copied %s\n", name);
+        return true;
     }
-    if (access(stub_xz, F_OK) == 0) {
-        mmap_data stub(stub_xz);
-        unlink(stub_xz);
-        int fd = xopen("stub.apk", O_WRONLY | O_CREAT, 0);
-        unxz(fd, stub);
-        close(fd);
+    return false;
+}
+
+static void extract_files(bool sbin) {
+    LOGD("extract_files: sbin=%d\n", sbin);
+    
+    // Define paths for compressed binaries
+    const char *magisk_xz_paths[] = {
+        sbin ? "/sbin/magisk.xz" : "magisk.xz",
+        "sbin/magisk.xz",
+        "overlay.d/sbin/magisk.xz",
+        "/.backup/magisk.xz",
+        nullptr
+    };
+    
+    const char *init_ld_xz_paths[] = {
+        sbin ? "/sbin/init-ld.xz" : "init-ld.xz",
+        "sbin/init-ld.xz",
+        "overlay.d/sbin/init-ld.xz",
+        nullptr
+    };
+    
+    const char *busybox_xz_paths[] = {
+        sbin ? "/sbin/busybox.xz" : "busybox.xz",
+        "sbin/busybox.xz",
+        "overlay.d/sbin/busybox.xz",
+        nullptr
+    };
+    
+    const char *magiskboot_xz_paths[] = {
+        sbin ? "/sbin/magiskboot.xz" : "magiskboot.xz",
+        "sbin/magiskboot.xz",
+        "overlay.d/sbin/magiskboot.xz",
+        nullptr
+    };
+    
+    const char *magiskinit_xz_paths[] = {
+        sbin ? "/sbin/magiskinit.xz" : "magiskinit.xz",
+        "sbin/magiskinit.xz",
+        "overlay.d/sbin/magiskinit.xz",
+        nullptr
+    };
+    
+    const char *magiskpolicy_xz_paths[] = {
+        sbin ? "/sbin/magiskpolicy.xz" : "magiskpolicy.xz",
+        "sbin/magiskpolicy.xz",
+        "overlay.d/sbin/magiskpolicy.xz",
+        nullptr
+    };
+    
+    const char *stub_xz_paths[] = {
+        sbin ? "/sbin/stub.xz" : "stub.xz",
+        "sbin/stub.xz",
+        "overlay.d/sbin/stub.xz",
+        nullptr
+    };
+
+    // Extract all compressed binaries
+    extract_xz_file("magisk", magisk_xz_paths, sbin, 0755);
+    extract_xz_file("init-ld", init_ld_xz_paths, sbin, 0, true); // optional
+    extract_xz_file("busybox", busybox_xz_paths, sbin, 0755, true); // optional
+    extract_xz_file("magiskboot", magiskboot_xz_paths, sbin, 0755, true); // optional
+    extract_xz_file("magiskinit", magiskinit_xz_paths, sbin, 0755, true); // optional
+    extract_xz_file("magiskpolicy", magiskpolicy_xz_paths, sbin, 0755, true); // optional
+    extract_xz_file("stub.apk", stub_xz_paths, sbin, 0644, true); // optional
+
+    // Copy non-compressed files from overlay.d/sbin (scripts, etc.)
+    copy_overlay_file("boot_patch.sh");
+    copy_overlay_file("util_functions.sh");
+    
+    // Copy chromeos directory if present
+    if (access("overlay.d/sbin/chromeos", F_OK) == 0) {
+        LOGD("extract_files: copying chromeos directory\n");
+        mkdir("chromeos", 0755);
+        
+        // Copy futility
+        char src[256], dest[256];
+        ssprintf(src, sizeof(src), "overlay.d/sbin/chromeos/futility");
+        ssprintf(dest, sizeof(dest), "chromeos/futility");
+        if (access(src, F_OK) == 0) {
+            int sfd = xopen(src, O_RDONLY, 0);
+            int dfd = xopen(dest, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+            char buf[8192];
+            ssize_t n;
+            while ((n = read(sfd, buf, sizeof(buf))) > 0) {
+                write(dfd, buf, n);
+            }
+            close(sfd);
+            close(dfd);
+            unlink(src);
+        }
+        
+        // Copy kernel.keyblock
+        ssprintf(src, sizeof(src), "overlay.d/sbin/chromeos/kernel.keyblock");
+        ssprintf(dest, sizeof(dest), "chromeos/kernel.keyblock");
+        if (access(src, F_OK) == 0) {
+            int sfd = xopen(src, O_RDONLY, 0);
+            int dfd = xopen(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            char buf[8192];
+            ssize_t n;
+            while ((n = read(sfd, buf, sizeof(buf))) > 0) {
+                write(dfd, buf, n);
+            }
+            close(sfd);
+            close(dfd);
+            unlink(src);
+        }
+        
+        // Copy kernel_data_key.vbprivk
+        ssprintf(src, sizeof(src), "overlay.d/sbin/chromeos/kernel_data_key.vbprivk");
+        ssprintf(dest, sizeof(dest), "chromeos/kernel_data_key.vbprivk");
+        if (access(src, F_OK) == 0) {
+            int sfd = xopen(src, O_RDONLY, 0);
+            int dfd = xopen(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            char buf[8192];
+            ssize_t n;
+            while ((n = read(sfd, buf, sizeof(buf))) > 0) {
+                write(dfd, buf, n);
+            }
+            close(sfd);
+            close(dfd);
+            unlink(src);
+        }
+        
+        // Remove the source directory
+        rmdir("overlay.d/sbin/chromeos");
     }
-    if (access(init_ld_xz, F_OK) == 0) {
-        mmap_data init_ld(init_ld_xz);
-        unlink(init_ld_xz);
-        int fd = xopen("init-ld", O_WRONLY | O_CREAT, 0);
-        unxz(fd, init_ld);
-        close(fd);
+
+    // Verify extracted files
+    if (access("magisk", F_OK) == 0) {
+        LOGD("extract_files: magisk binary present\n");
+    } else {
+        LOGE("extract_files: magisk binary NOT present!\n");
     }
 }
 

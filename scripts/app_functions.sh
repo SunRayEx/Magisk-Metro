@@ -251,27 +251,136 @@ export BOOTMODE=true
 
 ##########################
 # Root Access Management
+# Note: Magisk policies table uses UID, not package name
 ##########################
+
+# Get UID from package name
+# $1 = package name
+# Returns: UID or empty string if not found
+get_uid_from_package() {
+  local pkg="$1"
+  [ -z "$pkg" ] && return 1
+  
+  # Use dumpsys package to get userId (which is the UID for user 0)
+  local uid
+  uid=$(dumpsys package "$pkg" 2>/dev/null | grep "userId=" | head -1 | sed 's/.*userId=//')
+  
+  if [ -n "$uid" ]; then
+    echo "$uid"
+    return 0
+  fi
+  
+  # Fallback: use pm list packages -U
+  uid=$(pm list packages -U 2>/dev/null | grep "package:$pkg " | sed 's/.*uid://')
+  if [ -n "$uid" ]; then
+    echo "$uid"
+    return 0
+  fi
+  
+  return 1
+}
+
+# Get package name from UID
+# $1 = UID
+# Returns: package name or empty string if not found
+get_package_from_uid() {
+  local uid="$1"
+  [ -z "$uid" ] && return 1
+  
+  # Use pm list packages -U to find package by UID
+  local pkg
+  pkg=$(pm list packages -U 2>/dev/null | grep "uid:$uid " | sed 's/package://' | sed 's/ uid:.*//')
+  
+  if [ -n "$pkg" ]; then
+    echo "$pkg"
+    return 0
+  fi
+  
+  # Fallback: use dumpsys package for all packages
+  for p in $(pm list packages 2>/dev/null | sed 's/package://'); do
+    local puid
+    puid=$(dumpsys package "$p" 2>/dev/null | grep "userId=" | head -1 | sed 's/.*userId=//')
+    if [ "$puid" = "$uid" ]; then
+      echo "$p"
+      return 0
+    fi
+  done
+  
+  return 1
+}
 
 # Get list of apps with root access granted
 # Returns: package_name per line
 get_root_access_apps() {
   local db_file="/data/adb/magisk.db"
+  local found=0
   
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
-    local result
-    result=$(magisk --sqlite "SELECT package FROM policies WHERE policy > 0" 2>/dev/null)
-    if [ -n "$result" ]; then
-      echo "$result"
-      return 0
+    # Get UIDs with root access from policies table
+    local output
+    
+    # Method 1: Use magisk --sqlite (output format: uid=12345)
+    output=$(magisk --sqlite 'SELECT uid FROM policies WHERE policy > 0' 2>/dev/null)
+    
+    if [ -n "$output" ]; then
+      for line in $output; do
+        # Parse format: uid=12345
+        local uid
+        case "$line" in
+          uid=*)
+            uid="${line#uid=}"
+            ;;
+          *=*)
+            # Handle other key=value formats
+            continue
+            ;;
+          *)
+            # Plain number
+            uid="$line"
+            ;;
+        esac
+        
+        # Skip empty or invalid UIDs
+        [ -z "$uid" ] && continue
+        
+        # Check if it's a valid number and >= 10000
+        case "$uid" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        [ "$uid" -lt 10000 ] && continue  # Skip system UIDs
+        
+        local pkg
+        pkg=$(get_package_from_uid "$uid")
+        if [ -n "$pkg" ]; then
+          echo "$pkg"
+          found=1
+        fi
+      done
     fi
     
-    # Method 2: Use sqlite3 directly
-    if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$db_file" "SELECT package FROM policies WHERE policy > 0" 2>/dev/null
-      return 0
+    # Method 2: Fallback to sqlite3 directly
+    if [ "$found" = "0" ] && command -v sqlite3 >/dev/null 2>&1; then
+      output=$(sqlite3 "$db_file" 'SELECT uid FROM policies WHERE policy > 0' 2>/dev/null)
+      
+      if [ -n "$output" ]; then
+        for uid in $output; do
+          [ -z "$uid" ] && continue
+          case "$uid" in
+            ''|*[!0-9]*) continue ;;
+          esac
+          [ "$uid" -lt 10000 ] && continue
+          
+          local pkg
+          pkg=$(get_package_from_uid "$uid")
+          if [ -n "$pkg" ]; then
+            echo "$pkg"
+            found=1
+          fi
+        done
+      fi
     fi
+    
+    [ "$found" = "1" ] && return 0
   fi
   
   return 1
@@ -286,19 +395,19 @@ grant_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
-  # Method 1: Use magisk --su command
-  if magisk --su add "$pkg" 2>/dev/null; then
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
+  # Method 1: Use magisk --sqlite command with UID
+  if magisk --sqlite "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)" 2>/dev/null; then
     return 0
   fi
   
-  # Method 2: Use magisk --sqlite command
-  if magisk --sqlite "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null; then
-    return 0
-  fi
-  
-  # Method 3: Direct database manipulation
+  # Method 2: Direct database manipulation with UID
   if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$db_file" "INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('$pkg', 2, 0)" 2>/dev/null
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)" 2>/dev/null
     return $?
   fi
   
@@ -314,19 +423,19 @@ revoke_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
-  # Method 1: Use magisk --su command
-  if magisk --su remove "$pkg" 2>/dev/null; then
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
+  # Method 1: Use magisk --sqlite command with UID
+  if magisk --sqlite "DELETE FROM policies WHERE uid = $uid" 2>/dev/null; then
     return 0
   fi
   
-  # Method 2: Use magisk --sqlite command
-  if magisk --sqlite "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null; then
-    return 0
-  fi
-  
-  # Method 3: Direct database manipulation
+  # Method 2: Direct database manipulation with UID
   if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$db_file" "DELETE FROM policies WHERE package_name = '$pkg'" 2>/dev/null
+    sqlite3 "$db_file" "DELETE FROM policies WHERE uid = $uid" 2>/dev/null
     return $?
   fi
   
@@ -342,17 +451,22 @@ has_root_access() {
   
   local db_file="/data/adb/magisk.db"
   
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && return 1
+  
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
+    # Method 1: Use magisk --sqlite command with UID
     local policy
-    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
     if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
       return 0
     fi
     
-    # Method 2: Use sqlite3 directly
+    # Method 2: Use sqlite3 directly with UID
     if command -v sqlite3 >/dev/null 2>&1; then
-      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
       if [ -n "$policy" ] && [ "$policy" -gt 0 ] 2>/dev/null; then
         return 0
       fi
@@ -371,18 +485,23 @@ get_root_policy() {
   
   local db_file="/data/adb/magisk.db"
   
+  # Get UID from package name
+  local uid
+  uid=$(get_uid_from_package "$pkg")
+  [ -z "$uid" ] && echo "0" && return
+  
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
+    # Method 1: Use magisk --sqlite command with UID
     local policy
-    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+    policy=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
     if [ -n "$policy" ]; then
       echo "$policy"
       return
     fi
     
-    # Method 2: Use sqlite3 directly
+    # Method 2: Use sqlite3 directly with UID
     if command -v sqlite3 >/dev/null 2>&1; then
-      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE package_name = '$pkg'" 2>/dev/null)
+      policy=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
       if [ -n "$policy" ]; then
         echo "$policy"
         return
@@ -394,22 +513,35 @@ get_root_policy() {
 }
 
 # Get all root access policies (for logging/debugging)
-# Returns: package_name:policy per line
+# Returns: package_name:uid:policy per line
 list_root_policies() {
   local db_file="/data/adb/magisk.db"
   
   if [ -f "$db_file" ]; then
-    # Method 1: Use magisk --sqlite command
-    local result
-    result=$(magisk --sqlite "SELECT package_name || ':' || policy FROM policies" 2>/dev/null)
-    if [ -n "$result" ]; then
-      echo "$result"
-      return 0
+    # Get all policies with UID
+    local policies
+    policies=$(magisk --sqlite "SELECT uid || ':' || policy FROM policies" 2>/dev/null)
+    
+    if [ -z "$policies" ]; then
+      policies=$(sqlite3 "$db_file" "SELECT uid || ':' || policy FROM policies" 2>/dev/null)
     fi
     
-    # Method 2: Use sqlite3 directly
-    if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$db_file" "SELECT package_name || ':' || policy FROM policies" 2>/dev/null
+    # Convert UIDs to package names
+    if [ -n "$policies" ]; then
+      for entry in $policies; do
+        local uid=$(echo "$entry" | cut -d':' -f1)
+        local policy=$(echo "$entry" | cut -d':' -f2)
+        
+        [ -z "$uid" ] && continue
+        
+        local pkg
+        pkg=$(get_package_from_uid "$uid")
+        if [ -n "$pkg" ]; then
+          echo "$pkg:$uid:$policy"
+        else
+          echo "unknown:$uid:$policy"
+        fi
+      done
       return 0
     fi
   fi
@@ -422,4 +554,187 @@ notify_policy_change() {
   # Restart magiskd to reload policies
   killall magiskd 2>/dev/null || true
   return 0
+}
+
+##########################
+# Zygisk Configuration Management
+##########################
+
+# Check if Zygisk is enabled
+# Returns: 0 if enabled, 1 if disabled
+is_zygisk_enabled() {
+  local db_file="/data/adb/magisk.db"
+  
+  # Method 1: Check settings table in magisk.db
+  if [ -f "$db_file" ]; then
+    local zygisk_value
+    zygisk_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk' LIMIT 1" 2>/dev/null)
+    if [ -n "$zygisk_value" ] && [ "$zygisk_value" = "1" ]; then
+      return 0
+    fi
+    
+    # Try alternative key names
+    zygisk_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk_enabled' LIMIT 1" 2>/dev/null)
+    if [ -n "$zygisk_value" ] && [ "$zygisk_value" = "1" ]; then
+      return 0
+    fi
+  fi
+  
+  # Method 2: Check /data/adb/zygisk file (older versions)
+  if [ -f "/data/adb/zygisk" ]; then
+    local zygisk_content
+    zygisk_content=$(cat /data/adb/zygisk 2>/dev/null)
+    if [ "$zygisk_content" = "1" ]; then
+      return 0
+    fi
+  fi
+  
+  # Method 3: Check if Zygisk modules directory exists and has content
+  if [ -d "/data/adb/zygisk/modules" ]; then
+    if [ -n "$(ls -A /data/adb/zygisk/modules 2>/dev/null)" ]; then
+      return 0
+    fi
+  fi
+  
+  return 1
+}
+
+# Enable or disable Zygisk
+# $1 = 1 to enable, 0 to disable
+# Returns: 0 on success, 1 on failure
+set_zygisk_enabled() {
+  local enable="$1"
+  [ "$enable" != "1" ] && [ "$enable" != "0" ] && return 1
+  
+  local db_file="/data/adb/magisk.db"
+  local success=0
+  
+  # Method 1: Update settings table in magisk.db
+  if [ -f "$db_file" ]; then
+    # Try both key names for compatibility
+    if magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk', '$enable')" 2>/dev/null; then
+      success=1
+    elif magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk_enabled', '$enable')" 2>/dev/null; then
+      success=1
+    fi
+    
+    if [ "$success" = "1" ]; then
+      # Verify the setting was applied
+      local verify_value
+      verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk' LIMIT 1" 2>/dev/null)
+      if [ -z "$verify_value" ]; then
+        verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk_enabled' LIMIT 1" 2>/dev/null)
+      fi
+      
+      if [ "$verify_value" = "$enable" ]; then
+        # Restart Magisk daemon to apply changes
+        killall magiskd 2>/dev/null || true
+        sleep 1
+        # Start new daemon
+        magisk --daemon 2>/dev/null || true
+        return 0
+      fi
+    fi
+  fi
+  
+  # Method 2: Update /data/adb/zygisk file (fallback for older versions)
+  if echo "$enable" > /data/adb/zygisk 2>/dev/null; then
+    chmod 644 /data/adb/zygisk 2>/dev/null
+    # Restart Magisk daemon
+    killall magiskd 2>/dev/null || true
+    sleep 1
+    magisk --daemon 2>/dev/null || true
+    return 0
+  fi
+  
+  return 1
+}
+
+##########################
+# DenyList Configuration Management
+##########################
+
+# Check if DenyList is enabled
+# Returns: 0 if enabled, 1 if disabled
+is_denylist_enabled() {
+  local db_file="/data/adb/magisk.db"
+  
+  # Method 1: Check settings table in magisk.db
+  if [ -f "$db_file" ]; then
+    local denylist_value
+    denylist_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'denylist' LIMIT 1" 2>/dev/null)
+    if [ -n "$denylist_value" ] && [ "$denylist_value" = "1" ]; then
+      return 0
+    fi
+  fi
+  
+  # Method 2: Check if denylist table has entries
+  if [ -f "$db_file" ]; then
+    local count
+    count=$(magisk --sqlite "SELECT COUNT(*) FROM denylist" 2>/dev/null)
+    if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+  
+  # Method 3: Check /data/adb/denylist file (older versions)
+  if [ -f "/data/adb/denylist" ]; then
+    return 0
+  fi
+  
+  return 1
+}
+
+# Enable or disable DenyList
+# $1 = 1 to enable, 0 to disable
+# Returns: 0 on success, 1 on failure
+set_denylist_enabled() {
+  local enable="$1"
+  [ "$enable" != "1" ] && [ "$enable" != "0" ] && return 1
+  
+  local db_file="/data/adb/magisk.db"
+  local success=0
+  
+  # Method 1: Update settings table in magisk.db
+  if [ -f "$db_file" ]; then
+    if magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$enable')" 2>/dev/null; then
+      success=1
+    fi
+    
+    if [ "$success" = "1" ]; then
+      # Verify the setting was applied
+      local verify_value
+      verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'denylist' LIMIT 1" 2>/dev/null)
+      
+      if [ "$verify_value" = "$enable" ]; then
+        # Restart Magisk daemon to apply changes
+        killall magiskd 2>/dev/null || true
+        sleep 1
+        magisk --daemon 2>/dev/null || true
+        return 0
+      fi
+    fi
+  fi
+  
+  # Method 2: Create/remove /data/adb/denylist file (fallback for older versions)
+  if [ "$enable" = "1" ]; then
+    if touch /data/adb/denylist 2>/dev/null; then
+      chmod 644 /data/adb/denylist 2>/dev/null
+      # Restart Magisk daemon
+      killall magiskd 2>/dev/null || true
+      sleep 1
+      magisk --daemon 2>/dev/null || true
+      return 0
+    fi
+  else
+    if rm -f /data/adb/denylist 2>/dev/null; then
+      # Restart Magisk daemon
+      killall magiskd 2>/dev/null || true
+      sleep 1
+      magisk --daemon 2>/dev/null || true
+      return 0
+    fi
+  fi
+  
+  return 1
 }

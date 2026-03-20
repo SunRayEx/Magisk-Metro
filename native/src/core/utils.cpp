@@ -33,12 +33,71 @@ void write_string(int fd, string_view str) {
 const char *get_magisk_tmp() {
     static const char *path = nullptr;
     if (path == nullptr) {
+        // Try standard locations first
         if (access("/debug_ramdisk/" INTLROOT, F_OK) == 0) {
             path = "/debug_ramdisk";
+            LOGD("get_magisk_tmp: found at %s\n", path);
         } else if (access("/sbin/" INTLROOT, F_OK) == 0) {
             path = "/sbin";
+            LOGD("get_magisk_tmp: found at %s\n", path);
         } else {
-            path = "";
+            // Try alternative locations
+            LOGD("get_magisk_tmp: standard locations not found, trying alternatives...\n");
+            
+            // Check if /sbin exists but .magisk is missing
+            if (access("/sbin", F_OK) == 0) {
+                LOGD("get_magisk_tmp: /sbin exists but /sbin/.magisk not found\n");
+            }
+            
+            // Check if /debug_ramdisk exists but .magisk is missing
+            if (access("/debug_ramdisk", F_OK) == 0) {
+                LOGD("get_magisk_tmp: /debug_ramdisk exists but /debug_ramdisk/.magisk not found\n");
+            }
+            
+            // Try to find any mounted magisk tmpfs
+            FILE *fp = fopen("/proc/mounts", "re");
+            if (fp) {
+                char line[4096];
+                static char found_path[PATH_MAX] = "";
+                while (fgets(line, sizeof(line), fp)) {
+                    // Look for tmpfs mounts that might be magisk
+                    if (strstr(line, "tmpfs") && strstr(line, INTLROOT)) {
+                        // Found a tmpfs with .magisk, try to extract the mount point
+                        char *start = strchr(line, ' ');
+                        if (start) {
+                            start++;
+                            char *end = strchr(start, ' ');
+                            if (end) {
+                                *end = '\0';
+                                // Check if this path has .magisk
+                                char check_path[PATH_MAX];
+                                ssprintf(check_path, sizeof(check_path), "%s/" INTLROOT, start);
+                                if (access(check_path, F_OK) == 0) {
+                                    // Found it! Save to static buffer
+                                    LOGD("get_magisk_tmp: found magisk tmpfs mounted at %s\n", start);
+                                    strscpy(found_path, start, sizeof(found_path));
+                                    fclose(fp);
+                                    path = found_path;
+                                    return path;
+                                }
+                            }
+                        }
+                    }
+                }
+                fclose(fp);
+            }
+            
+            // Last resort: check if we can find magisk binary somewhere
+            if (access("/sbin/magisk", F_OK) == 0) {
+                LOGD("get_magisk_tmp: magisk binary found at /sbin, using /sbin\n");
+                path = "/sbin";
+            } else if (access("/debug_ramdisk/magisk", F_OK) == 0) {
+                LOGD("get_magisk_tmp: magisk binary found at /debug_ramdisk, using /debug_ramdisk\n");
+                path = "/debug_ramdisk";
+            } else {
+                LOGE("get_magisk_tmp: no magisk tmp found!\n");
+                path = "";
+            }
         }
     }
     return path;

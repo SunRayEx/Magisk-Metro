@@ -127,6 +127,7 @@ static_assert(+ZygiskStateFlags::ProcessOnDenyList == zygisk::StateFlag::PROCESS
 
 enum : uint32_t {
     UNMOUNT_MASK = (+ZygiskStateFlags::ProcessOnDenyList | +ZygiskStateFlags::DenyListEnforced),
+    SULIST_UNMOUNT_MASK = +ZygiskStateFlags::SuListEnforced,
     PRIVATE_MASK = (+ZygiskStateFlags::DenyListEnforced | +ZygiskStateFlags::ProcessIsMagiskApp)
 };
 

@@ -179,7 +179,7 @@ fun Project.setupCoreLib() {
                 it.addGeneratedSourceDirectory(syncResources, SyncWithDir::outputFolder)
             }
 
-            val stubTask = tasks.getByPath(":stub:comment$variantCapped")
+            // Stub removed - Flutter app is standalone, no dynamic loading needed
             val syncAssets = tasks.register("sync${variantCapped}Assets", SyncWithDir::class) {
                 outputFolder.set(layout.buildDirectory.dir("$variantName/assets"))
                 into(outputFolder)
@@ -197,10 +197,7 @@ fun Project.setupCoreLib() {
                         include("kernel_data_key.vbprivk", "kernel.keyblock")
                     }
                 }
-                from(stubTask) {
-                    include { it.name.endsWith(".apk") }
-                    rename { "stub.apk" }
-                }
+                // Stub APK packaging removed - not needed for Flutter standalone app
                 filesMatching("**/util_functions.sh") {
                     filter {
                         it.replace(
@@ -281,8 +278,7 @@ fun Project.setupAppCommon() {
                 this.transformationRequest = transformationRequest
                 this.signingConfig = signingConfig
                 this.comment = "version=${Config.version}\n" +
-                        "versionCode=${Config.versionCode}\n" +
-                        "stubVersion=${Config.stubVersion}\n"
+                        "versionCode=${Config.versionCode}\n"
                 this.outFolder.set(layout.buildDirectory.dir("outputs/apk/${variant.name}"))
             }
 

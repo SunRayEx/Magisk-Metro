@@ -108,7 +108,7 @@ object Config : PreferenceConfig, DBConfig {
     var darkTheme by preference(Key.DARK_THEME, -1)
     var themeOrdinal by preference(Key.THEME_ORDINAL, 0)
 
-    private var checkUpdatePrefs by preference(Key.CHECK_UPDATES, true)
+    private var checkUpdatePrefs by preference(Key.CHECK_UPDATES, false)  // 禁用自动检查更新，防止"夺舍"
     private var localePrefs by preference(Key.LOCALE, "")
     var doh by preference(Key.DOH, false)
     var updateChannel by preference(Key.RELEASE_CHANNEL, Value.DEFAULT_CHANNEL)

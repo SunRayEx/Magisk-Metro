@@ -33,7 +33,15 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
   @override
   void initState() {
     super.initState();
-    _startExecution();
+    // 延迟执行以允许翻转动画完成
+    // FlipPageRoute 动画时长为 400ms，额外等待 200ms 确保动画完全结束
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) {
+          _startExecution();
+        }
+      });
+    });
   }
 
   @override

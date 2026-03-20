@@ -1,12 +1,12 @@
-use crate::consts::MODULEROOT;
+use crate::consts::{APP_PACKAGE_NAME, MODULEROOT};
 use crate::daemon::{MagiskD, to_user_id};
 use crate::ffi::{ZygiskRequest, ZygiskStateFlags, get_magisk_tmp, update_deny_flags};
 use crate::resetprop::{get_prop, set_prop};
 use crate::socket::{IpcRead, UnixSocketExt};
 use base::libc::STDOUT_FILENO;
 use base::{
-    Directory, FsPathBuilder, LoggedResult, ResultExt, Utf8CStr, WriteExt, cstr, fork_dont_care,
-    libc, log_err, raw_cstr, warn,
+    Directory, FsPathBuilder, LoggedResult, ResultExt, Utf8CStr, Utf8CStrBuf, WriteExt, cstr, debug,
+    fork_dont_care, libc, log_err, raw_cstr, warn,
 };
 use nix::fcntl::OFlag;
 use std::fmt::Write;
@@ -16,12 +16,48 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 
 const NBPROP: &Utf8CStr = cstr!("ro.dalvik.vm.native.bridge");
-const ZYGISKLDR: &str = "libzygisk.so";
+// Use a more generic loader name that doesn't reveal Zygisk
+// libNbNqC.so is designed to look like a normal native bridge library
+const ZYGISKLDR: &str = "libNBNqc.so";
 const UNMOUNT_MASK: u32 =
     ZygiskStateFlags::ProcessOnDenyList.repr | ZygiskStateFlags::DenyListEnforced.repr;
 
+// Properties that may reveal Magisk traces - used for anti-detection
+const MAGISK_REVEALING_PROPS: [&str; 12] = [
+    "ro.dalvik.vm.native.bridge",
+    "ro.maple.enable",
+    "persist.magisk",
+    "ro.magisk",
+    "persist.sys.magisk",
+    "ro.sys.magisk",
+    "magisk.version",
+    "ro.magisk.version",
+    "ro.zygisk.enabled",
+    "persist.zygisk",
+    "ro.libzygisk",
+    "persist.native.bridge.modified",
+];
+
 pub fn zygisk_should_load_module(flags: u32) -> bool {
-    flags & UNMOUNT_MASK != UNMOUNT_MASK && flags & ZygiskStateFlags::ProcessIsMagiskApp.repr == 0
+    // Magisk Manager should always be able to load modules
+    if flags & ZygiskStateFlags::ProcessIsMagiskApp.repr != 0 {
+        return true;
+    }
+    
+    // SuList mode: hide from apps NOT in the whitelist
+    // ProcessOnDenyList is set for apps NOT in the whitelist
+    // So we should NOT load modules for those apps
+    if flags & ZygiskStateFlags::SuListEnforced.repr != 0 {
+        // In SuList mode, ProcessOnDenyList means "NOT in whitelist"
+        // We should NOT load modules for apps not in whitelist
+        if flags & ZygiskStateFlags::ProcessOnDenyList.repr != 0 {
+            return false;
+        }
+        return true;
+    }
+    
+    // DenyList mode: load modules only if not being hidden
+    flags & UNMOUNT_MASK != UNMOUNT_MASK
 }
 
 #[allow(unused_variables)]
@@ -131,18 +167,29 @@ impl ZygiskState {
             return;
         }
         let orig = get_prop(NBPROP);
+        
+        // Store original value for restoration
+        // Use a less suspicious loader name that doesn't contain "zygisk" or "magisk"
         self.lib_name = if orig.is_empty() || orig == "0" {
             ZYGISKLDR.to_string()
         } else {
+            // Prepend our loader to the existing native bridge
+            // Format: libNbNqC.so + original_bridge_name
             ZYGISKLDR.to_string() + &orig
         };
+        
+        // Set the native bridge property with our obfuscated loader name
+        // The property value no longer contains obvious "zygisk" or "magisk" keywords
         set_prop(NBPROP, Utf8CStr::from_string(&mut self.lib_name));
+        
         // Whether Huawei's Maple compiler is enabled.
         // If so, system server will be created by a special Zygote which ignores the native bridge
         // and make system server out of our control. Avoid it by disabling.
         if get_prop(cstr!("ro.maple.enable")) == "1" {
             set_prop(cstr!("ro.maple.enable"), cstr!("0"));
         }
+        
+        debug!("zygisk: native bridge set (anti-detection mode)");
     }
 
     pub fn restore_prop(&mut self) {
@@ -150,8 +197,30 @@ impl ZygiskState {
         if self.lib_name.len() > ZYGISKLDR.len() {
             orig = self.lib_name[ZYGISKLDR.len()..].to_string();
         }
+        // Restore original native bridge property
         set_prop(NBPROP, Utf8CStr::from_string(&mut orig));
         self.lib_name.clear();
+        
+        debug!("zygisk: native bridge restored to: {}", orig);
+    }
+    
+    /// Check if any Magisk-revealing properties exist
+    /// This is used for anti-detection awareness
+    pub fn check_prop_traces(&self) -> bool {
+        for prop in MAGISK_REVEALING_PROPS {
+            let mut buf = cstr::buf::new::<128>();
+            buf.push_str(prop);
+            let value = get_prop(buf.as_utf8_cstr());
+            if !value.is_empty() {
+                debug!("zygisk: Found potential trace prop: {}={}", prop, value);
+                // Check if value contains magisk-related keywords
+                let value_lower = value.to_lowercase();
+                if value_lower.contains("magisk") || value_lower.contains("zygisk") {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
@@ -194,8 +263,27 @@ impl MagiskD {
         let is_64_bit: bool = client.read_decodable()?;
         let mut flags: u32 = 0;
         update_deny_flags(uid, &process, &mut flags);
-        if self.get_manager_uid(to_user_id(uid)) == uid {
-            flags |= ZygiskStateFlags::ProcessIsMagiskApp.repr
+        
+        // CRITICAL: Protect Magisk Manager (MagisKube) from being hidden by itself
+        // Check if this UID belongs to the manager app
+        let manager_uid = self.get_manager_uid(to_user_id(uid));
+        debug!("zygisk: get_process_info uid={}, process={}, manager_uid={}", uid, process, manager_uid);
+        
+        if manager_uid == uid {
+            // This is the Magisk Manager app
+            flags |= ZygiskStateFlags::ProcessIsMagiskApp.repr;
+            // Ensure Manager is never hidden - clear ProcessOnDenyList flag
+            // This prevents the Manager from being subjected to its own hide mechanisms
+            flags &= !ZygiskStateFlags::ProcessOnDenyList.repr;
+            debug!("zygisk: Manager app recognized, flags={}", flags);
+        } else if manager_uid < 0 {
+            // Manager UID not found - try direct package name check as fallback
+            // This handles the case where get_manager_uid fails but we still need to protect the manager
+            if process.starts_with(APP_PACKAGE_NAME) {
+                debug!("zygisk: Manager detected by package name pattern: {}", process);
+                flags |= ZygiskStateFlags::ProcessIsMagiskApp.repr;
+                flags &= !ZygiskStateFlags::ProcessOnDenyList.repr;
+            }
         }
         if self.uid_granted_root(uid) {
             flags |= ZygiskStateFlags::ProcessGrantedRoot.repr

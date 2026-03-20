@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -97,9 +98,13 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "magisk_manager/data"
     private val MAGISK_CHANNEL = "magisk_manager/magisk"
     private val DENYLIST_CHANNEL = "magisk_manager/denylist"
+    private val ROOT_ACCESS_CHANNEL = "magisk_manager/root_access"
     private val LOGS_CHANNEL = "magisk_manager/logs"
     private val FILEPICKER_CHANNEL = "magisk_manager/filepicker"
     private val uiHandler = Handler(Looper.getMainLooper())
+    
+    // Path to app_functions.sh script
+    private val appFunctionsScriptPath = "/data/local/tmp/app_functions.sh"
     
     private var pendingResult: Result? = null
 
@@ -116,11 +121,15 @@ class MainActivity : FlutterActivity() {
                 "isRamdiskLoaded" -> result.success(isRamdiskLoaded())
                 "setZygiskEnabled" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: false
-                    result.success(setZygiskEnabled(enabled))
+                    // Use the new app_functions.sh method for better compatibility
+                    val success = executeAppFunctionExitCode("set_zygisk_enabled", if (enabled) "1" else "0") == 0
+                    result.success(success)
                 }
                 "setDenyListEnabled" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: false
-                    result.success(setDenyListEnabled(enabled))
+                    // Use the new app_functions.sh method for better compatibility
+                    val success = executeAppFunctionExitCode("set_denylist_enabled", if (enabled) "1" else "0") == 0
+                    result.success(success)
                 }
                 "isDenyListEnabled" -> result.success(isDenyListEnabled())
                 "getAppActivities" -> {
@@ -162,12 +171,6 @@ class MainActivity : FlutterActivity() {
                 "otaSlotSwitch" -> {
                     result.success(otaSlotSwitch())
                 }
-                "restoreMagiskAfterOta" -> {
-                    result.success(restoreMagiskAfterOta())
-                }
-                "installAddonDScript" -> {
-                    result.success(installAddonDScript())
-                }
                 "updateManager" -> result.success(updateMagiskManager())
                 "getLatestVersion" -> result.success(getLatestVersion())
                 "getDeviceInfo" -> result.success(getDeviceInfo())
@@ -178,6 +181,10 @@ class MainActivity : FlutterActivity() {
                 "openMagiskSettings" -> {
                     openMagiskSettings()
                     result.success(true)
+                }
+                "installModule" -> {
+                    val zipPath = call.argument<String>("zipPath")
+                    result.success(installModule(zipPath ?: ""))
                 }
                 else -> result.notImplemented()
             }
@@ -206,6 +213,32 @@ class MainActivity : FlutterActivity() {
                     val packageName = call.argument<String>("packageName")
                     result.success(revokeRootAccess(packageName ?: ""))
                 }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Root Access Channel - dedicated channel for root access app management
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ROOT_ACCESS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getRootAccessApps" -> result.success(getRootAccessAppsViaScript())
+                "grantRootAccess" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(grantRootAccessViaScript(packageName ?: ""))
+                }
+                "revokeRootAccess" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(revokeRootAccessViaScript(packageName ?: ""))
+                }
+                "hasRootAccess" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(hasRootAccessViaScript(packageName ?: ""))
+                }
+                "getRootPolicy" -> {
+                    val packageName = call.argument<String>("packageName")
+                    result.success(getRootPolicyViaScript(packageName ?: ""))
+                }
+                "listRootPolicies" -> result.success(listRootPoliciesViaScript())
+                "setupAppFunctionsScript" -> result.success(setupAppFunctionsScript())
                 else -> result.notImplemented()
             }
         }
@@ -475,11 +508,18 @@ class MainActivity : FlutterActivity() {
         val apps = mutableListOf<Map<String, Any>>()
         val pm = packageManager
         val denyList = getDenyList()
+        
+        android.util.Log.d("MainActivity", "getInstalledApps: Starting...")
+        android.util.Log.d("MainActivity", "getInstalledApps: denyList size: ${denyList.size}")
+        
         val rootAllowedPackages = getRootAllowedPackages()
+        android.util.Log.d("MainActivity", "getInstalledApps: rootAllowedPackages size: ${rootAllowedPackages.size}")
+        android.util.Log.d("MainActivity", "getInstalledApps: rootAllowedPackages: $rootAllowedPackages")
         
         try {
             // Get all installed packages using PackageManager
             val packages = pm.getInstalledPackages(0)
+            android.util.Log.d("MainActivity", "getInstalledApps: Total packages: ${packages.size}")
             
             for (packageInfo in packages) {
                 val packageName = packageInfo.packageName
@@ -541,10 +581,10 @@ class MainActivity : FlutterActivity() {
             // Method 1: Check if Magisk is properly installed and active
             val magiskDir = File("/data/adb/magisk")
             if (magiskDir.exists() && magiskDir.isDirectory) {
-                // Check if core files exist
-                val stubFile = File("/data/adb/magisk/stub.apk")
+                // Check if core files exist (no stub.apk needed - Flutter app is standalone)
+                val magiskFile = File("/data/adb/magisk/magisk")
                 val utilFile = File("/data/adb/magisk/util_functions.sh")
-                if (stubFile.exists() || utilFile.exists()) {
+                if (magiskFile.exists() || utilFile.exists()) {
                     return true
                 }
             }
@@ -597,47 +637,73 @@ class MainActivity : FlutterActivity() {
         return try {
             android.util.Log.d("MainActivity", "isZygiskEnabled: checking status")
             
-            // Method 1: Use magisk --sqlite to query zygisk_enabled from settings table (most reliable)
+            // Method 1: Check Magisk internal state using magisk --sqlite
+            // Query the settings table for zygisk setting
             val magiskConfigFile = File("/data/adb/magisk.db")
             android.util.Log.d("MainActivity", "magisk.db exists: ${magiskConfigFile.exists()}")
             
             if (magiskConfigFile.exists()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = 'zygisk_enabled'\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val result = reader.readLine()
-                process.waitFor()
-                val exitCode = process.exitValue()
-                android.util.Log.d("MainActivity", "magisk --sqlite result: $result, exit code: $exitCode")
+                // Try using magisk --sqlite command first (most reliable)
+                val sqliteResult = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='zygisk'\"")
+                android.util.Log.d("MainActivity", "SQLite query result for zygisk: '$sqliteResult'")
                 
-                if (result != null && result.trim() == "1") {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk.db")
+                if (sqliteResult.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk --sqlite (zygisk=1)")
+                    return true
+                }
+                
+                // Also try zygisk_enabled key for older versions
+                val sqliteResult2 = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='zygisk_enabled'\"")
+                android.util.Log.d("MainActivity", "SQLite query result for zygisk_enabled: '$sqliteResult2'")
+                
+                if (sqliteResult2.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via magisk --sqlite (zygisk_enabled=1)")
+                    return true
+                }
+                
+                // Fallback: Use sqlite3 directly
+                val directSqliteResult = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='zygisk'\"")
+                android.util.Log.d("MainActivity", "Direct SQLite result: '$directSqliteResult'")
+                
+                if (directSqliteResult.trim() == "1") {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via direct sqlite3")
                     return true
                 }
             }
             
-            // Method 2: Check /data/adb/zygisk file (older Magisk versions)
-            val zygiskFile = File("/data/adb/zygisk")
-            android.util.Log.d("MainActivity", "zygisk file exists: ${zygiskFile.exists()}")
+            // Method 2: Check if Zygisk is loaded by checking for zygiskd process
+            val zygiskdCheck = executeRootCommand("ps -A | grep zygiskd")
+            if (zygiskdCheck.isNotEmpty() && zygiskdCheck.contains("zygiskd")) {
+                android.util.Log.d("MainActivity", "isZygiskEnabled: true via zygiskd process")
+                return true
+            }
             
-            if (zygiskFile.exists()) {
-                val content = zygiskFile.readText().trim()
-                android.util.Log.d("MainActivity", "zygisk file content: $content")
-                if (content == "1") {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via zygisk file")
+            // Method 3: Check /data/adb/zygisk directory structure
+            val zygiskDir = File("/data/adb/zygisk")
+            android.util.Log.d("MainActivity", "zygisk dir exists: ${zygiskDir.exists()}")
+            
+            if (zygiskDir.exists() && zygiskDir.isDirectory) {
+                // Check if zygisk is active by looking for active files
+                val zygiskActive = executeRootCommand("ls -la /data/adb/zygisk/")
+                android.util.Log.d("MainActivity", "zygisk directory contents: $zygiskActive")
+                
+                // Check for uninstaller file which indicates zygisk is installed
+                val uninstallerFile = File("/data/adb/zygisk/uninstaller.sh")
+                if (uninstallerFile.exists()) {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via uninstaller.sh presence")
                     return true
                 }
             }
             
-            // Method 3: Check if Zygisk modules directory exists and has content
-            val zygiskModulesDir = File("/data/adb/zygisk/modules")
-            android.util.Log.d("MainActivity", "zygisk/modules dir exists: ${zygiskModulesDir.exists()}")
-            
+            // Method 4: Check if any Zygisk modules are installed
+            val zygiskModulesDir = File("/data/adb/modules")
             if (zygiskModulesDir.exists() && zygiskModulesDir.isDirectory) {
-                val modules = zygiskModulesDir.listFiles()
-                android.util.Log.d("MainActivity", "zygisk modules count: ${modules?.size ?: 0}")
-                if (modules != null && modules.isNotEmpty()) {
-                    android.util.Log.d("MainActivity", "isZygiskEnabled: true via modules directory")
-                    return true
+                zygiskModulesDir.listFiles()?.forEach { moduleDir ->
+                    val zygiskDir = File(moduleDir, "zygisk")
+                    if (zygiskDir.exists()) {
+                        android.util.Log.d("MainActivity", "isZygiskEnabled: true via module ${moduleDir.name} having zygisk folder")
+                        return true
+                    }
                 }
             }
             
@@ -646,6 +712,26 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error checking Zygisk status: ${e.message}", e)
             false
+        }
+    }
+    
+    /**
+     * Execute a root command and return the output
+     */
+    private fun executeRootCommand(command: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            process.waitFor()
+            output.toString().trim()
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error executing command: $command - ${e.message}")
+            ""
         }
     }
 
@@ -741,16 +827,44 @@ class MainActivity : FlutterActivity() {
 
     private fun isDenyListEnabled(): Boolean {
         return try {
-            // Check if DenyList is enabled by checking if the denylist table exists or has entries
+            android.util.Log.d("MainActivity", "isDenyListEnabled: checking status")
+            
+            // Method 1: Use magisk --denylist status command
+            val statusProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist status"))
+            val statusReader = BufferedReader(InputStreamReader(statusProcess.inputStream))
+            val statusOutput = StringBuilder()
+            var statusLine: String?
+            while (statusReader.readLine().also { statusLine = it } != null) {
+                statusOutput.append(statusLine).append("\n")
+            }
+            statusProcess.waitFor()
+            val statusResult = statusOutput.toString().trim()
+            android.util.Log.d("MainActivity", "magisk --denylist status output: $statusResult")
+            
+            // Check if denylist is enabled (output contains "enabled" or "true")
+            if (statusResult.contains("enabled", ignoreCase = true) || statusResult.contains("true", ignoreCase = true)) {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: true via magisk --denylist status")
+                return true
+            }
+            
+            // Method 2: Check settings table in magisk.db
             val magiskConfigFile = File("/data/adb/magisk.db")
             if (magiskConfigFile.exists()) {
-                // Use magisk --sqlite to check if denylist is enabled
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = 'denylist'\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val result = reader.readLine()
-                process.waitFor()
-                if (result != null && result.trim() == "1") {
-                    return true
+                // Try multiple possible key names
+                val keys = listOf("denylist", "magiskhide")
+                for (key in keys) {
+                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = '$key'\""))
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    val result = reader.readLine()
+                    process.waitFor()
+                    android.util.Log.d("MainActivity", "SQLite query for key '$key': $result")
+                    
+                    // Parse output - handle format like "value|1" or just "1"
+                    val value = result?.trim()?.split("|")?.lastOrNull()?.trim() ?: result?.trim()
+                    if (value == "1") {
+                        android.util.Log.d("MainActivity", "isDenyListEnabled: true via settings table key '$key'")
+                        return true
+                    }
                 }
                 
                 // Fallback: check if denylist table has any entries
@@ -758,52 +872,78 @@ class MainActivity : FlutterActivity() {
                 val denylistReader = BufferedReader(InputStreamReader(denylistProcess.inputStream))
                 val countResult = denylistReader.readLine()
                 denylistProcess.waitFor()
-                if (countResult != null && countResult.trim().toIntOrNull() ?: 0 > 0) {
+                android.util.Log.d("MainActivity", "denylist table count: $countResult")
+                
+                val count = countResult?.trim()?.split("|")?.lastOrNull()?.trim()?.toIntOrNull() ?: 0
+                if (count > 0) {
+                    android.util.Log.d("MainActivity", "isDenyListEnabled: true via denylist table entries ($count)")
                     return true
                 }
             }
             
-            // Check if /data/adb/denylist file exists (older versions)
-            val denylistFile = File("/data/adb/denylist")
-            if (denylistFile.exists()) {
-                return true
-            }
-            
+            android.util.Log.d("MainActivity", "isDenyListEnabled: false")
             false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error checking denylist status: ${e.message}")
             false
         }
     }
 
     private fun setDenyListEnabled(enabled: Boolean): Boolean {
         return try {
-            // Method 1: Update Magisk config in database (newer Magisk versions)
+            android.util.Log.d("MainActivity", "setDenyListEnabled: enabled=$enabled")
+            
+            // Method 1: Use magisk --denylist command
+            val cmd = if (enabled) "magisk --denylist enable" else "magisk --denylist disable"
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.waitFor()
+            val exitCode = process.exitValue()
+            
+            // Read output for debugging
+            val outputReader = BufferedReader(InputStreamReader(process.inputStream))
+            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+            val output = outputReader.readText().trim()
+            val error = errorReader.readText().trim()
+            android.util.Log.d("MainActivity", "$cmd output: $output, error: $error, exitCode: $exitCode")
+            
+            if (exitCode == 0) {
+                android.util.Log.d("MainActivity", "setDenyListEnabled: success via magisk --denylist command")
+                return true
+            }
+            
+            // Method 2: Update settings table directly
             val magiskConfigFile = File("/data/adb/magisk.db")
             if (magiskConfigFile.exists()) {
-                // Use magisk --sqlite to update denylist setting in settings table
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '${if (enabled) "1" else "0"}')\""))
-                process.waitFor()
-                if (process.exitValue() == 0) {
-                    // Restart Magisk daemon to apply changes
-                    val restartProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "killall magiskd"))
-                    restartProcess.waitFor()
-                    return true
+                // Try both key names for compatibility
+                val keys = listOf("denylist", "magiskhide")
+                for (key in keys) {
+                    val sqliteCmd = "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('$key', '${if (enabled) "1" else "0"}')\""
+                    android.util.Log.d("MainActivity", "Executing: $sqliteCmd")
+                    
+                    val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", sqliteCmd))
+                    sqliteProcess.waitFor()
+                    
+                    if (sqliteProcess.exitValue() == 0) {
+                        // Verify the setting was applied
+                        val verifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key = '$key'\""))
+                        val verifyReader = BufferedReader(InputStreamReader(verifyProcess.inputStream))
+                        val verifyResult = verifyReader.readLine()
+                        verifyProcess.waitFor()
+                        android.util.Log.d("MainActivity", "Verification for key '$key': $verifyResult")
+                        
+                        val value = verifyResult?.trim()?.split("|")?.lastOrNull()?.trim()
+                        if (value == if (enabled) "1" else "0") {
+                            android.util.Log.d("MainActivity", "setDenyListEnabled: success via settings table key '$key'")
+                            return true
+                        }
+                    }
                 }
             }
             
-            // Method 2: Create/remove /data/adb/denylist file (older versions)
-            if (enabled) {
-                val createProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "touch /data/adb/denylist"))
-                createProcess.waitFor()
-                return createProcess.exitValue() == 0
-            } else {
-                val removeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -f /data/adb/denylist"))
-                removeProcess.waitFor()
-                return removeProcess.exitValue() == 0
-            }
-            
+            android.util.Log.e("MainActivity", "setDenyListEnabled: failed - all methods failed")
             false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error setting denylist: ${e.message}")
             false
         }
     }
@@ -923,10 +1063,10 @@ class MainActivity : FlutterActivity() {
             // Method 2: Check if Magisk is properly installed and active
             val magiskDir = File("/data/adb/magisk")
             if (magiskDir.exists() && magiskDir.isDirectory) {
-                // Check if core files exist
-                val stubFile = File("/data/adb/magisk/stub.apk")
+                // Check if core files exist (no stub.apk needed - Flutter app is standalone)
+                val magiskFile = File("/data/adb/magisk/magisk")
                 val utilFile = File("/data/adb/magisk/util_functions.sh")
-                if (stubFile.exists() || utilFile.exists()) {
+                if (magiskFile.exists() || utilFile.exists()) {
                     return true
                 }
             }
@@ -1053,25 +1193,60 @@ class MainActivity : FlutterActivity() {
     private fun grantRootAccess(packageName: String): Boolean {
         if (packageName.isEmpty()) return false
         return try {
-            // Use Magisk's built-in SU policy management
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su add $packageName"))
-            process.waitFor()
-            if (process.exitValue() == 0) {
+            android.util.Log.d("MainActivity", "grantRootAccess: $packageName")
+            
+            // Step 1: Get UID for the package
+            val uidProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "dumpsys package $packageName | grep userId= | head -1"))
+            val uidReader = BufferedReader(InputStreamReader(uidProcess.inputStream))
+            val uidOutput = uidReader.readText().trim()
+            uidProcess.waitFor()
+            
+            android.util.Log.d("MainActivity", "dumpsys output for $packageName: $uidOutput")
+            
+            // Parse UID from output like "userId=10123"
+            val uidMatch = Regex("userId=(\\d+)").find(uidOutput)
+            val uid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+            
+            if (uid == null || uid < 10000) {
+                android.util.Log.e("MainActivity", "Failed to get valid UID for $packageName (uid=$uid)")
+                return false
+            }
+            
+            android.util.Log.d("MainActivity", "Got UID $uid for package $packageName")
+            
+            // Step 2: Grant root access using magisk --sqlite with UID
+            // policy values: 0=deny, 1=allow, 2=allow_forever
+            val sqliteCmd = "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)"
+            android.util.Log.d("MainActivity", "Executing: magisk --sqlite \"$sqliteCmd\"")
+            
+            val grantProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqliteCmd\""))
+            grantProcess.waitFor()
+            
+            val output = grantProcess.inputStream.bufferedReader().readText().trim()
+            val error = grantProcess.errorStream.bufferedReader().readText().trim()
+            android.util.Log.d("MainActivity", "Grant result: output=$output, error=$error, exitCode=${grantProcess.exitValue()}")
+            
+            if (grantProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully granted root access to $packageName (uid=$uid)")
                 return true
             }
             
-            // Fallback: Use magisk --sqlite command for newer Magisk versions
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES ('${packageName}', 2, 0)\""))
-            sqliteProcess.waitFor()
-            if (sqliteProcess.exitValue() == 0) {
-                return true
-            }
+            // Fallback: Use sqlite3 directly
+            val dbCmd = "sqlite3 /data/adb/magisk.db \"INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES ($uid, 2, 0, 1, 1)\""
+            android.util.Log.d("MainActivity", "Fallback: $dbCmd")
             
-            // Fallback: Direct database manipulation for older Magisk versions
-            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'INSERT OR REPLACE INTO policies (package_name, policy, until) VALUES (\"$packageName\", 2, 0)'"))
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", dbCmd))
             dbProcess.waitFor()
-            dbProcess.exitValue() == 0
+            
+            if (dbProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully granted root access via sqlite3")
+                return true
+            }
+            
+            android.util.Log.e("MainActivity", "Failed to grant root access")
+            false
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error granting root access: ${e.message}")
             false
         }
     }
@@ -1079,92 +1254,158 @@ class MainActivity : FlutterActivity() {
     private fun revokeRootAccess(packageName: String): Boolean {
         if (packageName.isEmpty()) return false
         return try {
-            // Use Magisk's built-in SU policy management
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su remove $packageName"))
-            process.waitFor()
-            if (process.exitValue() == 0) {
+            android.util.Log.d("MainActivity", "revokeRootAccess: $packageName")
+            
+            // Step 1: Get UID for the package
+            val uidProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "dumpsys package $packageName | grep userId= | head -1"))
+            val uidReader = BufferedReader(InputStreamReader(uidProcess.inputStream))
+            val uidOutput = uidReader.readText().trim()
+            uidProcess.waitFor()
+            
+            // Parse UID from output
+            val uidMatch = Regex("userId=(\\d+)").find(uidOutput)
+            val uid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+            
+            if (uid == null) {
+                android.util.Log.e("MainActivity", "Failed to get UID for $packageName")
+                return false
+            }
+            
+            android.util.Log.d("MainActivity", "Got UID $uid for package $packageName")
+            
+            // Step 2: Revoke root access using magisk --sqlite with UID
+            val sqliteCmd = "DELETE FROM policies WHERE uid=$uid"
+            val revokeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqliteCmd\""))
+            revokeProcess.waitFor()
+            
+            if (revokeProcess.exitValue() == 0) {
+                android.util.Log.d("MainActivity", "Successfully revoked root access from $packageName (uid=$uid)")
                 return true
             }
             
-            // Fallback: Use magisk --sqlite command for newer Magisk versions
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"DELETE FROM policies WHERE package_name = '${packageName}'\""))
-            sqliteProcess.waitFor()
-            if (sqliteProcess.exitValue() == 0) {
-                return true
-            }
-            
-            // Fallback: Direct database manipulation for older Magisk versions
-            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'DELETE FROM policies WHERE package_name = \"$packageName\"'"))
+            // Fallback: Use sqlite3 directly
+            val dbCmd = "sqlite3 /data/adb/magisk.db \"DELETE FROM policies WHERE uid=$uid\""
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", dbCmd))
             dbProcess.waitFor()
+            
             dbProcess.exitValue() == 0
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error revoking root access: ${e.message}")
             false
         }
     }
 
     private fun getRootAllowedPackages(): List<String> {
         return try {
-            // Method 1: Use magisk --sqlite to query package from policies table where policy > 0
-            // This is the most reliable method for getting root-allowed packages
-            val magiskDbFile = File("/data/adb/magisk.db")
-            if (magiskDbFile.exists()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT package FROM policies WHERE policy > 0\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val allowedPackages = mutableListOf<String>()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    val pkg = line?.trim()
-                    if (!pkg.isNullOrEmpty() && !pkg.contains("package")) {
-                        allowedPackages.add(pkg)
-                    }
+            android.util.Log.d("MainActivity", "getRootAllowedPackages: starting query")
+            
+            val allowedPackages = mutableListOf<String>()
+            
+            // Method 1: Use shell script to query magisk database
+            // This is more reliable than direct command execution due to quote handling
+            val script = """
+                . /data/local/tmp/app_functions.sh 2>/dev/null || true
+                get_root_access_apps
+            """.trimIndent()
+            
+            // Write script to temp file
+            val scriptPath = "/data/local/tmp/query_root_apps_$$.sh"
+            val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $scriptPath"))
+            writeProcess.outputStream.write(script.toByteArray())
+            writeProcess.outputStream.close()
+            writeProcess.waitFor()
+            
+            // Execute script
+            val execProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sh $scriptPath"))
+            val execReader = BufferedReader(InputStreamReader(execProcess.inputStream))
+            var line: String?
+            while (execReader.readLine().also { line = it } != null) {
+                val pkg = line!!.trim()
+                if (pkg.isNotEmpty() && pkg != "unknown") {
+                    allowedPackages.add(pkg)
+                    android.util.Log.d("MainActivity", "Found root app: $pkg")
                 }
-                process.waitFor()
+            }
+            execProcess.waitFor()
+            
+            // Cleanup
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -f $scriptPath")).waitFor()
+            
+            if (allowedPackages.isNotEmpty()) {
+                android.util.Log.d("MainActivity", "getRootAllowedPackages: found ${allowedPackages.size} packages via script")
+                return allowedPackages
+            }
+            
+            // Method 2: Fallback - Query policies table directly using raw SQL via shell
+            android.util.Log.d("MainActivity", "Trying fallback method: direct SQL query")
+            
+            // Use a shell script to properly handle the magisk --sqlite command
+            val sqlScript = """
+                magisk --sqlite 'SELECT uid FROM policies WHERE policy>0' 2>/dev/null || \
+                sqlite3 /data/adb/magisk.db 'SELECT uid FROM policies WHERE policy>0' 2>/dev/null
+            """.trimIndent()
+            
+            val sqlProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", sqlScript))
+            val sqlReader = BufferedReader(InputStreamReader(sqlProcess.inputStream))
+            val uidOutput = StringBuilder()
+            var sqlLine: String?
+            while (sqlReader.readLine().also { sqlLine = it } != null) {
+                uidOutput.append(sqlLine).append("\n")
+            }
+            sqlProcess.waitFor()
+            
+            val rawOutput = uidOutput.toString().trim()
+            android.util.Log.d("MainActivity", "SQL query output: '$rawOutput'")
+            
+            // Parse UIDs
+            val uids = mutableListOf<Int>()
+            for (uidLine in rawOutput.split("\n")) {
+                val trimmed = uidLine.trim()
+                if (trimmed.isEmpty()) continue
                 
-                if (allowedPackages.isNotEmpty()) {
-                    android.util.Log.d("MainActivity", "Found ${allowedPackages.size} root-allowed packages via magisk --sqlite")
-                    return allowedPackages
+                // Handle format like "uid|12345" or just "12345"
+                val uidValue = if (trimmed.contains("|")) {
+                    trimmed.split("|").lastOrNull()?.trim()
+                } else {
+                    trimmed
+                }
+                
+                val uid = uidValue?.toIntOrNull()
+                if (uid != null && uid >= 10000) {
+                    uids.add(uid)
+                    android.util.Log.d("MainActivity", "Found root-granted UID: $uid")
                 }
             }
             
-            // Method 2: Fallback to direct sqlite3 command
-            val sqliteProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'SELECT package FROM policies WHERE policy > 0'"))
-            val sqliteReader = BufferedReader(InputStreamReader(sqliteProcess.inputStream))
-            val sqlitePackages = mutableListOf<String>()
-            var sqliteLine: String?
-            while (sqliteReader.readLine().also { sqliteLine = it } != null) {
-                if (!sqliteLine.isNullOrEmpty()) {
-                    sqlitePackages.add(sqliteLine.trim())
-                }
-            }
-            sqliteProcess.waitFor()
+            android.util.Log.d("MainActivity", "Found ${uids.size} UIDs with root access")
             
-            if (sqlitePackages.isNotEmpty()) {
-                return sqlitePackages
-            }
-            
-            // Method 3: Fallback to check magisk --su ls command (for newer Magisk versions)
-            val suProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --su ls"))
-            val suReader = BufferedReader(InputStreamReader(suProcess.inputStream))
-            val suPackages = mutableListOf<String>()
-            var suLine: String?
-            while (suReader.readLine().also { suLine = it } != null) {
-                if (!suLine.isNullOrEmpty() && !suLine.contains("allow") && !suLine.contains("deny")) {
-                    // Parse the output format: "package_name allow/deny"
-                    val parts = suLine.trim().split("\\s+".toRegex())
-                    if (parts.size >= 2 && parts[1] == "allow") {
-                        suPackages.add(parts[0])
+            // Convert UIDs to package names
+            for (uid in uids) {
+                try {
+                    val pmProcess = Runtime.getRuntime().exec(arrayOf("pm", "list", "packages", "--uid", uid.toString()))
+                    val pmReader = BufferedReader(InputStreamReader(pmProcess.inputStream))
+                    val pmOutput = pmReader.readText().trim()
+                    pmProcess.waitFor()
+                    
+                    for (resultLine in pmOutput.split("\n")) {
+                        val trimmedLine = resultLine.trim()
+                        if (trimmedLine.startsWith("package:")) {
+                            val packageName = trimmedLine.removePrefix("package:").split(",").first().trim()
+                            if (packageName.isNotEmpty() && !allowedPackages.contains(packageName)) {
+                                allowedPackages.add(packageName)
+                                android.util.Log.d("MainActivity", "UID $uid -> package: $packageName")
+                            }
+                        }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Failed to get package for UID $uid: ${e.message}")
                 }
             }
-            suProcess.waitFor()
             
-            if (suPackages.isNotEmpty()) {
-                return suPackages
-            }
-            
-            emptyList()
+            android.util.Log.d("MainActivity", "getRootAllowedPackages: returning ${allowedPackages.size} packages: $allowedPackages")
+            allowedPackages
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error getting root allowed packages: ${e.message}")
+            android.util.Log.e("MainActivity", "Error getting root allowed packages: ${e.message}", e)
             emptyList()
         }
     }
@@ -1215,8 +1456,9 @@ class MainActivity : FlutterActivity() {
             }
             
             // Copy necessary Magisk files from assets
+            // Note: stub.apk is NOT included - Flutter app is standalone, no dynamic loading needed
             sendLog("[INFO] Copying Magisk files from assets")
-            val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "stub.apk", "util_functions.sh", "boot_patch.sh")
+            val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "util_functions.sh", "boot_patch.sh")
             var copySuccess = true
             for (file in magiskFiles) {
                 val destPath = "$tmpDir/$file"
@@ -1242,6 +1484,7 @@ class MainActivity : FlutterActivity() {
             sendLog("[INFO] Executing boot_patch.sh script")
             
             // Create a wrapper script that sets up environment and sources boot_patch.sh
+            // Note: Android shell (mksh/ash) doesn't support process substitution > >(...)
             val wrapperScript = """
                 #!/system/bin/sh
                 export BOOTMODE=true
@@ -1254,9 +1497,6 @@ class MainActivity : FlutterActivity() {
                 export LEGACYSAR=false
                 
                 cd "$tmpDir"
-                
-                # Redirect script output to log
-                exec > >(while read line; do echo "[SCRIPT] ${'$'}line"; done) 2>&1
                 
                 . ./util_functions.sh
                 . ./boot_patch.sh boot.img
@@ -1425,115 +1665,110 @@ class MainActivity : FlutterActivity() {
 
     private fun findBootImage(): String {
         try {
-            // Get current slot suffix
+            sendLog("[INFO] Finding boot image partition...")
+            
+            // Get current slot suffix for A/B devices
             val slotSuffixProcess = Runtime.getRuntime().exec(arrayOf("getprop", "ro.boot.slot_suffix"))
             val slotReader = BufferedReader(InputStreamReader(slotSuffixProcess.inputStream))
             val slotSuffix = slotReader.readLine()?.trim() ?: ""
+            slotSuffixProcess.waitFor()
+            sendLog("[INFO] Current slot suffix: $slotSuffix")
             
-            // First, check if this is a GKI 13+ device by checking kernel version
-            // GKI 13+ devices use init_boot partition for root
-            val kernelVersionProcess = Runtime.getRuntime().exec(arrayOf("uname", "-r"))
-            val kernelVersionReader = BufferedReader(InputStreamReader(kernelVersionProcess.inputStream))
-            val kernelVersion = kernelVersionReader.readLine()?.trim() ?: ""
+            // Get SDK version to check if this is Android 13+ (GKI device)
+            val sdkVersion = android.os.Build.VERSION.SDK_INT
+            val isAndroid13Plus = sdkVersion >= 33  // Android 13 is SDK 33
+            sendLog("[INFO] SDK version: $sdkVersion, Android 13+: $isAndroid13Plus")
             
-            var isGki13Plus = false
-            if (kernelVersion.isNotEmpty()) {
-                try {
-                    // Parse kernel version (e.g., "5.10.107-android13-01234-g1234567890ab")
-                    val majorVersion = kernelVersion.split(".")[0].toIntOrNull()
-                    if (majorVersion != null && majorVersion >= 5) {
-                        // Check for Android 13+ in kernel version string
-                        if (kernelVersion.contains("android13") || kernelVersion.contains("android14") || 
-                            kernelVersion.contains("android15") || kernelVersion.contains("gki-13") || 
-                            kernelVersion.contains("gki-14") || kernelVersion.contains("gki-15")) {
-                            isGki13Plus = true
-                        } else if (majorVersion > 5 || (majorVersion == 5 && kernelVersion.split(".")[1].toIntOrNull() ?: 0 >= 10)) {
-                            // Kernel 5.10+ is typically GKI 13+
-                            isGki13Plus = true
-                        }
+            // Check for init_boot partition first (GKI 13+ devices)
+            // init_boot partition is used on devices with GKI (Generic Kernel Image)
+            val initBootLocations = mutableListOf<String>()
+            
+            // With slot suffix first
+            if (slotSuffix.isNotEmpty()) {
+                initBootLocations.add("/dev/block/by-name/init_boot$slotSuffix")
+            }
+            // Without slot suffix
+            initBootLocations.add("/dev/block/by-name/init_boot")
+            
+            for (location in initBootLocations) {
+                val file = File(location)
+                if (file.exists()) {
+                    sendLog("[INFO] Found init_boot partition: $location")
+                    // Verify it's a block device
+                    val checkProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "test -b $location && echo 'block'"))
+                    checkProcess.waitFor()
+                    val result = checkProcess.inputStream.bufferedReader().readText().trim()
+                    if (result == "block") {
+                        sendLog("[INFO] Using init_boot partition: $location")
+                        return location
                     }
-                } catch (e: Exception) {
-                    // If parsing fails, fall back to checking init_boot existence
                 }
             }
             
-            // Check for init_boot partition first (priority for GKI 13+ devices)
-            if (slotSuffix.isNotEmpty()) {
-                val initBootWithSlot = "/dev/block/by-name/init_boot$slotSuffix"
-                if (File(initBootWithSlot).exists()) {
-                    // If init_boot exists, always use it (this is the correct behavior for modern devices)
-                    return initBootWithSlot
-                }
-            }
-            val initBoot = "/dev/block/by-name/init_boot"
-            if (File(initBoot).exists()) {
-                // If init_boot exists, always use it (this is the correct behavior for modern devices)
-                return initBoot
-            }
+            // If init_boot not found, check for boot partition
+            sendLog("[INFO] init_boot not found, checking boot partition...")
             
-            // If we're on a GKI 13+ device but init_boot doesn't exist, 
-            // this might be an edge case, but we should still prefer boot partition
-            // Check standard boot locations with slot support
             val bootLocations = mutableListOf<String>()
+            
+            // Add slot-specific locations first
             if (slotSuffix.isNotEmpty()) {
-                // Add slot-specific locations first
                 bootLocations.add("/dev/block/by-name/boot$slotSuffix")
-                bootLocations.add("/dev/block/platform/*/*/by-name/boot$slotSuffix")
-                bootLocations.add("/dev/block/platform/*/*/*/by-name/boot$slotSuffix")
                 bootLocations.add("/dev/block/bootdevice/by-name/boot$slotSuffix")
             }
-            // Add non-slot locations as fallback
+            // Add non-slot locations
             bootLocations.add("/dev/block/by-name/boot")
-            bootLocations.add("/dev/block/platform/*/*/by-name/boot")
-            bootLocations.add("/dev/block/platform/*/*/*/by-name/boot")
             bootLocations.add("/dev/block/bootdevice/by-name/boot")
             
             for (location in bootLocations) {
-                if (location.contains("*")) {
-                    // Handle wildcard paths
-                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls $location 2>/dev/null"))
-                    val reader = BufferedReader(InputStreamReader(process.inputStream))
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        if (line?.isNotEmpty() == true && File(line).exists()) {
-                            // Verify it's a valid boot image by checking if it's a block device
-                            val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", line))
-                            val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
-                            val fileType = statReader.readLine()
-                            if (fileType?.contains("block") == true) {
-                                return line
-                            }
-                        }
-                    }
-                } else {
-                    if (File(location).exists()) {
-                        // Verify it's a valid boot image by checking if it's a block device
-                        val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", location))
-                        val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
-                        val fileType = statReader.readLine()
-                        if (fileType?.contains("block") == true) {
-                            return location
-                        }
+                val file = File(location)
+                if (file.exists()) {
+                    sendLog("[INFO] Found boot partition: $location")
+                    // Verify it's a block device
+                    val checkProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "test -b $location && echo 'block'"))
+                    checkProcess.waitFor()
+                    val result = checkProcess.inputStream.bufferedReader().readText().trim()
+                    if (result == "block") {
+                        sendLog("[INFO] Using boot partition: $location")
+                        return location
                     }
                 }
             }
             
-            // Fallback: try to find using find_block logic
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "find /dev/block -name '*boot*' | grep -v 'recovery' | head -n 1"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val result = reader.readLine()
-            if (result?.isNotEmpty() == true) {
-                // Verify it's a valid boot image
-                val statProcess = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%F", result))
-                val statReader = BufferedReader(InputStreamReader(statProcess.inputStream))
-                val fileType = statReader.readLine()
-                if (fileType?.contains("block") == true) {
-                    return result
-                }
+            // Use find command to search for boot partition
+            sendLog("[INFO] Using find command to locate boot partition...")
+            val findProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", """
+                for p in /dev/block/by-name /dev/block/platform/*/*/by-name; do
+                    if [ -d "${'$'}p" ]; then
+                        # Check init_boot first
+                        for n in init_boot init_boot_a init_boot_b; do
+                            if [ -b "${'$'}p/${'$'}n" ]; then
+                                echo "${'$'}p/${'$'}n"
+                                exit 0
+                            fi
+                        done
+                        # Then check boot
+                        for n in boot boot_a boot_b; do
+                            if [ -b "${'$'}p/${'$'}n" ]; then
+                                echo "${'$'}p/${'$'}n"
+                                exit 0
+                            fi
+                        done
+                    fi
+                done
+                echo ""
+            """.trimIndent()))
+            findProcess.waitFor()
+            val findResult = findProcess.inputStream.bufferedReader().readText().trim()
+            
+            if (findResult.isNotEmpty()) {
+                sendLog("[INFO] Found partition via find: $findResult")
+                return findResult
             }
+            
+            sendLog("[ERROR] Could not find boot or init_boot partition")
             
         } catch (e: Exception) {
-            // Ignore errors and return empty
+            sendLog("[ERROR] Error finding boot image: ${e.message}")
         }
         return ""
     }
@@ -1542,12 +1777,20 @@ class MainActivity : FlutterActivity() {
         return try {
             sendLog("[INFO] Starting Magisk uninstallation (restoreImages=$restoreImages)")
             
-            // Check if Magisk is installed and available
-            if (!File("/data/adb/magisk").exists()) {
-                sendLog("[ERROR] Magisk directory not found")
+            // Check if Magisk is installed - check multiple possible locations
+            val magiskDir = File("/data/adb/magisk")
+            val magiskDb = File("/data/adb/magisk.db")
+            val modulesDir = File("/data/adb/modules")
+            
+            // Check if any Magisk-related files/directories exist
+            val hasMagisk = magiskDir.exists() || magiskDb.exists() || modulesDir.exists()
+            
+            if (!hasMagisk) {
+                sendLog("[ERROR] No Magisk installation found")
+                sendLog("[INFO] Checked: /data/adb/magisk, /data/adb/magisk.db, /data/adb/modules")
                 return false
             }
-            sendLog("[INFO] Magisk directory found")
+            sendLog("[INFO] Magisk installation found")
             
             // Create temporary directory for uninstaller
             val tmpDir = "/data/local/tmp/magisk_uninstall"
@@ -1670,9 +1913,6 @@ class MainActivity : FlutterActivity() {
                     
                     cd "$tmpDir"
                     
-                    # Redirect script output to log
-                    exec > >(while read line; do echo "[SCRIPT] ${'$'}line"; done) 2>&1
-                    
                     . ./util_functions.sh
                     $cmd
                     
@@ -1781,18 +2021,16 @@ class MainActivity : FlutterActivity() {
             }
             
             // Copy necessary Magisk files from assets
+            // Note: stub.apk is NOT included - Flutter app is standalone, no dynamic loading needed
             sendLog("[INFO] Copying Magisk files from assets")
-            val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "stub.apk", "util_functions.sh", "boot_patch.sh")
+            val magiskFiles = listOf("magiskinit", "magisk", "magiskboot", "util_functions.sh", "boot_patch.sh")
             var copySuccess = true
             for (file in magiskFiles) {
                 val destPath = "$tmpDir/$file"
                 if (!copyAssetToFile(file, destPath)) {
                     sendLog("[ERROR] Failed to copy $file from assets")
-                    // Skip init-ld as it's optional for some devices
-                    if (file != "init-ld") {
-                        copySuccess = false
-                        break
-                    }
+                    copySuccess = false
+                    break
                 }
             }
             
@@ -1822,9 +2060,6 @@ class MainActivity : FlutterActivity() {
                 export LEGACYSAR=false
                 
                 cd "$tmpDir"
-                
-                # Redirect script output to log
-                exec > >(while read line; do echo "[SCRIPT] ${'$'}line"; done) 2>&1
                 
                 . ./util_functions.sh
                 . ./boot_patch.sh boot.img
@@ -1892,19 +2127,37 @@ class MainActivity : FlutterActivity() {
 
     private fun otaSlotSwitch(): Boolean {
         return try {
-            sendLog("[INFO] Starting OTA slot switch using bootctl")
+            sendLog("[INFO] Starting OTA slot switch with Magisk restoration")
             
-            // Check if bootctl exists
-            val bootctlPath = "/tool/bootctl"
-            val bootctlFile = File(bootctlPath)
-            if (!bootctlFile.exists()) {
-                sendLog("[ERROR] bootctl not found at $bootctlPath")
-                return false
+            // Check if bootctl exists in assets first
+            var bootctlPath = ""
+            try {
+                // Try to extract bootctl from assets
+                val inputStream = assets.open("bootctl")
+                val content = inputStream.readBytes()
+                inputStream.close()
+                
+                // Write to temp location
+                bootctlPath = "/data/local/tmp/bootctl"
+                val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $bootctlPath"))
+                val outputStream = writeProcess.outputStream
+                outputStream.write(content)
+                outputStream.close()
+                writeProcess.waitFor()
+                
+                // Make executable
+                val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $bootctlPath"))
+                chmodProcess.waitFor()
+                sendLog("[INFO] Extracted bootctl from assets to $bootctlPath")
+            } catch (e: Exception) {
+                // Try system bootctl
+                bootctlPath = "/tool/bootctl"
+                val bootctlFile = File(bootctlPath)
+                if (!bootctlFile.exists()) {
+                    sendLog("[ERROR] bootctl not found")
+                    return false
+                }
             }
-            
-            // Make bootctl executable
-            val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $bootctlPath"))
-            chmodProcess.waitFor()
             
             // Get current slot
             sendLog("[INFO] Getting current boot slot")
@@ -1918,150 +2171,76 @@ class MainActivity : FlutterActivity() {
             val targetSlot = if (currentSlot == "_a") "_b" else "_a"
             sendLog("[INFO] Switching to slot: $targetSlot")
             
-            // Set active boot slot
-            sendLog("[INFO] Setting boot slot to $targetSlot")
+            // === Step 1: Backup Magisk to cache before slot switch ===
+            sendLog("[INFO] Step 1: Backing up Magisk files before slot switch")
+            val backupDir = "/cache/magisk_backup"
+            val backupProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", """
+                rm -rf $backupDir
+                mkdir -p $backupDir
+                if [ -d /data/adb/magisk ]; then
+                    mkdir -p $backupDir/magisk
+                    cp -r /data/adb/magisk/* $backupDir/magisk/
+                fi
+                if [ -d /data/adb/modules ]; then
+                    mkdir -p $backupDir/modules
+                    cp -r /data/adb/modules/* $backupDir/modules/
+                fi
+                if [ -f /data/adb/magisk.db ]; then
+                    cp /data/adb/magisk.db $backupDir/
+                fi
+                if [ -f /data/adb/magisk.apk ]; then
+                    cp /data/adb/magisk.apk $backupDir/
+                fi
+                ls -la $backupDir
+            """.trimIndent()))
+            backupProcess.waitFor()
+            sendLog("[INFO] Magisk backup completed")
+            
+            // === Step 2: Set active boot slot ===
+            sendLog("[INFO] Step 2: Setting boot slot to $targetSlot")
             val setSlotProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "$bootctlPath set-active-boot-slot $targetSlot"))
             setSlotProcess.waitFor()
             
-            if (setSlotProcess.exitValue() == 0) {
-                sendLog("[INFO] Boot slot switched successfully to $targetSlot")
-                sendLog("[INFO] Please reboot device to boot from the new slot")
-                true
-            } else {
+            if (setSlotProcess.exitValue() != 0) {
                 sendLog("[ERROR] Failed to set boot slot")
-                false
-            }
-        } catch (e: Exception) {
-            sendLog("[ERROR] Error during OTA slot switch: ${e.message}")
-            false
-        }
-    }
-
-    private fun restoreMagiskAfterOta(): Boolean {
-        return try {
-            sendLog("[INFO] Starting Magisk restoration after OTA")
-            
-            // Check if bootctl exists
-            val bootctlPath = "/tool/bootctl"
-            val bootctlFile = File(bootctlPath)
-            if (!bootctlFile.exists()) {
-                sendLog("[ERROR] bootctl not found at $bootctlPath")
                 return false
             }
+            sendLog("[INFO] Boot slot switched successfully to $targetSlot")
             
-            // Make bootctl executable
-            val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $bootctlPath"))
-            chmodProcess.waitFor()
-            
-            // Get current slot
-            sendLog("[INFO] Getting current boot slot")
-            val currentSlotProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "$bootctlPath current-slot"))
-            val currentSlotReader = BufferedReader(InputStreamReader(currentSlotProcess.inputStream))
-            val currentSlot = currentSlotReader.readLine()?.trim() ?: "unknown"
-            currentSlotProcess.waitFor()
-            sendLog("[INFO] Current slot: $currentSlot")
-            
-            // Check if Magisk backup exists
-            val backupDir = File("/cache/magisk_backup")
-            if (!backupDir.exists()) {
-                sendLog("[WARN] No Magisk backup found in /cache/magisk_backup")
-                // Try alternative backup location
-                val altBackupDir = File("/data/adb/magisk_backup")
-                if (!altBackupDir.exists()) {
-                    sendLog("[ERROR] No Magisk backup found, please install addon.d script first")
-                    return false
-                }
-            }
-            
-            // Restore Magisk files from backup
-            sendLog("[INFO] Restoring Magisk files from backup")
+            // === Step 3: Restore Magisk from backup ===
+            sendLog("[INFO] Step 3: Restoring Magisk to the new slot")
             val restoreProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", """
-                if [ -d /cache/magisk_backup/magisk ]; then
+                if [ -d $backupDir/magisk ]; then
                     mkdir -p /data/adb/magisk
-                    cp -r /cache/magisk_backup/magisk/* /data/adb/magisk/
+                    cp -r $backupDir/magisk/* /data/adb/magisk/
+                    chmod -R 755 /data/adb/magisk
                 fi
-                if [ -d /cache/magisk_backup/modules ]; then
+                if [ -d $backupDir/modules ]; then
                     mkdir -p /data/adb/modules
-                    cp -r /cache/magisk_backup/modules/* /data/adb/modules/
+                    cp -r $backupDir/modules/* /data/adb/modules/
+                    chmod -R 755 /data/adb/modules
                 fi
-                if [ -f /cache/magisk_backup/magisk.apk ]; then
-                    cp /cache/magisk_backup/magisk.apk /data/adb/magisk.apk
+                if [ -f $backupDir/magisk.db ]; then
+                    cp $backupDir/magisk.db /data/adb/
+                    chmod 600 /data/adb/magisk.db
                 fi
-                if [ -f /cache/magisk_backup/magisk.db ]; then
-                    cp /cache/magisk_backup/magisk.db /data/adb/magisk.db
+                if [ -f $backupDir/magisk.apk ]; then
+                    cp $backupDir/magisk.apk /data/adb/
                 fi
-                chown -R root:root /data/adb/magisk
-                chmod -R 755 /data/adb/magisk
                 echo "Magisk restoration completed"
             """.trimIndent()))
             restoreProcess.waitFor()
             
             if (restoreProcess.exitValue() == 0) {
-                sendLog("[INFO] Magisk restoration completed successfully")
-                sendLog("[INFO] Please reboot device to apply changes")
+                sendLog("[INFO] Magisk restored successfully to the new slot")
+                sendLog("[INFO] Please reboot device to boot from the new slot with Magisk")
                 true
             } else {
                 sendLog("[ERROR] Failed to restore Magisk")
                 false
             }
         } catch (e: Exception) {
-            sendLog("[ERROR] Error during Magisk restoration: ${e.message}")
-            false
-        }
-    }
-
-    private fun installAddonDScript(): Boolean {
-        return try {
-            sendLog("[INFO] Installing addon.d script for OTA recovery")
-            
-            // Check if addon.d.sh exists in assets
-            val addonDAsset = "addon.d.sh"
-            try {
-                assets.open(addonDAsset).close()
-            } catch (e: Exception) {
-                sendLog("[ERROR] addon.d.sh not found in assets")
-                return false
-            }
-            
-            // Create /system/addon.d directory if it doesn't exist
-            val mkdirProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p /system/addon.d"))
-            mkdirProcess.waitFor()
-            
-            // Copy addon.d.sh to /system/addon.d/
-            val destPath = "/system/addon.d/99-magisk.sh"
-            sendLog("[INFO] Copying addon.d script to $destPath")
-            
-            // Read asset content
-            val inputStream = assets.open(addonDAsset)
-            val content = inputStream.readBytes()
-            inputStream.close()
-            
-            // Write to destination using cat command
-            val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $destPath"))
-            val outputStream = writeProcess.outputStream
-            outputStream.write(content)
-            outputStream.close()
-            writeProcess.waitFor()
-            
-            if (writeProcess.exitValue() != 0) {
-                sendLog("[ERROR] Failed to write addon.d script")
-                return false
-            }
-            
-            // Make script executable
-            val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $destPath"))
-            chmodProcess.waitFor()
-            
-            if (chmodProcess.exitValue() == 0) {
-                sendLog("[INFO] addon.d script installed successfully")
-                sendLog("[INFO] Magisk will be automatically restored after OTA updates")
-                true
-            } else {
-                sendLog("[ERROR] Failed to set permissions on addon.d script")
-                false
-            }
-        } catch (e: Exception) {
-            sendLog("[ERROR] Error installing addon.d script: ${e.message}")
+            sendLog("[ERROR] Error during OTA slot switch: ${e.message}")
             false
         }
     }
@@ -2080,14 +2259,14 @@ class MainActivity : FlutterActivity() {
 
     private fun openMagiskSettings() {
         try {
-            val intent = packageManager.getLaunchIntentForPackage("com.topjohnwu.magisk")
+            val intent = packageManager.getLaunchIntentForPackage("com.magiskube.magisk")
             if (intent != null) {
                 startActivity(intent)
             }
         } catch (e: Exception) {
             try {
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:com.topjohnwu.magisk")
+                    data = Uri.parse("package:com.magiskube.magisk")
                 }
                 startActivity(intent)
             } catch (e2: Exception) {}
@@ -2144,19 +2323,491 @@ class MainActivity : FlutterActivity() {
             when {
                 uri.scheme == "file" -> uri.path
                 uri.scheme == "content" -> {
-                    val projection = arrayOf("_data")
-                    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            cursor.getString(cursor.getColumnIndexOrThrow("_data"))
-                        } else {
-                            null
-                        }
+                    // For content URIs, copy the file to cache directory
+                    // This is necessary because content:// URIs don't have real file paths
+                    val inputStream = contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        // Get file name from URI or use timestamp
+                        val fileName = getFileNameFromUri(uri) ?: "selected_file_${System.currentTimeMillis()}"
+                        
+                        // Create cache file
+                        val cacheFile = File(cacheDir, fileName)
+                        
+                        // Copy content to cache file
+                        val outputStream = cacheFile.outputStream()
+                        inputStream.copyTo(outputStream)
+                        inputStream.close()
+                        outputStream.close()
+                        
+                        sendLog("[INFO] File copied to cache: ${cacheFile.absolutePath}")
+                        cacheFile.absolutePath
+                    } else {
+                        sendLog("[ERROR] Failed to open input stream for URI: $uri")
+                        null
                     }
                 }
                 else -> null
             }
         } catch (e: Exception) {
+            sendLog("[ERROR] getFilePathFromUri failed: ${e.message}")
             null
+        }
+    }
+    
+    private fun getFileNameFromUri(uri: Uri): String? {
+        return try {
+            var fileName: String? = null
+            if (uri.scheme == "content") {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0) {
+                            fileName = cursor.getString(nameIndex)
+                        }
+                    }
+                }
+            }
+            if (fileName == null) {
+                uri.path?.substringAfterLast('/')
+            }
+            fileName
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ==================== Root Access Management via app_functions.sh ====================
+    
+    /**
+     * Setup app_functions.sh script from assets
+     * This should be called once when the app starts
+     */
+    private fun setupAppFunctionsScript(): Boolean {
+        return try {
+            // Check if script already exists and is up to date
+            val existingScript = File(appFunctionsScriptPath)
+            
+            // Copy script from assets to /data/local/tmp/
+            val inputStream = assets.open("app_functions.sh")
+            val content = inputStream.readBytes()
+            inputStream.close()
+            
+            // Write script using root shell
+            val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $appFunctionsScriptPath"))
+            val outputStream = writeProcess.outputStream
+            outputStream.write(content)
+            outputStream.close()
+            writeProcess.waitFor()
+            
+            if (writeProcess.exitValue() != 0) {
+                android.util.Log.e("MainActivity", "Failed to write app_functions.sh")
+                return false
+            }
+            
+            // Make script executable
+            val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $appFunctionsScriptPath"))
+            chmodProcess.waitFor()
+            
+            android.util.Log.d("MainActivity", "app_functions.sh setup completed")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error setting up app_functions.sh: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Execute a function from app_functions.sh script
+     * @param functionName The name of the function to call
+     * @param args Arguments to pass to the function
+     * @return The output of the function execution
+     */
+    private fun executeAppFunction(functionName: String, vararg args: String): String {
+        return try {
+            // Ensure script exists
+            if (!File(appFunctionsScriptPath).exists()) {
+                setupAppFunctionsScript()
+            }
+            
+            // Build the command
+            val argsStr = args.joinToString(" ")
+            val command = ". $appFunctionsScriptPath && $functionName $argsStr"
+            
+            android.util.Log.d("MainActivity", "Executing: $command")
+            
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = StringBuilder()
+            var line: String?
+            
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            
+            process.waitFor()
+            
+            val result = output.toString().trim()
+            android.util.Log.d("MainActivity", "Function $functionName output: $result")
+            result
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error executing $functionName: ${e.message}")
+            ""
+        }
+    }
+    
+    /**
+     * Get list of apps with root access via app_functions.sh
+     * @return List of package names that have root access granted
+     */
+    private fun getRootAccessAppsViaScript(): List<String> {
+        return try {
+            val output = executeAppFunction("get_root_access_apps")
+            if (output.isNotEmpty()) {
+                output.split("\n").filter { it.trim().isNotEmpty() }
+            } else {
+                // Fallback to direct method
+                getRootAllowedPackages()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error getting root access apps: ${e.message}")
+            // Fallback to direct method
+            getRootAllowedPackages()
+        }
+    }
+    
+    /**
+     * Grant root access to an app via app_functions.sh
+     * @param packageName The package name of the app
+     * @return true if successful, false otherwise
+     */
+    private fun grantRootAccessViaScript(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        
+        return try {
+            val output = executeAppFunction("grant_root_access", packageName)
+            val exitCode = executeAppFunctionExitCode("grant_root_access", packageName)
+            
+            if (exitCode == 0) {
+                android.util.Log.d("MainActivity", "Granted root access to $packageName via script")
+                true
+            } else {
+                // Fallback to direct method
+                grantRootAccess(packageName)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error granting root access: ${e.message}")
+            // Fallback to direct method
+            grantRootAccess(packageName)
+        }
+    }
+    
+    /**
+     * Revoke root access from an app via app_functions.sh
+     * @param packageName The package name of the app
+     * @return true if successful, false otherwise
+     */
+    private fun revokeRootAccessViaScript(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        
+        return try {
+            val exitCode = executeAppFunctionExitCode("revoke_root_access", packageName)
+            
+            if (exitCode == 0) {
+                android.util.Log.d("MainActivity", "Revoked root access from $packageName via script")
+                true
+            } else {
+                // Fallback to direct method
+                revokeRootAccess(packageName)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error revoking root access: ${e.message}")
+            // Fallback to direct method
+            revokeRootAccess(packageName)
+        }
+    }
+    
+    /**
+     * Check if an app has root access via app_functions.sh
+     * @param packageName The package name of the app
+     * @return true if the app has root access, false otherwise
+     */
+    private fun hasRootAccessViaScript(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        
+        return try {
+            val exitCode = executeAppFunctionExitCode("has_root_access", packageName)
+            exitCode == 0
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error checking root access: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Get root policy for an app via app_functions.sh
+     * @param packageName The package name of the app
+     * @return The policy value (0=deny, 1=allow, 2=allow_forever, 3=allow_session)
+     */
+    private fun getRootPolicyViaScript(packageName: String): Int {
+        if (packageName.isEmpty()) return 0
+        
+        return try {
+            val output = executeAppFunction("get_root_policy", packageName)
+            output.toIntOrNull() ?: 0
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error getting root policy: ${e.message}")
+            0
+        }
+    }
+    
+    /**
+     * List all root policies via app_functions.sh
+     * @return List of "package_name:policy" strings
+     */
+    private fun listRootPoliciesViaScript(): List<String> {
+        return try {
+            val output = executeAppFunction("list_root_policies")
+            if (output.isNotEmpty()) {
+                output.split("\n").filter { it.trim().isNotEmpty() && it.contains(":") }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error listing root policies: ${e.message}")
+            emptyList()
+        }
+    }
+    
+    /**
+     * Execute a function from app_functions.sh and return the exit code
+     * @param functionName The name of the function to call
+     * @param args Arguments to pass to the function
+     * @return The exit code of the function
+     */
+    private fun executeAppFunctionExitCode(functionName: String, vararg args: String): Int {
+        return try {
+            // Ensure script exists
+            if (!File(appFunctionsScriptPath).exists()) {
+                setupAppFunctionsScript()
+            }
+            
+            // Build the command
+            val argsStr = args.joinToString(" ")
+            val command = ". $appFunctionsScriptPath && $functionName $argsStr; echo \$?"
+            
+            android.util.Log.d("MainActivity", "Executing with exit code: $command")
+            
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val lines = mutableListOf<String>()
+            var line: String?
+            
+            while (reader.readLine().also { line = it } != null) {
+                lines.add(line ?: "")
+            }
+            
+            process.waitFor()
+            
+            // The last line should be the exit code
+            val exitCode = lines.lastOrNull()?.trim()?.toIntOrNull() ?: 1
+            android.util.Log.d("MainActivity", "Function $functionName exit code: $exitCode")
+            exitCode
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error executing $functionName: ${e.message}")
+            1
+        }
+    }
+    
+    // ==================== Module Installation ====================
+    
+    /**
+     * Install a Magisk module from a zip file
+     * @param zipPath The path to the module zip file
+     * @return true if installation was successful, false otherwise
+     */
+    private fun installModule(zipPath: String): Boolean {
+        return try {
+            sendLog("[INFO] Starting module installation from: $zipPath")
+            
+            // Validate zip path
+            if (zipPath.isEmpty()) {
+                sendLog("[ERROR] No zip file path provided")
+                return false
+            }
+            
+            // Check if zip file exists
+            val zipFile = File(zipPath)
+            if (!zipFile.exists()) {
+                sendLog("[ERROR] Zip file not found: $zipPath")
+                return false
+            }
+            sendLog("[INFO] Zip file found: $zipPath")
+            
+            // Check root access
+            if (!checkRootAccess()) {
+                sendLog("[ERROR] Root access not available")
+                return false
+            }
+            sendLog("[INFO] Root access confirmed")
+            
+            // Create temporary directory for module installation
+            val tmpDir = "/data/local/tmp/module_install_${System.currentTimeMillis()}"
+            sendLog("[INFO] Creating temp directory: $tmpDir")
+            val processMkdir = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p $tmpDir"))
+            processMkdir.waitFor()
+            if (processMkdir.exitValue() != 0) {
+                sendLog("[ERROR] Failed to create temp directory")
+                return false
+            }
+            
+            // Copy zip file to temp directory with proper quoting
+            sendLog("[INFO] Copying zip file to temp directory")
+            val escapedZipPath = zipPath.replace("'", "'\"'\"'")
+            val processCp = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp '$escapedZipPath' '$tmpDir/module.zip'"))
+            processCp.waitFor()
+            if (processCp.exitValue() != 0) {
+                sendLog("[ERROR] Failed to copy zip file")
+                return false
+            }
+            
+            // Verify the zip file was copied correctly
+            val verifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls -la '$tmpDir/module.zip' && unzip -l '$tmpDir/module.zip' | head -5"))
+            val verifyReader = BufferedReader(InputStreamReader(verifyProcess.inputStream))
+            var verifyLine: String?
+            while (verifyReader.readLine().also { verifyLine = it } != null) {
+                sendLog("[DEBUG] Zip verification: $verifyLine")
+            }
+            verifyProcess.waitFor()
+            if (verifyProcess.exitValue() != 0) {
+                sendLog("[ERROR] Zip file verification failed - file may be corrupted or not a valid zip")
+                return false
+            }
+            
+            // Copy module_installer.sh from assets
+            sendLog("[INFO] Copying module_installer.sh from assets")
+            val installerPath = "$tmpDir/module_installer.sh"
+            try {
+                val inputStream = assets.open("module_installer.sh")
+                val content = inputStream.readBytes()
+                inputStream.close()
+                
+                val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $installerPath"))
+                val outputStream = writeProcess.outputStream
+                outputStream.write(content)
+                outputStream.close()
+                writeProcess.waitFor()
+                
+                if (writeProcess.exitValue() != 0) {
+                    sendLog("[ERROR] Failed to write module_installer.sh")
+                    return false
+                }
+            } catch (e: Exception) {
+                sendLog("[ERROR] Failed to copy module_installer.sh from assets: ${e.message}")
+                return false
+            }
+            
+            // Copy util_functions.sh from assets (required by module_installer.sh)
+            sendLog("[INFO] Copying util_functions.sh from assets")
+            val utilFunctionsPath = "$tmpDir/util_functions.sh"
+            try {
+                val inputStream = assets.open("util_functions.sh")
+                val content = inputStream.readBytes()
+                inputStream.close()
+                
+                val writeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $utilFunctionsPath"))
+                val outputStream = writeProcess.outputStream
+                outputStream.write(content)
+                outputStream.close()
+                writeProcess.waitFor()
+                
+                if (writeProcess.exitValue() != 0) {
+                    sendLog("[ERROR] Failed to write util_functions.sh")
+                    return false
+                }
+            } catch (e: Exception) {
+                sendLog("[ERROR] Failed to copy util_functions.sh from assets: ${e.message}")
+                return false
+            }
+            
+            // Make scripts executable
+            sendLog("[INFO] Making scripts executable")
+            val chmodProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $installerPath $utilFunctionsPath"))
+            chmodProcess.waitFor()
+            
+            // Create wrapper script to execute module installation
+            // The module_installer.sh expects parameters: dummy <outfd> <zipfile>
+            val wrapperScript = """
+                #!/system/bin/sh
+                export BOOTMODE=true
+                export TMPDIR="$tmpDir"
+                export MAGISKBIN="/data/adb/magisk"
+                
+                cd "$tmpDir"
+                
+                # Verify files exist
+                if [ ! -f ./module_installer.sh ] || [ ! -f ./util_functions.sh ]; then
+                    echo "[ERROR] Required scripts not found in $tmpDir"
+                    ls -la "$tmpDir"
+                    exit 1
+                fi
+                
+                # Source util_functions.sh
+                . ./util_functions.sh
+                
+                # Execute module installer with proper parameters
+                # Parameters: dummy <outfd> <zipfile>
+                sh "$tmpDir/module_installer.sh" dummy 1 "$tmpDir/module.zip"
+            """.trimIndent()
+            
+            // Write wrapper script
+            val wrapperPath = "$tmpDir/install_wrapper.sh"
+            val writeWrapper = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat > $wrapperPath"))
+            val wrapperOutput = writeWrapper.outputStream
+            wrapperOutput.write(wrapperScript.toByteArray())
+            wrapperOutput.close()
+            writeWrapper.waitFor()
+            
+            // Make wrapper executable and run it
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 755 $wrapperPath")).waitFor()
+            
+            sendLog("[INFO] Executing module installer")
+            val installProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sh $wrapperPath"))
+            
+            // Read script output and send to log
+            val scriptReader = BufferedReader(InputStreamReader(installProcess.inputStream))
+            val errorReader = BufferedReader(InputStreamReader(installProcess.errorStream))
+            
+            // Read stdout
+            var scriptLine: String?
+            while (scriptReader.readLine().also { scriptLine = it } != null) {
+                sendLog(scriptLine!!)
+            }
+            
+            // Read stderr
+            var errorLine: String?
+            while (errorReader.readLine().also { errorLine = it } != null) {
+                sendLog("[STDERR] $errorLine")
+            }
+            
+            installProcess.waitFor()
+            val exitCode = installProcess.exitValue()
+            
+            // Cleanup temp directory
+            sendLog("[INFO] Cleaning up temp directory")
+            val cleanupProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -rf $tmpDir"))
+            cleanupProcess.waitFor()
+            
+            if (exitCode == 0) {
+                sendLog("[INFO] Module installed successfully!")
+                sendLog("[INFO] Reboot may be required for the module to take effect")
+                true
+            } else {
+                sendLog("[ERROR] Module installation failed with exit code: $exitCode")
+                false
+            }
+        } catch (e: Exception) {
+            sendLog("[ERROR] Exception during module installation: ${e.message}")
+            false
         }
     }
 }

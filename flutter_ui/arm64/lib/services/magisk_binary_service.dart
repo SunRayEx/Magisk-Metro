@@ -37,6 +37,26 @@ class MagiskBinaryService {
     }
   }
 
+  /// Patch boot image WITHOUT root access
+  /// This allows users to patch a boot.img file on an unrooted device
+  /// The patched image will be saved to Downloads directory
+  /// 
+  /// [bootImagePath] - Path to the boot image file (from file picker)
+  /// [outputDir] - Optional output directory path
+  /// Returns the path to the patched boot image, or null if failed
+  static Future<String?> patchBootImageNoRoot(String bootImagePath, {String? outputDir}) async {
+    try {
+      final result = await _channel.invokeMethod<String>('patchBootImageNoRoot', {
+        'bootImage': bootImagePath,
+        'outputDir': outputDir,
+      });
+      return result;
+    } catch (e) {
+      print('patchBootImageNoRoot error: $e');
+      return null;
+    }
+  }
+
   static Future<bool> updateMagiskManager() async {
     try {
       final result = await _channel.invokeMethod<bool>('updateManager');

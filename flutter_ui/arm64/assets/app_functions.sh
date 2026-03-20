@@ -313,32 +313,74 @@ get_package_from_uid() {
 # Returns: package_name per line
 get_root_access_apps() {
   local db_file="/data/adb/magisk.db"
+  local found=0
   
   if [ -f "$db_file" ]; then
     # Get UIDs with root access from policies table
-    local uids
-    uids=$(magisk --sqlite "SELECT uid FROM policies WHERE policy > 0" 2>/dev/null)
+    local output
     
-    if [ -z "$uids" ]; then
-      # Fallback to sqlite3
-      uids=$(sqlite3 "$db_file" "SELECT uid FROM policies WHERE policy > 0" 2>/dev/null)
-    fi
+    # Method 1: Use magisk --sqlite (output format: uid=12345)
+    output=$(magisk --sqlite 'SELECT uid FROM policies WHERE policy > 0' 2>/dev/null)
     
-    # Convert UIDs to package names
-    if [ -n "$uids" ]; then
-      for uid in $uids; do
+    if [ -n "$output" ]; then
+      for line in $output; do
+        # Parse format: uid=12345
+        local uid
+        case "$line" in
+          uid=*)
+            uid="${line#uid=}"
+            ;;
+          *=*)
+            # Handle other key=value formats
+            continue
+            ;;
+          *)
+            # Plain number
+            uid="$line"
+            ;;
+        esac
+        
         # Skip empty or invalid UIDs
         [ -z "$uid" ] && continue
-        [ "$uid" -lt 10000 ] 2>/dev/null && continue  # Skip system UIDs
+        
+        # Check if it's a valid number and >= 10000
+        case "$uid" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        [ "$uid" -lt 10000 ] && continue  # Skip system UIDs
         
         local pkg
         pkg=$(get_package_from_uid "$uid")
         if [ -n "$pkg" ]; then
           echo "$pkg"
+          found=1
         fi
       done
-      return 0
     fi
+    
+    # Method 2: Fallback to sqlite3 directly
+    if [ "$found" = "0" ] && command -v sqlite3 >/dev/null 2>&1; then
+      output=$(sqlite3 "$db_file" 'SELECT uid FROM policies WHERE policy > 0' 2>/dev/null)
+      
+      if [ -n "$output" ]; then
+        for uid in $output; do
+          [ -z "$uid" ] && continue
+          case "$uid" in
+            ''|*[!0-9]*) continue ;;
+          esac
+          [ "$uid" -lt 10000 ] && continue
+          
+          local pkg
+          pkg=$(get_package_from_uid "$uid")
+          if [ -n "$pkg" ]; then
+            echo "$pkg"
+            found=1
+          fi
+        done
+      fi
+    fi
+    
+    [ "$found" = "1" ] && return 0
   fi
   
   return 1
@@ -386,15 +428,67 @@ revoke_root_access() {
   uid=$(get_uid_from_package "$pkg")
   [ -z "$uid" ] && return 1
   
+  local success=0
+  
   # Method 1: Use magisk --sqlite command with UID
-  if magisk --sqlite "DELETE FROM policies WHERE uid = $uid" 2>/dev/null; then
-    return 0
+  # Note: magisk --sqlite returns 0 even if no rows affected, so we need to verify
+  magisk --sqlite "DELETE FROM policies WHERE uid = $uid" 2>/dev/null
+  
+  # Verify deletion using magisk --sqlite
+  local verify
+  verify=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
+  # Handle output format: could be "policy=0", "0", or empty
+  case "$verify" in
+    ""|policy=0|0)
+      success=1
+      ;;
+  esac
+  
+  # Method 2: Direct database manipulation with UID if Method 1 failed
+  if [ "$success" = "0" ] && [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "DELETE FROM policies WHERE uid = $uid" 2>/dev/null
+    
+    # Verify deletion
+    verify=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
+    if [ -z "$verify" ] || [ "$verify" = "0" ]; then
+      success=1
+    fi
   fi
   
-  # Method 2: Direct database manipulation with UID
-  if [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$db_file" "DELETE FROM policies WHERE uid = $uid" 2>/dev/null
-    return $?
+  # Method 3: Try setting policy to 0 (deny) instead of deleting
+  if [ "$success" = "0" ]; then
+    magisk --sqlite "UPDATE policies SET policy = 0 WHERE uid = $uid" 2>/dev/null
+    
+    # Verify update
+    verify=$(magisk --sqlite "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
+    # Handle output format: could be "policy=0", "0", etc.
+    case "$verify" in
+      policy=0|0|"")
+        success=1
+        ;;
+    esac
+  fi
+  
+  # Method 4: Direct update using sqlite3
+  if [ "$success" = "0" ] && [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "UPDATE policies SET policy = 0 WHERE uid = $uid" 2>/dev/null
+    
+    # Verify update
+    verify=$(sqlite3 "$db_file" "SELECT policy FROM policies WHERE uid = $uid" 2>/dev/null)
+    if [ "$verify" = "0" ] || [ -z "$verify" ]; then
+      success=1
+    fi
+  fi
+  
+  if [ "$success" = "1" ]; then
+    # Notify Magisk daemon to reload policies
+    # Method 1: Use magisk --sqlite to trigger reload
+    magisk --sqlite "SELECT 1" 2>/dev/null
+    
+    # Method 2: Restart magiskd (more reliable)
+    killall -HUP magiskd 2>/dev/null || kill -HUP $(pgrep magiskd | head -1) 2>/dev/null || true
+    
+    return 0
   fi
   
   return 1
@@ -567,41 +661,37 @@ set_zygisk_enabled() {
   local db_file="/data/adb/magisk.db"
   local success=0
   
-  # Method 1: Update settings table in magisk.db
-  if [ -f "$db_file" ]; then
-    # Try both key names for compatibility
-    if magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk', '$enable')" 2>/dev/null; then
+  # Method 1: Use magisk --sqlite command
+  # Note: magisk --sqlite always returns 0 if command executes, so we need to verify
+  magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk', '$enable')" 2>/dev/null
+  magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk_enabled', '$enable')" 2>/dev/null
+  
+  # Verify the setting was applied
+  local verify
+  verify=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk'" 2>/dev/null)
+  
+  # Handle output format: could be "value=1", "1", or empty
+  case "$verify" in
+    value=$enable|$enable)
       success=1
-    elif magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk_enabled', '$enable')" 2>/dev/null; then
-      success=1
-    fi
+      ;;
+  esac
+  
+  # Method 2: Direct sqlite3 manipulation if Method 1 verification failed
+  if [ "$success" = "0" ] && [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk', '$enable')" 2>/dev/null
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO settings (key, value) VALUES ('zygisk_enabled', '$enable')" 2>/dev/null
     
-    if [ "$success" = "1" ]; then
-      # Verify the setting was applied
-      local verify_value
-      verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk' LIMIT 1" 2>/dev/null)
-      if [ -z "$verify_value" ]; then
-        verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'zygisk_enabled' LIMIT 1" 2>/dev/null)
-      fi
-      
-      if [ "$verify_value" = "$enable" ]; then
-        # Restart Magisk daemon to apply changes
-        killall magiskd 2>/dev/null || true
-        sleep 1
-        # Start new daemon
-        magisk --daemon 2>/dev/null || true
-        return 0
-      fi
+    # Verify again
+    verify=$(sqlite3 "$db_file" "SELECT value FROM settings WHERE key = 'zygisk'" 2>/dev/null)
+    if [ "$verify" = "$enable" ]; then
+      success=1
     fi
   fi
   
-  # Method 2: Update /data/adb/zygisk file (fallback for older versions)
-  if echo "$enable" > /data/adb/zygisk 2>/dev/null; then
-    chmod 644 /data/adb/zygisk 2>/dev/null
-    # Restart Magisk daemon
-    killall magiskd 2>/dev/null || true
-    sleep 1
-    magisk --daemon 2>/dev/null || true
+  if [ "$success" = "1" ]; then
+    # Notify Magisk daemon to reload settings (don't kill, just send HUP signal)
+    kill -HUP $(pgrep -x magiskd | head -1) 2>/dev/null || true
     return 0
   fi
   
@@ -653,45 +743,61 @@ set_denylist_enabled() {
   local db_file="/data/adb/magisk.db"
   local success=0
   
-  # Method 1: Update settings table in magisk.db
-  if [ -f "$db_file" ]; then
-    if magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$enable')" 2>/dev/null; then
-      success=1
-    fi
-    
-    if [ "$success" = "1" ]; then
-      # Verify the setting was applied
-      local verify_value
-      verify_value=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'denylist' LIMIT 1" 2>/dev/null)
-      
-      if [ "$verify_value" = "$enable" ]; then
-        # Restart Magisk daemon to apply changes
-        killall magiskd 2>/dev/null || true
-        sleep 1
-        magisk --daemon 2>/dev/null || true
-        return 0
+  # Method 1: Use magisk --denylist command (official way)
+  if [ "$enable" = "1" ]; then
+    magisk --denylist enable 2>/dev/null
+  else
+    magisk --denylist disable 2>/dev/null
+  fi
+  
+  # Verify using magisk --denylist status
+  local status
+  status=$(magisk --denylist status 2>/dev/null)
+  case "$status" in
+    *enabled*|*true*|*1*)
+      if [ "$enable" = "1" ]; then
+        success=1
       fi
+      ;;
+    *disabled*|*false*|*0*)
+      if [ "$enable" = "0" ]; then
+        success=1
+      fi
+      ;;
+  esac
+  
+  # Method 2: Use magisk --sqlite to update settings and verify
+  if [ "$success" = "0" ]; then
+    magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$enable')" 2>/dev/null
+    magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('magiskhide', '$enable')" 2>/dev/null
+    
+    # Verify the setting
+    local verify
+    verify=$(magisk --sqlite "SELECT value FROM settings WHERE key = 'denylist'" 2>/dev/null)
+    
+    case "$verify" in
+      value=$enable|$enable)
+        success=1
+        ;;
+    esac
+  fi
+  
+  # Method 3: Direct sqlite3 manipulation
+  if [ "$success" = "0" ] && [ -f "$db_file" ] && command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$enable')" 2>/dev/null
+    sqlite3 "$db_file" "INSERT OR REPLACE INTO settings (key, value) VALUES ('magiskhide', '$enable')" 2>/dev/null
+    
+    # Verify
+    verify=$(sqlite3 "$db_file" "SELECT value FROM settings WHERE key = 'denylist'" 2>/dev/null)
+    if [ "$verify" = "$enable" ]; then
+      success=1
     fi
   fi
   
-  # Method 2: Create/remove /data/adb/denylist file (fallback for older versions)
-  if [ "$enable" = "1" ]; then
-    if touch /data/adb/denylist 2>/dev/null; then
-      chmod 644 /data/adb/denylist 2>/dev/null
-      # Restart Magisk daemon
-      killall magiskd 2>/dev/null || true
-      sleep 1
-      magisk --daemon 2>/dev/null || true
-      return 0
-    fi
-  else
-    if rm -f /data/adb/denylist 2>/dev/null; then
-      # Restart Magisk daemon
-      killall magiskd 2>/dev/null || true
-      sleep 1
-      magisk --daemon 2>/dev/null || true
-      return 0
-    fi
+  if [ "$success" = "1" ]; then
+    # Notify Magisk daemon to reload settings (don't kill, just send HUP signal)
+    kill -HUP $(pgrep -x magiskd | head -1) 2>/dev/null || true
+    return 0
   fi
   
   return 1

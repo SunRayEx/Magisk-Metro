@@ -194,7 +194,6 @@ fun Project.setupCoreLib() {
                 it.addGeneratedSourceDirectory(syncResources, SyncWithDir::outputFolder)
             }
 
-            val stubTask = tasks.getByPath(":stub:comment$variantCapped")
             val syncAssets = tasks.register("sync${variantCapped}Assets", SyncWithDir::class) {
                 outputFolder.set(layout.buildDirectory.dir("$variantName/assets"))
                 into(outputFolder)
@@ -212,10 +211,7 @@ fun Project.setupCoreLib() {
                         include("kernel_data_key.vbprivk", "kernel.keyblock")
                     }
                 }
-                from(stubTask) {
-                    include { it.name.endsWith(".apk") }
-                    rename { "stub.apk" }
-                }
+                // stub.apk removed - no longer needed for MagiskUbe
                 filesMatching("**/util_functions.sh") {
                     filter {
                         it.replace(
@@ -296,8 +292,7 @@ fun Project.setupAppCommon() {
                 this.transformationRequest = transformationRequest
                 this.signingConfig = signingConfig
                 this.comment = "version=${Config.version}\n" +
-                        "versionCode=${Config.versionCode}\n" +
-                        "stubVersion=${Config.stubVersion}\n"
+                        "versionCode=${Config.versionCode}\n"
                 this.outFolder.set(layout.buildDirectory.dir("outputs/apk/${variant.name}"))
             }
 

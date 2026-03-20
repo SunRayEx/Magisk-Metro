@@ -755,9 +755,20 @@ install_module() {
 ##########
 
 # Detect whether in boot mode
-[ -z $BOOTMODE ] && ps | grep zygote | grep -qv grep && BOOTMODE=true
-[ -z $BOOTMODE ] && ps -A 2>/dev/null | grep zygote | grep -qv grep && BOOTMODE=true
-[ -z $BOOTMODE ] && BOOTMODE=false
+# Only set BOOTMODE if it's not already set (e.g., by the calling script)
+# This prevents overwriting BOOTMODE=true when this script is sourced
+if [ -z "$BOOTMODE" ]; then
+  if ps | grep zygote | grep -qv grep 2>/dev/null; then
+    BOOTMODE=true
+  elif ps -A 2>/dev/null | grep zygote | grep -qv grep; then
+    BOOTMODE=true
+  else
+    BOOTMODE=false
+  fi
+fi
+
+# If BOOTMODE is still not set, default to false
+[ -z "$BOOTMODE" ] && BOOTMODE=false
 
 TMPDIR=/dev/tmp
 MAGISKBIN="/data/adb/magisk"

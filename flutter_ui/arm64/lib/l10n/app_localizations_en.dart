@@ -183,6 +183,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get denyListDesc => 'Enable or disable DenyList';
 
   @override
+  String get suList => 'SuList';
+
+  @override
+  String get suListDesc => 'Whitelist mode - only listed apps get root access';
+
+  @override
+  String get aggressiveHide => 'Aggressive Hide';
+
+  @override
+  String get aggressiveHideDesc => 'Enhanced hiding: spoof props, clear env vars';
+
+  @override
+  String get enableDenyOrSuList => 'Enable DenyList or SuList above to manage apps.';
+
+  @override
   String get installModule => 'Install Module';
 
   @override
@@ -196,4 +211,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rootRequired => 'Root access is required for this operation';
+
+  @override
+  String get magiskRootRequired => 'Magisk Root permission is required for this feature';
+
+  @override
+  String get noFileSelected => 'No file selected';
 }

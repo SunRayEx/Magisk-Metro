@@ -87,6 +87,7 @@ pub mod ffi {
         ZygiskConfig,
         BootloopCount,
         SuManager,
+        SulistConfig,
     }
 
     #[repr(i32)]
@@ -121,6 +122,7 @@ pub mod ffi {
     enum ZygiskStateFlags {
         ProcessGrantedRoot = 0x00000001,
         ProcessOnDenyList = 0x00000002,
+        SuListEnforced = 0x00000004,
         DenyListEnforced = 0x40000000,
         ProcessIsMagiskApp = 0x80000000,
     }
@@ -222,6 +224,7 @@ pub mod ffi {
         fn get_db_setting(&self, key: DbEntryKey) -> i32;
         #[cxx_name = "set_db_setting"]
         fn set_db_setting_for_cxx(&self, key: DbEntryKey, value: i32) -> bool;
+        fn uid_granted_root(&self, uid: i32) -> bool;
 
         #[Self = MagiskD]
         #[cxx_name = "Get"]

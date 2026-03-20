@@ -79,6 +79,7 @@ default_abis = support_abis.keys() - {"riscv64"}
 support_targets = {"magisk", "magiskinit", "magiskboot", "magiskpolicy", "resetprop"}
 default_targets = support_targets - {"resetprop"}
 rust_targets = default_targets.copy()
+rust_jni_targets = set()
 clean_targets = {"native", "cpp", "rust", "app"}
 ondk_version = "r29.5"
 
@@ -296,6 +297,65 @@ def build_rust_src(targets: set[str]):
             mv(source, target)
 
 
+def build_rust_jni(targets: set[str]):
+    """Build Rust JNI libraries (.so files) for Android"""
+    targets = targets & rust_jni_targets
+    if not targets:
+        return
+
+    header("* Building JNI libraries: " + " ".join(targets))
+
+    os.chdir(Path("native", "src"))
+
+    cmds = ["build", "-p", ""]
+    if args.release:
+        cmds.append("-r")
+        profile = "release"
+    else:
+        profile = "debug"
+    if args.verbose == 0:
+        cmds.append("-q")
+    elif args.verbose > 1:
+        cmds.append("--verbose")
+
+    for triple in build_abis.values():
+        cmds.append("--target")
+        cmds.append(triple)
+
+    for tgt in targets:
+        cmds[2] = tgt
+        proc = run_cargo(cmds)
+        if proc.returncode != 0:
+            error(f"Build JNI library {tgt} failed!")
+
+    os.chdir(Path("..", ".."))
+
+    native_out = Path("native", "out")
+    rust_out = native_out / "rust"
+    
+    # Copy .so files to Flutter app jniLibs directory
+    flutter_jni_libs = Path("flutter_ui", "arm64", "android", "app", "src", "main", "jniLibs")
+    
+    for arch, triple in build_abis.items():
+        arch_out = native_out / arch
+        arch_out.mkdir(mode=0o755, exist_ok=True)
+        
+        for tgt in targets:
+            # The library name is defined in Cargo.toml as 'magiskboot'
+            source = rust_out / triple / profile / "libmagiskboot.so"
+            if source.exists():
+                # Copy to native out
+                target = arch_out / "libmagiskboot.so"
+                mv(source, target)
+                
+                # Copy to Flutter jniLibs
+                jni_arch_dir = flutter_jni_libs / arch
+                jni_arch_dir.mkdir(parents=True, exist_ok=True)
+                cp(target, jni_arch_dir / "libmagiskboot.so")
+                
+                vprint(f"Copied JNI library to {jni_arch_dir / 'libmagiskboot.so'}")
+
+
 def write_if_diff(file_name: Path, text: str):
     do_write = True
     if file_name.exists():
@@ -437,11 +497,7 @@ def build_app():
     mv(source, target)
     header(f"Output: {target}")
 
-    # Stub building is directly integrated into the main app
-    # build process. Copy the stub APK into output directory.
-    source = Path("app", "core", "src", build_type, "assets", "stub.apk")
-    target = config["outdir"] / f"stub-{build_type}.apk"
-    cp(source, target)
+    # Stub removed - Flutter app is standalone, no dynamic loading needed
 
 
 def build_flutter_app():
@@ -469,26 +525,33 @@ def build_flutter_app():
 
 def build_flutter_magisk():
     header("* Building Flutter Magisk with native binaries")
-    # First build native binaries
+    
+    # Build JNI library first (for magiskboot functionality on Android 10+)
+    ensure_toolchain()
+    dump_flag_header()
+    build_rust_jni(rust_jni_targets)
+    
+    # Build native binaries
     build_native()
     
     # Copy necessary files to Flutter assets
     flutter_assets = Path("flutter_ui", "arm64", "android", "app", "src", "main", "assets")
     flutter_assets.mkdir(parents=True, exist_ok=True)
     
-    # Copy native binaries
+    # Copy native binaries (for root operations)
     native_out = Path("native", "out", "arm64-v8a")
-    binaries = ["magisk", "magiskboot", "magiskinit", "magiskpolicy"]
+    binaries = ["magisk", "magiskinit", "magiskpolicy"]
     for binary in binaries:
         source = native_out / binary
         target = flutter_assets / binary
         if source.exists():
             cp(source, target)
     
-    # Copy stub.apk
-    stub_source = Path("temp_apk", "assets", "stub.apk")
-    if stub_source.exists():
-        cp(stub_source, flutter_assets / "stub.apk")
+    # Note: magiskboot is now a JNI library (.so), not a binary
+    # It's already copied to jniLibs by build_rust_jni()
+    
+    # Skip stub.apk - Flutter app is standalone, no dynamic loading needed
+    # This prevents the "stub takeover" issue where stub.apk replaces the Flutter app
     
     # Copy scripts
     scripts = ["util_functions.sh", "boot_patch.sh", "uninstaller.sh"]
@@ -860,7 +923,7 @@ def load_config():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Magisk build script")
-    parser.set_defaults(func=lambda x: None)
+    parser.set_defaults(func=lambda: None)
     parser.add_argument(
         "-r", "--release", action="store_true", help="compile in release mode"
     )

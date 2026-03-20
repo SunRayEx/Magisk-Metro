@@ -31,13 +31,13 @@ class NetworkService(
             CUSTOM_CHANNEL -> fetchCustomUpdate(Config.customChannelUrl)
             else -> throw IllegalArgumentException()
         }
-        if (info.versionCode < Info.env.versionCode &&
-            Config.updateChannel == DEFAULT_CHANNEL &&
-            !BuildConfig.DEBUG
-        ) {
-            Config.updateChannel = BETA_CHANNEL
-            info = fetchBetaUpdate()
-        }
+        //if (info.versionCode < Info.env.versionCode &&
+        //    Config.updateChannel == DEFAULT_CHANNEL &&
+        //    !BuildConfig.DEBUG
+        //) {
+        //    Config.updateChannel = BETA_CHANNEL
+        //    info = fetchBetaUpdate()
+        //}
         info
     }
 

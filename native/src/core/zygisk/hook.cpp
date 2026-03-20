@@ -373,8 +373,10 @@ void HookContext::post_native_bridge_load(void *handle) {
 
     // Reload the real native bridge if necessary
     auto nb = get_prop(NBPROP);
-    auto len = sizeof(ZYGISKLDR) - 1;
+    // Use the length of the loader name to detect if we appended original bridge
+    auto len = ZYGISKLDR_LEN;
     if (nb.size() > len) {
+        // The property value starts with our loader name, followed by the original bridge
         arg.load_native_bridge(nb.c_str() + len, arg.callbacks);
     }
     runtime_callbacks = arg.callbacks;

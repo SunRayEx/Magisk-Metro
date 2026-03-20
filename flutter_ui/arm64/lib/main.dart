@@ -6,20 +6,39 @@ import 'animated_dashboard_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'utils/persistent_storage.dart';
 import 'providers/dashboard_providers.dart';
+import 'services/android_data_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Load persisted settings
   final storage = PersistentStorage();
-  final isDarkMode = await storage.loadDarkMode();
-  final tileColor = await storage.loadTileColor();
+  
+  // Load all cached data in parallel for smooth cold start
+  final results = await Future.wait([
+    storage.loadDarkMode(),
+    storage.loadTileColor(),
+    storage.loadMagiskStatusCache(),
+    storage.loadModulesCache(),
+    storage.loadAppsCache(),
+    storage.loadSuListEnabled(),
+  ]);
+  
+  final isDarkMode = results[0] as bool;
+  final tileColor = results[1] as int;
+  final magiskStatusCache = results[2] as Map<String, dynamic>;
+  final modulesCache = results[3] as List<Map<String, dynamic>>;
+  final appsCache = results[4] as List<Map<String, dynamic>>;
+  final suListEnabled = results[5] as bool;
+  
+  // Initialize AndroidDataService
+  await AndroidDataService.initialize();
   
   runApp(
     ProviderScope(
       overrides: [
         themeProvider.overrideWith((ref) => isDarkMode),
         tileColorProvider.overrideWith((ref) => tileColor),
+        suListEnabledProvider.overrideWith((ref) => suListEnabled),
       ],
       child: const MagiskDashboardApp(),
     ),

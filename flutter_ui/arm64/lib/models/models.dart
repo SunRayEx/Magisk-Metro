@@ -33,6 +33,11 @@ class Module {
   final bool isEnabled;
   final String description;
   final String path;
+  final bool hasWebUI;        // Whether module has web interface
+  final String? webUIUrl;     // URL for web interface (e.g., http://127.0.0.1:port)
+  final bool hasActionScript; // Whether module has action script (action.sh)
+  final int? webUIPort;       // Port for web UI
+  final bool needsReboot;     // Whether module needs reboot to take effect (update folder exists)
 
   const Module({
     required this.name,
@@ -41,6 +46,11 @@ class Module {
     this.isEnabled = true,
     this.description = '',
     this.path = '',
+    this.hasWebUI = false,
+    this.webUIUrl,
+    this.hasActionScript = false,
+    this.webUIPort,
+    this.needsReboot = false,
   });
 
   Module copyWith({
@@ -50,6 +60,11 @@ class Module {
     bool? isEnabled,
     String? description,
     String? path,
+    bool? hasWebUI,
+    String? webUIUrl,
+    bool? hasActionScript,
+    int? webUIPort,
+    bool? needsReboot,
   }) {
     return Module(
       name: name ?? this.name,
@@ -58,6 +73,11 @@ class Module {
       isEnabled: isEnabled ?? this.isEnabled,
       description: description ?? this.description,
       path: path ?? this.path,
+      hasWebUI: hasWebUI ?? this.hasWebUI,
+      webUIUrl: webUIUrl ?? this.webUIUrl,
+      hasActionScript: hasActionScript ?? this.hasActionScript,
+      webUIPort: webUIPort ?? this.webUIPort,
+      needsReboot: needsReboot ?? this.needsReboot,
     );
   }
 }

@@ -402,11 +402,55 @@ void ZygiskContext::app_specialize_pre() {
 
     rust::Vec<int> module_fds;
     owned_fd fd = get_module_info(args.app->uid, module_fds);
+    
+    // Log all flags for debugging
+    ZLOGD("[%s] info_flags=0x%08x (DenyListEnforced=%d, SuListEnforced=%d, ProcessOnDenyList=%d, ProcessGrantedRoot=%d, ProcessIsMagiskApp=%d)\n",
+          process, info_flags,
+          (info_flags & +ZygiskStateFlags::DenyListEnforced) ? 1 : 0,
+          (info_flags & +ZygiskStateFlags::SuListEnforced) ? 1 : 0,
+          (info_flags & +ZygiskStateFlags::ProcessOnDenyList) ? 1 : 0,
+          (info_flags & +ZygiskStateFlags::ProcessGrantedRoot) ? 1 : 0,
+          (info_flags & +ZygiskStateFlags::ProcessIsMagiskApp) ? 1 : 0);
+    
+    // IMPORTANT: Never hide Magisk App itself!
+    // ProcessIsMagiskApp is set for the manager app in daemon.rs
+    // The ProcessOnDenyList flag is already cleared for Manager in daemon.rs
+    if (info_flags & +ZygiskStateFlags::ProcessIsMagiskApp) {
+        ZLOGI("[%s] is Magisk App, skipping hide, loading modules\n", process);
+        // Manager always gets modules loaded
+        if (fd >= 0 && !module_fds.empty()) {
+            run_modules_pre(module_fds);
+        }
+        return;
+    }
+    
+    // Determine if we should unmount based on the flags
+    // The Rust side (zygisk_should_load_module) already decided if modules should be loaded
+    // If module_fds is not empty, it means we should load modules (not hidden)
+    // If module_fds is empty, it means we should hide (unmount)
+    
+    bool should_unmount = false;
+    
+    // DenyList mode: ProcessOnDenyList + DenyListEnforced = hide
     if ((info_flags & UNMOUNT_MASK) == UNMOUNT_MASK) {
-        ZLOGI("[%s] is on the denylist\n", process);
+        ZLOGI("[%s] on DenyList, hiding\n", process);
+        should_unmount = true;
+    }
+    // SuList mode: ProcessOnDenyList means NOT in whitelist = hide
+    else if ((info_flags & SULIST_UNMOUNT_MASK) && (info_flags & +ZygiskStateFlags::ProcessOnDenyList)) {
+        ZLOGI("[%s] NOT in SuList, hiding\n", process);
+        should_unmount = true;
+    }
+    
+    if (should_unmount) {
         flags |= DO_REVERT_UNMOUNT;
-    } else if (fd >= 0) {
-        run_modules_pre(module_fds);
+        ZLOGI("[%s] DO_REVERT_UNMOUNT set\n", process);
+    } else {
+        // Not hiding, load modules if available
+        if (fd >= 0 && !module_fds.empty()) {
+            ZLOGD("[%s] loading modules\n", process);
+            run_modules_pre(module_fds);
+        }
     }
 }
 

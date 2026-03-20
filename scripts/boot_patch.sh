@@ -21,7 +21,6 @@
 # magisk             binary    The magisk binary.
 # magiskboot         binary    A tool to manipulate boot images.
 # init-ld            binary    The library that will be LD_PRELOAD of /init
-# stub.apk           binary    The stub Magisk app to embed into ramdisk.
 # chromeos           folder    This folder includes the utility and keys to sign
 #                  (optional)  chromeos boot images. Only used for Pixel C.
 #
@@ -176,8 +175,23 @@ $BOOTMODE && [ -z "$PREINITDEVICE" ] && PREINITDEVICE=$(./magisk --preinit-devic
 
 # Compress to save precious ramdisk space
 ./magiskboot compress=xz magisk magisk.xz
-./magiskboot compress=xz stub.apk stub.xz
 ./magiskboot compress=xz init-ld init-ld.xz
+# Compress busybox if available (for boot patch mode without APK)
+if [ -f busybox ]; then
+  ./magiskboot compress=xz busybox busybox.xz
+fi
+# Compress magiskboot if available
+if [ -f magiskboot ]; then
+  ./magiskboot compress=xz magiskboot magiskboot.xz
+fi
+# Compress magiskinit if available
+if [ -f magiskinit ]; then
+  ./magiskboot compress=xz magiskinit magiskinit.xz
+fi
+# Compress magiskpolicy if available
+if [ -f magiskpolicy ]; then
+  ./magiskboot compress=xz magiskpolicy magiskpolicy.xz
+fi
 
 echo "KEEPVERITY=$KEEPVERITY" > config
 echo "KEEPFORCEENCRYPT=$KEEPFORCEENCRYPT" >> config
@@ -194,13 +208,47 @@ fi
 "mkdir 0750 overlay.d" \
 "mkdir 0750 overlay.d/sbin" \
 "add 0644 overlay.d/sbin/magisk.xz magisk.xz" \
-"add 0644 overlay.d/sbin/stub.xz stub.xz" \
 "add 0644 overlay.d/sbin/init-ld.xz init-ld.xz" \
 "patch" \
 "$SKIP_BACKUP backup ramdisk.cpio.orig" \
 "mkdir 000 .backup" \
 "add 000 .backup/.magisk config" \
 || abort "! Unable to patch ramdisk"
+
+# Add busybox to ramdisk if available
+if [ -f busybox.xz ]; then
+  ./magiskboot cpio $RAMDISK "add 0644 overlay.d/sbin/busybox.xz busybox.xz" \
+  || ui_print "! Unable to add busybox to ramdisk"
+fi
+
+# Add magiskboot to ramdisk if available
+if [ -f magiskboot.xz ]; then
+  ./magiskboot cpio $RAMDISK "add 0644 overlay.d/sbin/magiskboot.xz magiskboot.xz" \
+  || ui_print "! Unable to add magiskboot to ramdisk"
+fi
+
+# Add magiskinit to ramdisk if available
+if [ -f magiskinit.xz ]; then
+  ./magiskboot cpio $RAMDISK "add 0644 overlay.d/sbin/magiskinit.xz magiskinit.xz" \
+  || ui_print "! Unable to add magiskinit to ramdisk"
+fi
+
+# Add magiskpolicy to ramdisk if available
+if [ -f magiskpolicy.xz ]; then
+  ./magiskboot cpio $RAMDISK "add 0644 overlay.d/sbin/magiskpolicy.xz magiskpolicy.xz" \
+  || ui_print "! Unable to add magiskpolicy to ramdisk"
+fi
+
+# Add scripts to ramdisk (not compressed, shell scripts)
+if [ -f boot_patch.sh ]; then
+  ./magiskboot cpio $RAMDISK "add 0755 overlay.d/sbin/boot_patch.sh boot_patch.sh" \
+  || ui_print "! Unable to add boot_patch.sh to ramdisk"
+fi
+
+if [ -f util_functions.sh ]; then
+  ./magiskboot cpio $RAMDISK "add 0755 overlay.d/sbin/util_functions.sh util_functions.sh" \
+  || ui_print "! Unable to add util_functions.sh to ramdisk"
+fi
 
 rm -f ramdisk.cpio.orig config *.xz
 
@@ -261,6 +309,67 @@ ui_print "- Repacking boot image"
 
 # Sign chromeos boot
 $CHROMEOS && sign_chromeos
+
+# Extract binaries to /data/adb/magisk for magiskd
+ui_print "- Extracting binaries to /data/adb/magisk"
+if [ -d /data/adb ]; then
+  mkdir -p /data/adb/magisk
+  # Copy binary files
+  if [ -f magisk ]; then
+    cp -f magisk /data/adb/magisk/magisk
+    chmod 755 /data/adb/magisk/magisk
+  fi
+  if [ -f magiskboot ]; then
+    cp -f magiskboot /data/adb/magisk/magiskboot
+    chmod 755 /data/adb/magisk/magiskboot
+  fi
+  if [ -f magiskinit ]; then
+    cp -f magiskinit /data/adb/magisk/magiskinit
+    chmod 755 /data/adb/magisk/magiskinit
+  fi
+  if [ -f magiskpolicy ]; then
+    cp -f magiskpolicy /data/adb/magisk/magiskpolicy
+    chmod 755 /data/adb/magisk/magiskpolicy
+  fi
+  if [ -f init-ld ]; then
+    cp -f init-ld /data/adb/magisk/init-ld
+    chmod 755 /data/adb/magisk/init-ld
+  fi
+  if [ -f busybox ]; then
+    cp -f busybox /data/adb/magisk/busybox
+    chmod 755 /data/adb/magisk/busybox
+  fi
+  # Copy script files
+  if [ -f boot_patch.sh ]; then
+    cp -f boot_patch.sh /data/adb/magisk/boot_patch.sh
+    chmod 755 /data/adb/magisk/boot_patch.sh
+  fi
+  if [ -f util_functions.sh ]; then
+    cp -f util_functions.sh /data/adb/magisk/util_functions.sh
+    chmod 755 /data/adb/magisk/util_functions.sh
+  fi
+  # Copy chromeos files for Pixel C devices
+  if [ -d chromeos ]; then
+    mkdir -p /data/adb/magisk/chromeos
+    if [ -f chromeos/futility ]; then
+      cp -f chromeos/futility /data/adb/magisk/chromeos/futility
+      chmod 755 /data/adb/magisk/chromeos/futility
+    fi
+    if [ -f chromeos/kernel.keyblock ]; then
+      cp -f chromeos/kernel.keyblock /data/adb/magisk/chromeos/kernel.keyblock
+      chmod 644 /data/adb/magisk/chromeos/kernel.keyblock
+    fi
+    if [ -f chromeos/kernel_data_key.vbprivk ]; then
+      cp -f chromeos/kernel_data_key.vbprivk /data/adb/magisk/chromeos/kernel_data_key.vbprivk
+      chmod 644 /data/adb/magisk/chromeos/kernel_data_key.vbprivk
+    fi
+  fi
+  # Set proper SELinux context
+  chcon -R u:object_r:magisk_file:s0 /data/adb/magisk 2>/dev/null || true
+  ui_print "- Binaries extracted to /data/adb/magisk"
+else
+  ui_print "! /data/adb not available, skipping binary extraction"
+fi
 
 # Restore the original boot partition path
 [ -e "$BOOTNAND" ] && BOOTIMAGE="$BOOTNAND"

@@ -39,6 +39,15 @@ int add_list(int client);
 int rm_list(int client);
 void ls_list(int client);
 
+// SuList functions
+int enable_sulist();
+int disable_sulist();
+
 bool proc_context_match(int pid, std::string_view context);
 void *logcat(void *arg);
 extern bool logcat_exit;
+
+// Global state
+#include <atomic>
+extern std::atomic<bool> denylist_enforced;
+extern std::atomic<bool> enforce_sulist;

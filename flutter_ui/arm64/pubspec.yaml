@@ -1,7 +1,7 @@
 name: magiskube
 description: MagisKube - Metro UI style dashboard for Magisk
 publish_to: 'none'
-version: 1.0.0+0
+version: 10001.0.0+10001
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -14,11 +14,20 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.2.2
+  webview_flutter: ^4.4.2
+  webview_flutter_android: ^3.12.0
+  path_provider: ^2.1.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon.png"
 
 flutter:
   generate: true
