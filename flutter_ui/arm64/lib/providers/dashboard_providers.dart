@@ -418,34 +418,42 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
       // Reload SuList state first
       await _loadSuListState();
       
+      // Get installed apps
       final apps = await AndroidDataService.getApps();
       
       if (apps.isNotEmpty) {
-        // If SuList is enabled, load DenyList and invert the logic
-        // SuList = DenyList反选：在DenyList中的应用可见root，不在DenyList中的应用被隐藏
-        Set<String> denyListPackages = {};
+        // Get root access apps from policies database
+        Set<String> rootAccessPackages = {};
+        try {
+          final rootApps = await AndroidDataService.getRootAccessApps();
+          rootAccessPackages = rootApps.toSet();
+          debugPrint('AppsNotifier: Found ${rootAccessPackages.length} apps with root access: $rootAccessPackages');
+        } catch (e) {
+          debugPrint('AppsNotifier: Error getting root access apps: $e');
+        }
+        
+        // If SuList is enabled, also load SuList whitelist
+        Set<String> suListPackages = {};
         if (_isSuListEnabled) {
           try {
-            // Get DenyList packages
-            final denyList = await AndroidDataService.getDenyList();
-            denyListPackages = denyList.toSet();
+            suListPackages = await AndroidDataService.getSuListApps();
+            debugPrint('AppsNotifier: SuList enabled, whitelist: $suListPackages');
           } catch (e) {
-            // Ignore error
+            debugPrint('AppsNotifier: Error getting SuList apps: $e');
           }
         }
         
         final loadedApps = apps.map((app) {
           final packageName = app['packageName']?.toString() ?? '';
-          final inDenyList = denyListPackages.contains(packageName);
+          final hasRootAccess = _isSuListEnabled 
+              ? suListPackages.contains(packageName)
+              : rootAccessPackages.contains(packageName);
+          
           return AppInfo(
             name: app['name']?.toString() ?? 'Unknown',
             packageName: packageName,
             isActive: app['isActive'] as bool? ?? true,
-            // SuList mode: inDenyList = hasRootAccess (inverted logic)
-            // Normal mode: use hasRootAccess from system
-            hasRootAccess: _isSuListEnabled 
-                ? inDenyList  // SuList: 在DenyList中 = 可见root
-                : (app['hasRootAccess'] as bool? ?? false),
+            hasRootAccess: hasRootAccess,
           );
         }).toList();
         
@@ -453,10 +461,13 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
         _persistentCache = loadedApps;
         state = loadedApps;
         
+        debugPrint('AppsNotifier: Loaded ${loadedApps.length} apps, ${loadedApps.where((a) => a.hasRootAccess).length} with root access');
+        
         // Save to storage
         await _saveAppsToStorage(loadedApps);
       }
     } catch (e) {
+      debugPrint('AppsNotifier: Error loading apps: $e');
       // Keep current list on error
     }
   }
@@ -509,13 +520,11 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
         
         try {
           if (_isSuListEnabled) {
-            // SuList mode = DenyList反选
-            // hasRootAccess = true => 加入DenyList (可见root)
-            // hasRootAccess = false => 从DenyList移除 (隐藏root)
+            // SuList mode
             if (hasRootAccess) {
-              await AndroidDataService.addToDenyList(packageName);
+              await AndroidDataService.addToSuList(packageName);
             } else {
-              await AndroidDataService.removeFromDenyList(packageName);
+              await AndroidDataService.removeFromSuList(packageName);
             }
           } else {
             // Traditional mode
@@ -576,25 +585,275 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
   }
 }
 
-/// Optimized logs provider with limited buffer
-final logsProvider = StreamProvider<List<String>>((ref) {
-  return AndroidDataService.getLogcatStream()
-      .take(20)
-      .toList()
-      .asStream()
-      .asyncExpand((initial) {
-    final logs = <String>[...initial];
-    return AndroidDataService.getLogcatStream().map((log) {
-      logs.add(log);
-      if (logs.length > 20) {
-        logs.removeAt(0);
-      }
-      return List<String>.from(logs);
-    });
-  });
+/// Logs provider - shows all Magisk logs using root shell fetch
+/// Same method as original Magisk app: cat /cache/magisk.log || logcat -d -s Magisk
+final logsProvider = StateNotifierProvider<LogsNotifier, AsyncValue<List<String>>>((ref) {
+  return LogsNotifier();
 });
 
-final denyListEnabledProvider = StateProvider<bool>((ref) => true);
+class LogsNotifier extends StateNotifier<AsyncValue<List<String>>> {
+  LogsNotifier() : super(const AsyncValue.loading()) {
+    _loadLogs();
+  }
+  
+  Future<void> _loadLogs() async {
+    try {
+      state = const AsyncValue.loading();
+      // Use the same method as original Magisk app
+      final logContent = await AndroidDataService.fetchMagiskLogs();
+      final logs = logContent.split('\n').where((line) => line.isNotEmpty).toList();
+      state = AsyncValue.data(logs);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+  
+  /// Clear Magisk logs
+  Future<bool> clearLogs() async {
+    try {
+      final success = await AndroidDataService.clearMagiskLogs();
+      if (success) {
+        state = const AsyncValue.data([]);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  Future<void> refresh() async {
+    await _loadLogs();
+  }
+}
+
+/// Filtered logs provider for dashboard tile - shows only E/W/D level logs
+final filteredLogsProvider = Provider<List<String>>((ref) {
+  final logsAsync = ref.watch(logsProvider);
+  return logsAsync.when(
+    data: (logs) => logs.where((log) => 
+      log.contains('[E]') || 
+      log.contains('[W]') || 
+      log.contains('[D]') ||
+      log.contains(' E:') ||
+      log.contains(' W:') ||
+      log.contains(' D:')
+    ).toList(),
+    loading: () => [],
+    error: (_, __) => [],
+  );
+});
+
+final denyListEnabledProvider = StateProvider<bool>((ref) => false);
+
+/// DenyList state provider with caching
+final denyListStateProvider = StateNotifierProvider<DenyListNotifier, DenyListState>((ref) {
+  return DenyListNotifier();
+});
+
+/// DenyList state model
+class DenyListState {
+  final bool isEnabled;
+  final Set<String> apps;
+  final Set<String> activities;
+  final bool isLoading;
+  final DateTime? lastUpdate;
+  
+  const DenyListState({
+    this.isEnabled = false,
+    this.apps = const {},
+    this.activities = const {},
+    this.isLoading = true,
+    this.lastUpdate,
+  });
+  
+  DenyListState copyWith({
+    bool? isEnabled,
+    Set<String>? apps,
+    Set<String>? activities,
+    bool? isLoading,
+    DateTime? lastUpdate,
+  }) {
+    return DenyListState(
+      isEnabled: isEnabled ?? this.isEnabled,
+      apps: apps ?? this.apps,
+      activities: activities ?? this.activities,
+      isLoading: isLoading ?? this.isLoading,
+      lastUpdate: lastUpdate ?? this.lastUpdate,
+    );
+  }
+}
+
+/// Pending DenyList changes - tracked locally, flushed on refresh/leave
+final pendingDenyListChangesProvider = StateProvider<Map<String, bool>>((ref) => {});
+
+class DenyListNotifier extends StateNotifier<DenyListState> {
+  static DenyListState? _persistentCache;
+  static const _cacheDuration = Duration(seconds: 10);
+  
+  DenyListNotifier() : super(_persistentCache ?? const DenyListState()) {
+    if (_persistentCache == null) {
+      _loadFromStorage();
+    } else {
+      // Refresh in background
+      _refreshIfNeeded();
+    }
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    
+    final enabled = await storage.loadDenyListEnabled();
+    final apps = await storage.loadDenyListApps();
+    final activities = await storage.loadDenyListActivities();
+    
+    final cachedState = DenyListState(
+      isEnabled: enabled,
+      apps: apps,
+      activities: activities,
+      isLoading: false,
+      lastUpdate: DateTime.now(),
+    );
+    
+    _persistentCache = cachedState;
+    state = cachedState;
+    
+    // Refresh in background
+    _refreshIfNeeded();
+  }
+  
+  Future<void> _refreshIfNeeded() async {
+    final now = DateTime.now();
+    if (state.lastUpdate != null && 
+        now.difference(state.lastUpdate!) < _cacheDuration) {
+      return;
+    }
+    await _loadFromMagiskDB();
+  }
+  
+  Future<void> _loadFromMagiskDB() async {
+    try {
+      final enabled = await AndroidDataService.isDenyListEnabled();
+      final denyListRaw = await AndroidDataService.getDenyList();
+      
+      // Parse denylist - format: package|process or package/activity
+      final apps = <String>{};
+      final activities = <String>{};
+      
+      for (final item in denyListRaw) {
+        if (item.contains('|')) {
+          // Format: package|process
+          final parts = item.split('|');
+          final packageName = parts.first.trim();
+          if (packageName.isNotEmpty) {
+            apps.add(packageName);
+          }
+        } else if (item.contains('/')) {
+          // Format: package/activity
+          activities.add(item);
+          apps.add(item.split('/').first);
+        } else if (item.isNotEmpty) {
+          // Plain package name
+          apps.add(item);
+        }
+      }
+      
+      final newState = DenyListState(
+        isEnabled: enabled,
+        apps: apps,
+        activities: activities,
+        isLoading: false,
+        lastUpdate: DateTime.now(),
+      );
+      
+      _persistentCache = newState;
+      state = newState;
+      
+      // Save to storage
+      final storage = PersistentStorage();
+      await storage.saveDenyListEnabled(enabled);
+      await storage.saveDenyListApps(apps);
+      await storage.saveDenyListActivities(activities);
+    } catch (e) {
+      debugPrint('DenyListNotifier: Error loading from magisk.db: $e');
+      state = state.copyWith(isLoading: false);
+    }
+  }
+  
+  /// Toggle DenyList enabled state (writes immediately)
+  Future<void> setEnabled(bool enabled) async {
+    state = state.copyWith(isEnabled: enabled);
+    _persistentCache = state;
+    
+    try {
+      await AndroidDataService.setDenyListEnabled(enabled);
+      
+      final storage = PersistentStorage();
+      await storage.saveDenyListEnabled(enabled);
+    } catch (e) {
+      // Revert on error
+      state = state.copyWith(isEnabled: !enabled);
+      _persistentCache = state;
+    }
+  }
+  
+  /// Toggle app in DenyList (local state only, flush on refresh/leave)
+  void toggleApp(String packageName, bool inDenyList) {
+    final newApps = Set<String>.from(state.apps);
+    if (inDenyList) {
+      newApps.add(packageName);
+    } else {
+      newApps.remove(packageName);
+    }
+    
+    state = state.copyWith(apps: newApps);
+    _persistentCache = state;
+  }
+  
+  /// Toggle activity in DenyList (local state only)
+  void toggleActivity(String fullActivityName, bool inDenyList) {
+    final newActivities = Set<String>.from(state.activities);
+    if (inDenyList) {
+      newActivities.add(fullActivityName);
+    } else {
+      newActivities.remove(fullActivityName);
+    }
+    
+    state = state.copyWith(activities: newActivities);
+    _persistentCache = state;
+  }
+  
+  /// Flush pending changes to magisk.db
+  Future<void> flushPendingChanges(Map<String, bool> pendingChanges) async {
+    if (pendingChanges.isEmpty) return;
+    
+    for (final entry in pendingChanges.entries) {
+      final packageName = entry.key;
+      final shouldAdd = entry.value;
+      
+      try {
+        if (shouldAdd) {
+          await AndroidDataService.addToDenyList(packageName);
+        } else {
+          await AndroidDataService.removeFromDenyList(packageName);
+        }
+      } catch (e) {
+        debugPrint('DenyListNotifier: Error flushing change for $packageName: $e');
+      }
+    }
+    
+    // Save updated state
+    final storage = PersistentStorage();
+    await storage.saveDenyListApps(state.apps);
+    await storage.saveDenyListActivities(state.activities);
+  }
+  
+  /// Refresh from magisk.db
+  Future<void> refresh() async {
+    state = state.copyWith(isLoading: true);
+    await _loadFromMagiskDB();
+  }
+}
 
 final contributorsProvider = Provider<List<Contributor>>((ref) {
   return const [

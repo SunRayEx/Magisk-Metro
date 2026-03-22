@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/dashboard_providers.dart';
 import '../models/models.dart';
 import '../services/android_data_service.dart';
@@ -515,6 +516,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         if (enabled && mounted) {
           _showRestartDialog();
         }
+        // If Zygisk is disabled, also disable DenyList
+        if (!enabled) {
+          await AndroidDataService.setDenyListEnabled(false);
+        }
       } else {
         setState(() {
           _isZygiskEnabled = !enabled;
@@ -525,39 +530,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       setState(() {
         _isZygiskEnabled = !enabled;
       });
-    }
-  }
-
-  Future<void> _toggleSuList(bool enabled) async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isSuListEnabled = enabled;
-    });
-    
-    try {
-      final success = await AndroidDataService.setSuListEnabled(enabled);
-      if (!mounted) return;
-      
-      if (success) {
-        ref.read(appsProvider.notifier).updateSuListState(enabled);
-        if (enabled && mounted) {
-          _showRestartDialog();
-        }
-      } else {
-        // Revert state on failure
-        setState(() {
-          _isSuListEnabled = !enabled;
-        });
-      }
-    } catch (e) {
-      debugPrint('_toggleSuList error: $e');
-      // Revert state on error
-      if (mounted) {
-        setState(() {
-          _isSuListEnabled = !enabled;
-        });
-      }
     }
   }
 
@@ -590,6 +562,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(1, tileColorIndex, isDark);
     final localizations = AppLocalizations.of(context)!;
+    final status = ref.watch(magiskStatusProvider);
+    
+    // Check if we have MagiskSU root (only show Zygisk/DenyList if MagiskSU)
+    final hasMagiskSuRoot = status.isRooted;
 
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -607,31 +583,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(4),
                   children: [
-                    // Magisk Settings Section
-                    _buildSectionHeader(context, 'Magisk Settings', isDark),
-                    _buildSettingTile(
-                      context,
-                      localizations.zygisk,
-                      localizations.zygiskDesc,
-                      Icons.security,
-                      widgetColor,
-                      _isZygiskEnabled,
-                      _toggleZygisk,
-                      isDark,
-                    ),
-                    _buildSettingTile(
-                      context,
-                      localizations.suList,
-                      localizations.suListDesc,
-                      Icons.checklist,
-                      widgetColor,
-                      _isSuListEnabled,
-                      _toggleSuList,
-                      isDark,
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(height: 1, thickness: 1),
-                    const SizedBox(height: 8),
+                    // Magisk Settings Section - Only show if MagiskSU root
+                    if (hasMagiskSuRoot) ...[
+                      _buildSectionHeader(context, 'Magisk Settings', isDark),
+                      _buildSettingTile(
+                        context,
+                        localizations.zygisk,
+                        localizations.zygiskDesc,
+                        Icons.security,
+                        widgetColor,
+                        _isZygiskEnabled,
+                        _toggleZygisk,
+                        isDark,
+                      ),
+                      // DenyList page navigation - single item for both toggle and navigation
+                      _buildNavigationTile(
+                        context,
+                        localizations.denyList,
+                        localizations.denyListDesc,
+                        Icons.shield,
+                        widgetColor,
+                        isDark,
+                        onTap: _isZygiskEnabled 
+                            ? () => Navigator.push(context, FlipPageRoute(page: const DenyListPage()))
+                            : () => _showZygiskRequiredDialog(),
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1, thickness: 1),
+                      const SizedBox(height: 8),
+                    ],
                     
                     // App Settings Section
                     _buildSectionHeader(context, 'App Settings', isDark),
@@ -665,6 +645,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
   }
+  
+  void _showZygiskRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Zygisk Required'),
+        content: Text('DenyList requires Zygisk to be enabled first. Please enable Zygisk before using DenyList.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildSectionHeader(BuildContext context, String title, bool isDark) {
     return Padding(
@@ -688,50 +684,56 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     Color widgetColor,
     bool value,
     Function(bool) onToggle,
-    bool isDark,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        onToggle(!value);
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        padding: const EdgeInsets.all(12),
-        color: AppTheme.getListItem(isDark),
-        child: Row(
-          children: [
-            Icon(icon, color: widgetColor, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      color: AppTheme.getListItemFont(isDark),
+    bool isDark, {
+    bool enabled = true,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: GestureDetector(
+        onTap: enabled
+            ? () {
+                onToggle(!value);
+              }
+            : null,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          padding: const EdgeInsets.all(12),
+          color: AppTheme.getListItem(isDark),
+          child: Row(
+            children: [
+              Icon(icon, color: widgetColor, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        color: AppTheme.getListItemFont(isDark),
+                      ),
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
-                      color: AppTheme.getListItemFont(isDark)
-                          .withValues(alpha: 0.6),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12,
+                        color: AppTheme.getListItemFont(isDark)
+                            .withValues(alpha: 0.6),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Switch(
-              value: value,
-              onChanged: onToggle,
-              activeColor: widgetColor,
-            ),
-          ],
+              Switch(
+                value: value,
+                onChanged: enabled ? onToggle : null,
+                activeColor: widgetColor,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -931,11 +933,11 @@ class _ModulesPageState extends ConsumerState<ModulesPage> {
   Future<void> _openWebUI(Module module) async {
     if (module.webUIUrl == null) return;
     
-    // Open WebUI in our custom WebView page
+    // Open WebUI in our custom WebView page with flip animation
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ModuleWebUIPage(
+      FlipPageRoute(
+        page: ModuleWebUIPage(
           module: module,
           webUIUrl: module.webUIUrl!,
         ),
@@ -1374,7 +1376,6 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
   
   Widget _buildHeader(BuildContext context, AppLocalizations localizations, bool isDark, Color widgetColor) {
     final rootAppsCount = _cachedApps.where((app) => app.hasRootAccess).length;
-    final isSuListEnabled = ref.watch(suListEnabledProvider);
     
     return Column(
       children: [
@@ -1395,27 +1396,13 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
                 ),
               ),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      localizations.apps,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 20,
-                        color: AppTheme.getFont(isDark),
-                      ),
-                    ),
-                    if (isSuListEnabled)
-                      Text(
-                        'SuList Mode (DenyList Inverted)',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: widgetColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
+                child: Text(
+                  localizations.apps,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    color: AppTheme.getFont(isDark),
+                  ),
                 ),
               ),
               GestureDetector(
@@ -1630,21 +1617,12 @@ class LogsPage extends ConsumerStatefulWidget {
 }
 
 class _LogsPageState extends ConsumerState<LogsPage> {
-  List<String> _allLogs = [];
-  final ScrollController _scrollController = ScrollController();
-  bool _autoScroll = true;
-  int _previousLogCount = 0;
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   Future<void> _saveLogsToFile() async {
     try {
-      if (_allLogs.isNotEmpty) {
-        final logContent = _allLogs.join('\n');
+      final logsAsync = ref.read(logsProvider);
+      if (logsAsync.value != null) {
+        final logs = logsAsync.value!;
+        final logContent = logs.join('\n');
         
         // Get current date and time for filename
         final now = DateTime.now();
@@ -1670,16 +1648,6 @@ class _LogsPageState extends ConsumerState<LogsPage> {
     }
   }
 
-  void _scrollToBottom() {
-    if (_autoScroll && _scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final logsAsync = ref.watch(logsProvider);
@@ -1696,62 +1664,52 @@ class _LogsPageState extends ConsumerState<LogsPage> {
             _buildHeader(context, localizations.logs, isDark, widgetColor, localizations),
             Expanded(
               child: logsAsync.when(
-                data: (logs) {
-                  // Check if new logs were added
-                  final hasNewLogs = logs.length > _previousLogCount;
-                  _previousLogCount = logs.length;
-                  _allLogs = logs;
-                  
-                  // Schedule scroll to bottom after build
-                  if (hasNewLogs) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-                  }
-                  
-                  if (logs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                data: (logs) => RefreshIndicator(
+                  onRefresh: () => ref.read(logsProvider.notifier).refresh(),
+                  child: logs.isEmpty 
+                    ? ListView(
                         children: [
-                          Icon(Icons.article_outlined, 
-                            size: 64, 
-                            color: AppTheme.getFont(isDark).withValues(alpha: 0.3)),
-                          const SizedBox(height: 16),
-                          Text('No logs yet',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
+                          SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                          Center(
+                            child: Text(
+                              'No logs available',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
+                              ),
                             ),
                           ),
                         ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(4),
+                        itemCount: logs.length,
+                        itemBuilder: (context, index) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 2),
+                            padding: const EdgeInsets.all(8),
+                            color: AppTheme.getListItem(isDark),
+                            child: Text(
+                              logs[index],
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppTheme.getListItemFont(isDark),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  }
-                  
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(4),
-                    itemCount: logs.length,
-                    itemBuilder: (context, index) {
-                      final isNewLog = hasNewLogs && index >= logs.length - (logs.length - _previousLogCount + (hasNewLogs ? 1 : 0));
-                      return _AnimatedLogTile(
-                        key: ValueKey('log_$index'),
-                        log: logs[index],
-                        isDark: isDark,
-                        isNew: isNewLog,
-                      );
-                    },
-                  );
-                },
+                ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.error_outline, size: 64, color: Colors.red.withValues(alpha: 0.5)),
+                      Text('Error: $error', style: GoogleFonts.poppins(color: Colors.red)),
                       const SizedBox(height: 16),
-                      Text('Error: $error',
-                        style: GoogleFonts.poppins(color: AppTheme.getFont(isDark)),
-                        textAlign: TextAlign.center,
+                      ElevatedButton(
+                        onPressed: () => ref.read(logsProvider.notifier).refresh(),
+                        child: const Text('Retry'),
                       ),
                     ],
                   ),
@@ -1779,149 +1737,24 @@ class _LogsPageState extends ConsumerState<LogsPage> {
             ),
           ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: AppTheme.getFont(isDark),
-                  ),
-                ),
-                Text(
-                  '${_allLogs.length} entries',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
             ),
           ),
-          // Auto-scroll toggle
           GestureDetector(
-            onTap: () => setState(() => _autoScroll = !_autoScroll),
+            onTap: _saveLogsToFile,
             child: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _autoScroll ? widgetColor.withValues(alpha: 0.2) : null,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.vertical_align_bottom,
-                color: _autoScroll ? widgetColor : AppTheme.getFont(isDark).withValues(alpha: 0.5),
-                size: 20,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: _saveLogsToFile,
-            icon: Icon(Icons.save, size: 18),
-            label: Text(localizations.save, style: TextStyle(fontSize: 14)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: widgetColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Icon(Icons.save, color: AppTheme.getFont(isDark), size: 24),
             ),
           ),
           const SizedBox(width: 8),
         ],
-      ),
-    );
-  }
-}
-
-/// Animated log tile with flip animation for new logs
-class _AnimatedLogTile extends StatefulWidget {
-  final String log;
-  final bool isDark;
-  final bool isNew;
-
-  const _AnimatedLogTile({
-    super.key,
-    required this.log,
-    required this.isDark,
-    this.isNew = false,
-  });
-
-  @override
-  State<_AnimatedLogTile> createState() => _AnimatedLogTileState();
-}
-
-class _AnimatedLogTileState extends State<_AnimatedLogTile> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-  bool _hasAnimated = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
-    
-    if (widget.isNew && !_hasAnimated) {
-      _controller.forward();
-      _hasAnimated = true;
-    } else {
-      _controller.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(_AnimatedLogTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isNew && !oldWidget.isNew && !_hasAnimated) {
-      _controller.forward();
-      _hasAnimated = true;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Transform(
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.001) // Perspective
-            ..rotateX((1 - _animation.value) * 0.5), // Flip along X axis
-          alignment: Alignment.topCenter,
-          child: Opacity(
-            opacity: _animation.value,
-            child: child,
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppTheme.getListItem(widget.isDark),
-          border: widget.isNew 
-              ? Border(left: BorderSide(color: AppTheme.getTileWidgetColor(2, 0, widget.isDark), width: 3))
-              : null,
-        ),
-        child: Text(
-          widget.log,
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: AppTheme.getListItemFont(widget.isDark),
-          ),
-        ),
       ),
     );
   }
@@ -1970,6 +1803,20 @@ class ContributorsPage extends ConsumerWidget {
                           color: AppTheme.getListItemFont(isDark),
                         ),
                       ),
+                      trailing: contributor.github != null && contributor.github != 'none'
+                          ? Icon(Icons.open_in_new,
+                              color: AppTheme.getListItemFont(isDark)
+                                  .withValues(alpha: 0.6))
+                          : null,
+                      onTap: () {
+                        if (contributor.github != null && contributor.github != 'none') {
+                          _openGithub(contributor.github!);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Not valid GitHub Link')),
+                          );
+                        }
+                      },
                     ),
                   );
                 },
@@ -1979,6 +1826,13 @@ class ContributorsPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _openGithub(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Widget _buildHeader(BuildContext context, String title, bool isDark) {
@@ -2132,6 +1986,615 @@ class ActivityInfo {
   final bool isInDenyList;
   
   ActivityInfo({required this.name, required this.isInDenyList});
+}
+
+/// DenyList Page - Manage apps that should hide root
+/// Uses cached state from provider with async sync on refresh
+/// Apps in DenyList are sorted to top like Apps page
+class DenyListPage extends ConsumerStatefulWidget {
+  const DenyListPage({super.key});
+
+  @override
+  ConsumerState<DenyListPage> createState() => _DenyListPageState();
+}
+
+class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
+  String _searchQuery = '';
+  Map<String, bool> _expandedApps = {}; // Track which apps are expanded
+  Map<String, List<ActivityInfo>> _appActivities = {}; // Cached activities
+  List<AppInfo> _cachedApps = []; // Local cache for sorting
+  Map<String, bool> _pendingChanges = {}; // Pending denylist changes (not yet flushed)
+  Set<String> _confirmedDenyListApps = {}; // Confirmed state from magisk.db (used for labels)
+  
+  @override
+  void dispose() {
+    // Flush pending changes when leaving the page
+    _flushPendingChanges();
+    super.dispose();
+  }
+  
+  Future<void> _flushPendingChanges() async {
+    if (_pendingChanges.isEmpty) return;
+    
+    // Execute all pending changes to magisk.db
+    for (final entry in _pendingChanges.entries) {
+      final packageName = entry.key;
+      final shouldAdd = entry.value;
+      
+      try {
+        if (shouldAdd) {
+          await AndroidDataService.addToDenyList(packageName);
+          _confirmedDenyListApps.add(packageName);
+        } else {
+          await AndroidDataService.removeFromDenyList(packageName);
+          _confirmedDenyListApps.remove(packageName);
+        }
+      } catch (e) {
+        debugPrint('Error flushing denylist change for $packageName: $e');
+      }
+    }
+    
+    // Clear pending changes
+    _pendingChanges = {};
+    
+    // Update provider state
+    final notifier = ref.read(denyListStateProvider.notifier);
+    await notifier.refresh();
+  }
+  
+  void _toggleAppInDenyList(String packageName) {
+    // Get current switch state (considering pending changes)
+    final currentSwitchState = _getSwitchState(packageName);
+    final newState = !currentSwitchState;
+    
+    // Update or remove pending change
+    // If the new state matches the confirmed state, remove from pending
+    // Otherwise, add to pending
+    final confirmedState = _confirmedDenyListApps.contains(packageName);
+    
+    if (newState == confirmedState) {
+      // New state matches confirmed state - remove from pending if exists
+      _pendingChanges.remove(packageName);
+    } else {
+      // New state differs from confirmed - track as pending
+      _pendingChanges[packageName] = newState;
+    }
+    
+    // Also update all activities for this app
+    final activities = _appActivities[packageName] ?? [];
+    if (activities.isNotEmpty) {
+      for (final activity in activities) {
+        final fullActivityName = '$packageName/${activity.name}';
+        if (newState == confirmedState) {
+          _pendingChanges.remove(fullActivityName);
+        } else {
+          _pendingChanges[fullActivityName] = newState;
+        }
+      }
+      // Update cached activities UI state
+      setState(() {
+        _appActivities[packageName] = activities.map((a) => 
+            ActivityInfo(name: a.name, isInDenyList: newState)).toList();
+      });
+    }
+    
+    // Trigger rebuild to update switch state
+    setState(() {});
+  }
+  
+  /// Get the switch state for an app (considers pending changes)
+  /// Switch is ON if app OR any of its activities are in DenyList
+  bool _getSwitchState(String packageName) {
+    // Check pending changes first
+    if (_pendingChanges.containsKey(packageName)) {
+      return _pendingChanges[packageName]!;
+    }
+    
+    // Check if app is in confirmed list
+    if (_confirmedDenyListApps.contains(packageName)) {
+      return true;
+    }
+    
+    // Check if any activity has pending change to true
+    final activities = _appActivities[packageName] ?? [];
+    for (final activity in activities) {
+      final fullActivityName = '$packageName/${activity.name}';
+      if (_pendingChanges[fullActivityName] == true) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /// Get the label visibility (based on confirmed magisk.db state OR pending enable)
+  /// Shows label when app OR any activity is in DenyList
+  bool _shouldShowDenyListLabel(String packageName) {
+    // Check confirmed state
+    if (_confirmedDenyListApps.contains(packageName)) {
+      return true;
+    }
+    
+    // Check if any activity is confirmed in DenyList
+    final denyListState = ref.read(denyListStateProvider);
+    for (final activity in denyListState.activities) {
+      if (activity.startsWith('$packageName/')) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /// Get the icon state - shows "visibility_off" with background when in DenyList
+  /// This reflects the overall DenyList status for the app
+  bool _isAppInDenyList(String packageName) {
+    return _getSwitchState(packageName);
+  }
+  
+  List<AppInfo> _sortApps(List<AppInfo> apps, Set<String> denyListApps) {
+    final sorted = List<AppInfo>.from(apps);
+    sorted.sort((a, b) {
+      final aInDenyList = denyListApps.contains(a.packageName);
+      final bInDenyList = denyListApps.contains(b.packageName);
+      
+      // Apps in DenyList first
+      if (aInDenyList && !bInDenyList) return -1;
+      if (!aInDenyList && bInDenyList) return 1;
+      
+      // Then alphabetically
+      return a.name.compareTo(b.name);
+    });
+    return sorted;
+  }
+  
+  Future<void> _loadAppActivities(String packageName) async {
+    if (_appActivities.containsKey(packageName)) return;
+    
+    try {
+      final activities = await AndroidDataService.getAppActivities(packageName);
+      final denyListState = ref.read(denyListStateProvider);
+      
+      final activityInfos = activities.map((activity) {
+        final fullActivityName = '$packageName/$activity';
+        return ActivityInfo(
+          name: activity,
+          isInDenyList: denyListState.activities.contains(fullActivityName),
+        );
+      }).toList();
+      
+      setState(() {
+        _appActivities[packageName] = activityInfos;
+      });
+    } catch (e) {
+      setState(() {
+        _appActivities[packageName] = [];
+      });
+    }
+  }
+  
+  void _toggleActivityInDenyList(String packageName, String activityName) {
+    final fullActivityName = '$packageName/$activityName';
+    final denyListState = ref.read(denyListStateProvider);
+    final isInList = denyListState.activities.contains(fullActivityName);
+    
+    // Update local state
+    final notifier = ref.read(denyListStateProvider.notifier);
+    notifier.toggleActivity(fullActivityName, !isInList);
+    
+    // Update cached activities
+    final activities = _appActivities[packageName];
+    if (activities != null) {
+      final index = activities.indexWhere((a) => a.name == activityName);
+      if (index >= 0) {
+        setState(() {
+          _appActivities[packageName]![index] = ActivityInfo(
+            name: activityName, 
+            isInDenyList: !isInList,
+          );
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = ref.watch(appsProvider);
+    final denyListState = ref.watch(denyListStateProvider);
+    final isDark = ref.watch(themeProvider);
+    final tileColorIndex = ref.watch(tileColorProvider);
+    final widgetColor = AppTheme.getTileWidgetColor(1, tileColorIndex, isDark);
+    final localizations = AppLocalizations.of(context)!;
+    
+    // Initialize confirmed denylist apps from provider (only on first load or after refresh)
+    if (_confirmedDenyListApps.isEmpty && !denyListState.isLoading) {
+      _confirmedDenyListApps = Set<String>.from(denyListState.apps);
+    }
+    
+    // Sort apps based on CONFIRMED state (not pending)
+    if (_cachedApps.isEmpty || 
+        _cachedApps.length != apps.length ||
+        !_listEquals(_cachedApps, apps)) {
+      _cachedApps = _sortApps(apps, _confirmedDenyListApps);
+    } else {
+      // Just update sort order based on confirmed denylist
+      _cachedApps = _sortApps(_cachedApps, _confirmedDenyListApps);
+    }
+    
+    // Filter apps based on search
+    final filteredApps = _cachedApps.where((app) {
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        return app.name.toLowerCase().contains(query) ||
+               app.packageName.toLowerCase().contains(query);
+      }
+      return true;
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: AppTheme.getBackground(isDark),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context, localizations.denyList, isDark, widgetColor),
+            if (denyListState.isLoading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else
+              Expanded(
+                child: Column(
+                  children: [
+                    // Enable/Disable switch
+                    Container(
+                      margin: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.getListItem(isDark),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.shield, color: widgetColor),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  localizations.enforceDenyList,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                    color: AppTheme.getListItemFont(isDark),
+                                  ),
+                                ),
+                                Text(
+                                  localizations.enforceDenyListDesc,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: denyListState.isEnabled,
+                            onChanged: (enabled) async {
+                              final notifier = ref.read(denyListStateProvider.notifier);
+                              await notifier.setEnabled(enabled);
+                            },
+                            activeColor: widgetColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Search bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: TextField(
+                        onChanged: (value) => setState(() => _searchQuery = value),
+                        decoration: InputDecoration(
+                          hintText: 'Search apps...',
+                          hintStyle: GoogleFonts.poppins(
+                            color: AppTheme.getFont(isDark).withValues(alpha: 0.5),
+                          ),
+                          prefixIcon: Icon(Icons.search, color: widgetColor),
+                          filled: true,
+                          fillColor: AppTheme.getListItem(isDark),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        style: GoogleFonts.poppins(color: AppTheme.getListItemFont(isDark)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Apps list
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          // Flush pending changes first
+                          await _flushPendingChanges();
+                          // Then refresh from magisk.db
+                          await ref.read(denyListStateProvider.notifier).refresh();
+                        },
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(4),
+                          itemCount: filteredApps.length,
+                          itemBuilder: (context, index) {
+                            final app = filteredApps[index];
+                            // Switch state considers pending changes
+                            final switchState = _getSwitchState(app.packageName);
+                            // Label only shows for confirmed denylist apps
+                            final showLabel = _shouldShowDenyListLabel(app.packageName);
+                            final isExpanded = _expandedApps[app.packageName] ?? false;
+                            
+                            return _DenyListAppTile(
+                              key: ValueKey(app.packageName),
+                              app: app,
+                              switchState: switchState,
+                              showDenyListLabel: showLabel,
+                              isExpanded: isExpanded,
+                              widgetColor: widgetColor,
+                              isDark: isDark,
+                              activities: _appActivities[app.packageName],
+                              onToggle: () => _toggleAppInDenyList(app.packageName),
+                              onExpand: () async {
+                                setState(() {
+                                  _expandedApps[app.packageName] = !isExpanded;
+                                });
+                                if (!isExpanded) {
+                                  await _loadAppActivities(app.packageName);
+                                }
+                              },
+                              onActivityToggle: (activityName) => 
+                                  _toggleActivityInDenyList(app.packageName, activityName),
+                              localizations: localizations,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  bool _listEquals(List<AppInfo> a, List<AppInfo> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].packageName != b[i].packageName) return false;
+    }
+    return true;
+  }
+  
+  Widget _buildHeader(BuildContext context, String title, bool isDark, Color widgetColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      color: AppTheme.getTile(isDark),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left, color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
+          // DenyList count badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: widgetColor.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${ref.watch(denyListStateProvider).apps.length}',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: widgetColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Separate widget for each DenyList app tile to minimize rebuilds
+class _DenyListAppTile extends StatelessWidget {
+  final AppInfo app;
+  final bool switchState; // Current switch state (considers pending changes)
+  final bool showDenyListLabel; // Show label only for confirmed denylist apps
+  final bool isExpanded;
+  final Color widgetColor;
+  final bool isDark;
+  final List<ActivityInfo>? activities;
+  final VoidCallback onToggle;
+  final VoidCallback onExpand;
+  final Function(String) onActivityToggle;
+  final AppLocalizations localizations;
+
+  const _DenyListAppTile({
+    super.key,
+    required this.app,
+    required this.switchState,
+    required this.showDenyListLabel,
+    required this.isExpanded,
+    required this.widgetColor,
+    required this.isDark,
+    this.activities,
+    required this.onToggle,
+    required this.onExpand,
+    required this.onActivityToggle,
+    required this.localizations,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      color: AppTheme.getListItem(isDark),
+      child: Column(
+        children: [
+          // Main tile
+          ListTile(
+            leading: Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: switchState 
+                    ? widgetColor.withValues(alpha: 0.2)
+                    : AppTheme.getListItem(isDark).withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                switchState ? Icons.visibility_off : Icons.visibility,
+                color: switchState ? widgetColor : widgetColor.withValues(alpha: 0.5),
+              ),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    app.name,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.getListItemFont(isDark),
+                    ),
+                  ),
+                ),
+                // Label only shows for CONFIRMED denylist apps (from magisk.db)
+                if (showDenyListLabel)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: widgetColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'DENYLIST',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: widgetColor,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            subtitle: Text(
+              app.packageName,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Expand button
+                GestureDetector(
+                  onTap: onExpand,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+                // Main switch - state considers pending changes
+                Switch(
+                  value: switchState,
+                  onChanged: (_) => onToggle(),
+                  activeColor: widgetColor,
+                ),
+              ],
+            ),
+          ),
+          // Expanded activities list
+          if (isExpanded && activities != null)
+            Container(
+              padding: const EdgeInsets.only(left: 72, right: 16, bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    localizations.activities,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (activities!.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        'Loading activities...',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.4),
+                        ),
+                      ),
+                    )
+                  else
+                    ...activities!.map((activity) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.getTile(isDark),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                activity.name,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: AppTheme.getListItemFont(isDark),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Switch(
+                              value: activity.isInDenyList,
+                              onChanged: (_) => onActivityToggle(activity.name),
+                              activeColor: widgetColor,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class SettingsSheet extends ConsumerWidget {

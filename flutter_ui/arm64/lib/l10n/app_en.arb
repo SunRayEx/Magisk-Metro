@@ -57,8 +57,6 @@
   "restoreMagiskAfterOtaDesc": "Restore Magisk after system OTA update",
   "zygiskDesc": "Enable or disable Zygisk",
   "denyListDesc": "Enable or disable DenyList",
-  "suList": "SuList",
-  "suListDesc": "Whitelist mode - only listed apps get root access",
   "aggressiveHide": "Aggressive Hide",
   "aggressiveHideDesc": "Enhanced hiding: spoof props, clear env vars",
   "enableDenyOrSuList": "Enable DenyList or SuList above to manage apps.",
@@ -68,5 +66,8 @@
   "selectModuleZipDesc": "Choose a .zip file to install as Magisk module",
   "rootRequired": "Root access is required for this operation",
   "magiskRootRequired": "Magisk Root permission is required for this feature",
-  "noFileSelected": "No file selected"
+  "noFileSelected": "No file selected",
+  "enforceDenyList": "Enforce DenyList",
+  "enforceDenyListDesc": "Apps in DenyList will have root hidden from them",
+  "activities": "Activities"
 }

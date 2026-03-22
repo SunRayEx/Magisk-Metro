@@ -183,12 +183,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get denyListDesc => '启用或禁用 DenyList';
 
   @override
-  String get suList => 'SuList';
-
-  @override
-  String get suListDesc => '白名单模式 - 只有列表中的应用才能获取 root 权限';
-
-  @override
   String get aggressiveHide => '增强隐藏';
 
   @override
@@ -217,4 +211,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noFileSelected => '未选择文件';
+
+  @override
+  String get enforceDenyList => '强制拒绝列表';
+
+  @override
+  String get enforceDenyListDesc => '拒绝列表中的应用将对Root隐藏';
+
+  @override
+  String get activities => '活动';
 }

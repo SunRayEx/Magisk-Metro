@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+
 android {
     namespace = "com.magiskube.magisk"
     compileSdk = flutter.compileSdkVersion

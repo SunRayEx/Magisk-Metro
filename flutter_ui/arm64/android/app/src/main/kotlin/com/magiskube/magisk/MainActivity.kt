@@ -19,6 +19,8 @@ import androidx.webkit.WebViewAssetLoader
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.platform.PlatformViewRegistry
+import com.magiskube.magisk.webui.WebUIViewFactory
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
@@ -120,6 +122,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        
+        // Register WebUI PlatformView
+        val registry: PlatformViewRegistry = flutterEngine.platformViewsController.registry
+        registry.registerViewFactory("magiskube-webui", WebUIViewFactory())
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -318,6 +324,8 @@ class MainActivity : FlutterActivity() {
                     val packageName = call.argument<String>("packageName") ?: ""
                     result.success(removeFromSuList(packageName))
                 }
+                "fetchMagiskLogs" -> result.success(fetchMagiskLogs())
+                "clearMagiskLogs" -> result.success(clearMagiskLogs())
                 else -> result.notImplemented()
             }
         }
@@ -647,61 +655,26 @@ class MainActivity : FlutterActivity() {
         val apps = mutableListOf<Map<String, Any>>()
         val pm = packageManager
         
-        android.util.Log.d("MainActivity", "getInstalledApps: Starting optimized scan...")
+        android.util.Log.d("MainActivity", "getInstalledApps: Starting scan...")
         
-        // Use background thread for heavy operations
+        // Primary method: Use PackageManager directly (most reliable)
         try {
-            // Method 1: Use pm list packages -3 to get only third-party apps (much faster)
-            val process = Runtime.getRuntime().exec(arrayOf("pm", "list", "packages", "-3", "-U"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = reader.readText()
-            process.waitFor()
+            val packages = pm.getInstalledPackages(PackageManager.GET_META_DATA)
+            android.util.Log.d("MainActivity", "getInstalledApps: Found ${packages.size} total packages")
             
-            // Parse output and collect package info in batch
-            val packageLines = output.split("\n").filter { it.startsWith("package:") }
-            android.util.Log.d("MainActivity", "getInstalledApps: Found ${packageLines.size} third-party packages")
-            
-            // Get denylist and root packages in parallel (cached)
-            val denyListFuture = Thread { /* pre-warm */ }
-            val rootPackagesFuture = Thread { /* pre-warm */ }
-            
-            // Batch process packages
-            for (line in packageLines) {
+            for (packageInfo in packages) {
                 try {
-                    // Format: package:com.example uid:10123
-                    val parts = line.split(" ")
-                    val packageName = parts[0].removePrefix("package:").trim()
-                    if (packageName.isEmpty()) continue
-                    
-                    // Get app name - use package name as fallback for speed
-                    val appName = try {
-                        val appInfo = pm.getApplicationInfo(packageName, 0)
-                        pm.getApplicationLabel(appInfo).toString()
-                    } catch (e: Exception) {
-                        packageName.substringAfterLast(".")
-                    }
-                    
-                    apps.add(mapOf<String, Any>(
-                        "name" to appName,
-                        "packageName" to packageName,
-                        "isActive" to true,  // Will be updated by Flutter based on SuList/DenyList
-                        "hasRootAccess" to false  // Will be updated by Flutter based on root policies
-                    ))
-                } catch (e: Exception) {
-                    // Skip problematic packages
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "getInstalledApps error: ${e.message}")
-            // Fallback: minimal scan using PackageManager with flags for third-party only
-            try {
-                val packages = pm.getInstalledPackages(PackageManager.GET_META_DATA)
-                for (packageInfo in packages) {
-                    // Filter: only show third-party apps (not system apps)
                     val appInfo = packageInfo.applicationInfo
-                    if (appInfo != null && (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0) {
+                    if (appInfo == null) continue
+                    
+                    // Filter: only show third-party apps (not system apps)
+                    // A system app has FLAG_SYSTEM (0x1) set in flags
+                    val isSystemApp = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    
+                    if (!isSystemApp) {
                         val packageName = packageInfo.packageName
                         val appName = pm.getApplicationLabel(appInfo).toString()
+                        
                         apps.add(mapOf<String, Any>(
                             "name" to appName,
                             "packageName" to packageName,
@@ -709,7 +682,42 @@ class MainActivity : FlutterActivity() {
                             "hasRootAccess" to false
                         ))
                     }
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Error processing package: ${e.message}")
                 }
+            }
+            
+            android.util.Log.d("MainActivity", "getInstalledApps: Found ${apps.size} third-party apps")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "getInstalledApps PackageManager error: ${e.message}")
+            
+            // Fallback: Use shell command
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("pm", "list", "packages", "-3"))
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                var line: String?
+                
+                while (reader.readLine().also { line = it } != null) {
+                    val packageName = line?.removePrefix("package:")?.trim()
+                    if (!packageName.isNullOrEmpty()) {
+                        try {
+                            val appInfo = pm.getApplicationInfo(packageName, 0)
+                            val appName = pm.getApplicationLabel(appInfo).toString()
+                            
+                            apps.add(mapOf<String, Any>(
+                                "name" to appName,
+                                "packageName" to packageName,
+                                "isActive" to true,
+                                "hasRootAccess" to false
+                            ))
+                        } catch (e: Exception) {
+                            // Skip packages we can't get info for
+                        }
+                    }
+                }
+                process.waitFor()
+                
             } catch (e2: Exception) {
                 android.util.Log.e("MainActivity", "Fallback scan also failed: ${e2.message}")
             }
@@ -1114,53 +1122,72 @@ class MainActivity : FlutterActivity() {
         return try {
             android.util.Log.d("MainActivity", "isDenyListEnabled: checking status")
             
-            // Method 1: Use magisk --denylist status command
-            val statusProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist status"))
-            val statusReader = BufferedReader(InputStreamReader(statusProcess.inputStream))
-            val statusOutput = StringBuilder()
-            var statusLine: String?
-            while (statusReader.readLine().also { statusLine = it } != null) {
-                statusOutput.append(statusLine).append("\n")
-            }
-            statusProcess.waitFor()
-            val statusResult = statusOutput.toString().trim()
-            android.util.Log.d("MainActivity", "magisk --denylist status output: $statusResult")
+            // NOTE: We check the DATABASE setting, not the runtime Zygisk state
+            // The UI will show if DenyList is enabled in settings
+            // Actual effectiveness depends on Zygisk being enabled
             
-            // Check if denylist is enabled (output contains "enabled" or "true")
-            if (statusResult.contains("enabled", ignoreCase = true) || statusResult.contains("true", ignoreCase = true)) {
-                android.util.Log.d("MainActivity", "isDenyListEnabled: true via magisk --denylist status")
+            // Method 1: Use sqlite3 to query settings table directly
+            val dbQueryResult = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='denylist' LIMIT 1\"")
+            android.util.Log.d("MainActivity", "sqlite3 denylist query: '$dbQueryResult'")
+            
+            // Check if the result is "1"
+            if (dbQueryResult.trim() == "1") {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: TRUE via sqlite3 query (denylist=1)")
                 return true
             }
             
-            // Method 2: Check settings table using SELECT * (WHERE clause doesn't work)
-            val magiskConfigFile = File("/data/adb/magisk.db")
-            if (magiskConfigFile.exists()) {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT * FROM settings\""))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val output = reader.readText().trim()
-                process.waitFor()
-                
-                // Parse output - look for key=denylist|value=1 or key=magiskhide|value=1
-                for (line in output.split("\n")) {
-                    val trimmed = line.trim()
-                    if (trimmed.startsWith("key=denylist|")) {
-                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
-                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
-                            android.util.Log.d("MainActivity", "isDenyListEnabled: true via denylist setting")
-                            return true
-                        }
-                    }
-                    if (trimmed.startsWith("key=magiskhide|")) {
-                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
-                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
-                            android.util.Log.d("MainActivity", "isDenyListEnabled: true via magiskhide setting")
-                            return true
-                        }
+            // Method 2: Check using magisk --sqlite command
+            val magiskSqlResult = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='denylist'\"")
+            android.util.Log.d("MainActivity", "magisk --sqlite denylist query: '$magiskSqlResult'")
+            
+            // Parse result - format could be "value=1" or just "1"
+            val dbValue = if (magiskSqlResult.startsWith("value=")) {
+                magiskSqlResult.removePrefix("value=").trim()
+            } else {
+                magiskSqlResult.trim()
+            }
+            
+            if (dbValue == "1") {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: TRUE via magisk --sqlite (denylist=1)")
+                return true
+            }
+            
+            // Method 3: Check magiskhide key for older Magisk versions
+            val magiskhideResult = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='magiskhide' LIMIT 1\"")
+            android.util.Log.d("MainActivity", "sqlite3 magiskhide query: '$magiskhideResult'")
+            
+            if (magiskhideResult.trim() == "1") {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: TRUE via magiskhide key")
+                return true
+            }
+            
+            // Method 4: Check if denylist table has any entries (indicates it was enabled and used)
+            val denyListCount = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT COUNT(*) FROM denylist\"")
+            android.util.Log.d("MainActivity", "denylist table count: '$denyListCount'")
+            
+            val count = denyListCount.trim().toIntOrNull() ?: 0
+            if (count > 0) {
+                android.util.Log.d("MainActivity", "isDenyListEnabled: TRUE (denylist has $count entries)")
+                return true
+            }
+            
+            // Method 5: Query ALL settings and look for denylist related keys
+            val allSettings = executeRootCommand("magisk --sqlite \"SELECT * FROM settings\"")
+            android.util.Log.d("MainActivity", "All settings: '$allSettings'")
+            
+            // Parse settings output for denylist or magiskhide
+            for (line in allSettings.split("\n")) {
+                val trimmed = line.trim()
+                // Format: key=denylist|value=1
+                if (trimmed.contains("key=denylist|") || trimmed.contains("key=magiskhide|")) {
+                    if (trimmed.contains("value=1")) {
+                        android.util.Log.d("MainActivity", "isDenyListEnabled: TRUE found in settings: $trimmed")
+                        return true
                     }
                 }
             }
             
-            android.util.Log.d("MainActivity", "isDenyListEnabled: false")
+            android.util.Log.d("MainActivity", "isDenyListEnabled: FALSE")
             false
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error checking denylist status: ${e.message}")
@@ -1231,91 +1258,123 @@ class MainActivity : FlutterActivity() {
      * Direct method to enable/disable DenyList using magisk commands
      * This is more reliable than the script-based approach
      * IMPORTANT: Must update BOTH runtime state AND database for persistence
+     * IMPORTANT: DenyList requires Zygisk to be enabled first
      */
     private fun setDenyListEnabledDirect(enabled: Boolean): Boolean {
         return try {
             android.util.Log.d("MainActivity", "setDenyListEnabledDirect: enabled=$enabled")
             
-            // Method 1: Use magisk --denylist enable/disable command
-            // This is the official way and should update both runtime and database
+            // NOTE: We save the setting to database regardless of Zygisk runtime state
+            // The actual effectiveness depends on Zygisk being enabled
+            // UI will show the setting state, not the runtime effectiveness
+            
+            // Check if Zygisk is enabled in database (not runtime state)
+            val zygiskDbValue = executeRootCommand("sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='zygisk' LIMIT 1\"")
+            val zygiskEnabled = zygiskDbValue.trim() == "1"
+            
+            android.util.Log.d("MainActivity", "Zygisk database setting: '$zygiskDbValue', enabled=$zygiskEnabled")
+            
+            if (enabled && !zygiskEnabled) {
+                android.util.Log.w("MainActivity", "WARNING: DenyList enabled but Zygisk is not enabled in database!")
+                android.util.Log.w("MainActivity", "DenyList will not be effective until Zygisk is enabled and device is rebooted")
+                // Still proceed to save the setting
+            }
+            
+            val value = if (enabled) "1" else "0"
+            
+            // Step 1: Update database directly using sqlite3
+            android.util.Log.d("MainActivity", "Step 1: Updating database via sqlite3")
+            val dbUpdateCmd = """
+                sqlite3 /data/adb/magisk.db "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$value')";
+                sqlite3 /data/adb/magisk.db "INSERT OR REPLACE INTO settings (key, value) VALUES ('magiskhide', '$value')";
+            """.trimIndent()
+            
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", dbUpdateCmd))
+            dbProcess.waitFor()
+            
+            // Step 2: Also try via magisk --sqlite for good measure
+            android.util.Log.d("MainActivity", "Step 2: Updating via magisk --sqlite")
+            val magiskSqlCmd = "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$value')\""
+            Runtime.getRuntime().exec(arrayOf("su", "-c", magiskSqlCmd)).waitFor()
+            
+            val magiskSqlCmd2 = "magisk --sqlite \"INSERT OR REPLACE INTO settings (key, value) VALUES ('magiskhide', '$value')\""
+            Runtime.getRuntime().exec(arrayOf("su", "-c", magiskSqlCmd2)).waitFor()
+            
+            // Step 3: Try magisk --denylist command for runtime state
+            android.util.Log.d("MainActivity", "Step 3: Updating runtime via magisk --denylist")
             val cmd = if (enabled) "magisk --denylist enable" else "magisk --denylist disable"
-            android.util.Log.d("MainActivity", "Executing: $cmd")
+            val runtimeProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            runtimeProcess.waitFor()
+            android.util.Log.d("MainActivity", "magisk --denylist command exit code: ${runtimeProcess.exitValue()}")
             
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-            val inputReader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-            
-            val input = inputReader.readText().trim()
-            val error = errorReader.readText().trim()
-            process.waitFor()
-            
-            android.util.Log.d("MainActivity", "Command result: input='$input', error='$error', exitCode=${process.exitValue()}")
+            // Step 4: Notify Magisk daemon to reload settings
+            try {
+                Runtime.getRuntime().exec(arrayOf("su", "-c", "kill -HUP \$(pgrep -x magiskd | head -1) 2>/dev/null || true")).waitFor()
+                android.util.Log.d("MainActivity", "Sent HUP signal to magiskd")
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Failed to notify magiskd: ${e.message}")
+            }
             
             // Give it a moment to take effect
-            Thread.sleep(500)
+            Thread.sleep(300)
             
-            // Verify by checking status
-            val statusProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist status"))
-            val statusReader = BufferedReader(InputStreamReader(statusProcess.inputStream))
-            val statusOutput = statusReader.readText().trim()
-            statusProcess.waitFor()
+            // Step 5: Verify database was updated
+            val verifyDbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db \"SELECT value FROM settings WHERE key='denylist' LIMIT 1\""))
+            val verifyDbReader = BufferedReader(InputStreamReader(verifyDbProcess.inputStream))
+            val dbValue = verifyDbReader.readText().trim()
+            verifyDbProcess.waitFor()
+            android.util.Log.d("MainActivity", "Database denylist value: '$dbValue'")
             
-            android.util.Log.d("MainActivity", "DenyList status after command: '$statusOutput'")
-            
-            // If the command succeeded (exit code 0), consider it a success
-            // The magisk --denylist command handles database persistence internally
-            if (process.exitValue() == 0) {
-                android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS (exit code 0)")
+            // Step 6: Final verification
+            if (dbValue == value) {
+                android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS - database updated to '$value'")
                 return true
             }
             
-            // Method 2: If method 1 failed, try using magisk --sqlite directly
-            android.util.Log.d("MainActivity", "Method 1 failed, trying magisk --sqlite approach")
+            // If database verification failed, try one more approach
+            android.util.Log.w("MainActivity", "Database verification failed, trying alternative verification")
             
-            val value = if (enabled) "1" else "0"
-            val sqlCmd = "INSERT OR REPLACE INTO settings (key, value) VALUES ('denylist', '$value')"
-            val sqlProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqlCmd\""))
-            sqlProcess.waitFor()
+            // Check if denylist table has entries (if enabling)
+            if (enabled) {
+                val countProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db \"SELECT COUNT(*) FROM denylist\""))
+                val countReader = BufferedReader(InputStreamReader(countProcess.inputStream))
+                val countOutput = countReader.readText().trim()
+                countProcess.waitFor()
+                val count = countOutput.toIntOrNull() ?: 0
+                android.util.Log.d("MainActivity", "DenyList table has $count entries")
+                
+                // Even with 0 entries, if the database says denylist is enabled, it's fine
+                if (count >= 0) {
+                    android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS - denylist table exists")
+                    return true
+                }
+            } else {
+                // When disabling, check if value is 0 or empty
+                if (dbValue == "0" || dbValue.isEmpty()) {
+                    android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS - denylist disabled")
+                    return true
+                }
+            }
             
-            // Also try magiskhide key for older Magisk versions
-            val sqlCmd2 = "INSERT OR REPLACE INTO settings (key, value) VALUES ('magiskhide', '$value')"
-            Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"$sqlCmd2\"")).waitFor()
+            // Last resort: check via magisk --sqlite
+            val magiskVerifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key='denylist'\""))
+            val magiskVerifyReader = BufferedReader(InputStreamReader(magiskVerifyProcess.inputStream))
+            val magiskVerifyOutput = magiskVerifyReader.readText().trim()
+            magiskVerifyProcess.waitFor()
+            android.util.Log.d("MainActivity", "magisk --sqlite verify: '$magiskVerifyOutput'")
             
-            // Verify
-            Thread.sleep(300)
-            val verifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --sqlite \"SELECT value FROM settings WHERE key='denylist'\""))
-            val verifyReader = BufferedReader(InputStreamReader(verifyProcess.inputStream))
-            val verifyOutput = verifyReader.readText().trim()
-            verifyProcess.waitFor()
+            val finalValue = if (magiskVerifyOutput.startsWith("value=")) {
+                magiskVerifyOutput.removePrefix("value=").trim()
+            } else {
+                magiskVerifyOutput.trim()
+            }
             
-            android.util.Log.d("MainActivity", "SQLite verify output: '$verifyOutput'")
-            
-            // Parse the output - could be "value=1" or just "1"
-            val dbValue = verifyOutput.removePrefix("value=").trim()
-            
-            if (dbValue == value) {
-                android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS via sqlite")
+            if (finalValue == value) {
+                android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS via magisk --sqlite")
                 true
             } else {
-                // Check if the status command indicates success
-                val finalSuccess = if (enabled) {
-                    statusOutput.contains("enabled", ignoreCase = true) || 
-                    statusOutput.contains("true", ignoreCase = true)
-                } else {
-                    statusOutput.contains("disabled", ignoreCase = true) || 
-                    statusOutput.contains("false", ignoreCase = true) ||
-                    statusOutput.isEmpty()
-                }
-                
-                if (finalSuccess) {
-                    android.util.Log.d("MainActivity", "setDenyListEnabledDirect: SUCCESS based on status")
-                    true
-                } else {
-                    android.util.Log.e("MainActivity", "setDenyListEnabledDirect: FAILED - all methods failed")
-                    // Return true anyway if exit code was 0, as the command might have worked
-                    // even if we can't verify it
-                    process.exitValue() == 0
-                }
+                android.util.Log.e("MainActivity", "setDenyListEnabledDirect: FAILED - value mismatch (expected '$value', got '$finalValue')")
+                false
             }
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error in setDenyListEnabledDirect: ${e.message}")
@@ -1801,30 +1860,144 @@ class MainActivity : FlutterActivity() {
 
     private fun getDenyList(): List<String> {
         val denyList = mutableListOf<String>()
+        
+        android.util.Log.d("MainActivity", "getDenyList: Starting to fetch denylist")
+        
         try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist ls"))
+            // Method 1: Query database directly (most reliable)
+            // The denylist table has columns: package_name, process_name
+            // We want to get unique package names
+            val dbQuery = "SELECT DISTINCT package_name FROM denylist"
+            val dbProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db \"$dbQuery\""))
+            val dbReader = BufferedReader(InputStreamReader(dbProcess.inputStream))
+            var dbLine: String?
+            while (dbReader.readLine().also { dbLine = it } != null) {
+                val packageName = dbLine?.trim()
+                if (!packageName.isNullOrEmpty() && packageName != "package_name") {
+                    denyList.add(packageName)
+                    android.util.Log.d("MainActivity", "getDenyList: Found package from DB: $packageName")
+                }
+            }
+            dbProcess.waitFor()
+            
+            if (denyList.isNotEmpty()) {
+                android.util.Log.d("MainActivity", "getDenyList: Returning ${denyList.size} items from database")
+                return denyList
+            }
+            
+            // Method 2: Use magisk --denylist ls command
+            android.util.Log.d("MainActivity", "getDenyList: Trying magisk --denylist ls")
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "magisk --denylist ls 2>/dev/null"))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = StringBuilder()
             var line: String?
             while (reader.readLine().also { line = it } != null) {
-                line?.let {
-                    if (it.isNotEmpty() && !it.contains("denylist")) {
-                        denyList.add(it.trim())
+                output.append(line).append("\n")
+            }
+            process.waitFor()
+            
+            val rawOutput = output.toString().trim()
+            android.util.Log.d("MainActivity", "getDenyList: magisk --denylist ls output: '$rawOutput'")
+            
+            // Parse the output
+            // Format from magisk --denylist ls:
+            // 1. package|process (most common): "com.example.app|com.example.app"
+            // 2. package|process with activity: "com.example.app|com.example.app:process"
+            // 3. isolated|package:process (isolated process): "isolated|com.example.app:sandboxed_process0"
+            for (outputLine in rawOutput.split("\n")) {
+                val trimmed = outputLine.trim()
+                if (trimmed.isEmpty()) continue
+                
+                // Skip header lines if any
+                if (trimmed.startsWith("Denylist") || trimmed.startsWith("===") || 
+                    trimmed.startsWith("---") || trimmed == "ID" || trimmed == "Package") {
+                    continue
+                }
+                
+                // Skip isolated processes - they are special sandboxed processes
+                if (trimmed.startsWith("isolated|")) {
+                    android.util.Log.d("MainActivity", "getDenyList: Skipping isolated process: $trimmed")
+                    continue
+                }
+                
+                // Extract package name from different formats
+                // Primary format: package|process
+                val packageName = when {
+                    // Format: package|process (most common from magisk --denylist ls)
+                    trimmed.contains("|") -> {
+                        trimmed.substringBefore("|").trim()
+                    }
+                    // Format: package/activity
+                    trimmed.contains("/") -> {
+                        trimmed.substringBefore("/").trim()
+                    }
+                    // Format: package:process
+                    trimmed.contains(":") -> {
+                        trimmed.substringBefore(":").trim()
+                    }
+                    // Just package name
+                    else -> {
+                        trimmed
+                    }
+                }
+                
+                // Validate package name (should not be empty and should contain at least one dot)
+                if (packageName.isNotEmpty() && packageName.contains(".") && !denyList.contains(packageName)) {
+                    denyList.add(packageName)
+                    android.util.Log.d("MainActivity", "getDenyList: Parsed package: '$packageName' from '$trimmed'")
+                }
+            }
+            
+            // Method 3: Also get activities from denylist table
+            val activityQuery = "SELECT package_name || '/' || process_name FROM denylist WHERE process_name IS NOT NULL AND process_name != ''"
+            val activityProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db \"$activityQuery\""))
+            val activityReader = BufferedReader(InputStreamReader(activityProcess.inputStream))
+            var activityLine: String?
+            while (activityReader.readLine().also { activityLine = it } != null) {
+                val activity = activityLine?.trim()
+                if (!activity.isNullOrEmpty()) {
+                    // Add as package/activity format
+                    if (!denyList.contains(activity)) {
+                        denyList.add(activity)
+                        android.util.Log.d("MainActivity", "getDenyList: Found activity from DB: $activity")
+                    }
+                    // Also ensure the package is in the list
+                    val pkg = activity.substringBefore("/")
+                    if (!denyList.contains(pkg)) {
+                        denyList.add(pkg)
                     }
                 }
             }
+            activityProcess.waitFor()
+            
         } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "getDenyList error: ${e.message}")
+            
+            // Fallback: Try alternative database query format
             try {
-                val dbFile = File("/data/adb/magisk.db")
-                if (dbFile.exists()) {
-                    val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db 'SELECT package_name FROM denylist'"))
-                    val reader = BufferedReader(InputStreamReader(process.inputStream))
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        line?.let { if (it.isNotEmpty()) denyList.add(it.trim()) }
+                android.util.Log.d("MainActivity", "getDenyList: Trying fallback query")
+                val fallbackProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "sqlite3 /data/adb/magisk.db '.dump denylist'"))
+                val fallbackReader = BufferedReader(InputStreamReader(fallbackProcess.inputStream))
+                var fallbackLine: String?
+                val insertPattern = Regex("INSERT INTO denylist VALUES\\('([^']+)'")
+                
+                while (fallbackReader.readLine().also { fallbackLine = it } != null) {
+                    val match = insertPattern.find(fallbackLine ?: "")
+                    if (match != null) {
+                        val packageName = match.groupValues[1]
+                        if (packageName.isNotEmpty() && !denyList.contains(packageName)) {
+                            denyList.add(packageName)
+                            android.util.Log.d("MainActivity", "getDenyList: Found from dump: $packageName")
+                        }
                     }
                 }
-            } catch (e2: Exception) {}
+                fallbackProcess.waitFor()
+            } catch (e2: Exception) {
+                android.util.Log.e("MainActivity", "getDenyList fallback error: ${e2.message}")
+            }
         }
+        
+        android.util.Log.d("MainActivity", "getDenyList: Returning ${denyList.size} items: $denyList")
         return denyList
     }
 
@@ -4647,6 +4820,114 @@ class MainActivity : FlutterActivity() {
         return "https://magiskube.local/local/index.html"
     }
     
+    // ==================== Magisk Logs Methods ====================
+    
+    /**
+     * Fetch Magisk logs using root shell
+     * Same implementation as original Magisk app:
+     * - First tries: cat /cache/magisk.log
+     * - Falls back to: logcat -d -s Magisk
+     * 
+     * @return The log content as a string
+     */
+    private fun fetchMagiskLogs(): String {
+        return try {
+            // Method 1: Try to read Magisk log file (same as original Magisk app)
+            // The log file is typically at /cache/magisk.log
+            val logFile = "/cache/magisk.log"
+            val catProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat $logFile 2>/dev/null || logcat -d -s Magisk 2>/dev/null"))
+            val reader = BufferedReader(InputStreamReader(catProcess.inputStream))
+            val output = StringBuilder()
+            var line: String?
+            
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            
+            catProcess.waitFor()
+            
+            val result = output.toString()
+            if (result.isNotEmpty()) {
+                result
+            } else {
+                // Fallback: try alternative log locations
+                val altLocations = listOf(
+                    "/data/adb/magisk.log",
+                    "/data/cache/magisk.log",
+                    "/data/local/tmp/magisk.log"
+                )
+                
+                for (location in altLocations) {
+                    val altProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat $location 2>/dev/null"))
+                    val altReader = BufferedReader(InputStreamReader(altProcess.inputStream))
+                    val altOutput = StringBuilder()
+                    
+                    while (altReader.readLine().also { line = it } != null) {
+                        altOutput.append(line).append("\n")
+                    }
+                    
+                    altProcess.waitFor()
+                    
+                    if (altOutput.isNotEmpty()) {
+                        return altOutput.toString()
+                    }
+                }
+                
+                // Last resort: get all Magisk-related logs from logcat
+                val logcatProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "logcat -d | grep -i magisk"))
+                val logcatReader = BufferedReader(InputStreamReader(logcatProcess.inputStream))
+                val logcatOutput = StringBuilder()
+                
+                while (logcatReader.readLine().also { line = it } != null) {
+                    logcatOutput.append(line).append("\n")
+                }
+                
+                logcatProcess.waitFor()
+                logcatOutput.toString()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error fetching Magisk logs: ${e.message}")
+            ""
+        }
+    }
+    
+    /**
+     * Clear Magisk logs
+     * Same implementation as original Magisk app:
+     * - Uses: echo -n > /cache/magisk.log
+     * 
+     * @return true if successful, false otherwise
+     */
+    private fun clearMagiskLogs(): Boolean {
+        return try {
+            // Clear the main Magisk log file
+            val clearProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "echo -n > /cache/magisk.log 2>/dev/null || true"))
+            clearProcess.waitFor()
+            
+            // Also try alternative log locations
+            val altLocations = listOf(
+                "/data/adb/magisk.log",
+                "/data/cache/magisk.log",
+                "/data/local/tmp/magisk.log"
+            )
+            
+            for (location in altLocations) {
+                try {
+                    val altClearProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "echo -n > $location 2>/dev/null || true"))
+                    altClearProcess.waitFor()
+                } catch (e: Exception) {
+                    // Ignore errors for alternative locations
+                }
+            }
+            
+            android.util.Log.d("MainActivity", "Magisk logs cleared successfully")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error clearing Magisk logs: ${e.message}")
+            false
+        }
+    }
+
     // ==================== No-Root Boot Image Patching ====================
     
     /**

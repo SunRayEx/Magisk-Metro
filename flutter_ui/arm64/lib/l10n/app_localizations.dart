@@ -443,18 +443,6 @@ abstract class AppLocalizations {
   /// **'Enable or disable DenyList'**
   String get denyListDesc;
 
-  /// No description provided for @suList.
-  ///
-  /// In en, this message translates to:
-  /// **'SuList'**
-  String get suList;
-
-  /// No description provided for @suListDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Whitelist mode - only listed apps get root access'**
-  String get suListDesc;
-
   /// No description provided for @aggressiveHide.
   ///
   /// In en, this message translates to:
@@ -514,6 +502,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No file selected'**
   String get noFileSelected;
+
+  /// No description provided for @enforceDenyList.
+  ///
+  /// In en, this message translates to:
+  /// **'Enforce DenyList'**
+  String get enforceDenyList;
+
+  /// No description provided for @enforceDenyListDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps in DenyList will have root hidden from them'**
+  String get enforceDenyListDesc;
+
+  /// No description provided for @activities.
+  ///
+  /// In en, this message translates to:
+  /// **'Activities'**
+  String get activities;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

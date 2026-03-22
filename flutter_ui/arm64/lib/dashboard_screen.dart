@@ -130,6 +130,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case '/apps':
         page = const AppsPage();
         break;
+      case '/denylist':
+        page = const DenyListPage();
+        break;
       case '/logs':
         page = const LogsPage();
         break;
@@ -381,7 +384,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ? const Color(0xFF64B5F6)
         : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
 
-    // Only clickable if rooted with Magisk
+    // Only clickable if rooted with MagiskSU (not other root solutions)
     final isClickable = status.isRooted;
 
     // Filter enabled modules for carousel
@@ -538,7 +541,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildLogsCard(BuildContext context, WidgetRef ref, bool isDark) {
-    final logsAsync = ref.watch(logsProvider);
+    final filteredLogs = ref.watch(filteredLogsProvider);
     final localizations = AppLocalizations.of(context)!;
 
     // Logs card is always clickable
@@ -563,23 +566,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 4),
               Expanded(
-                child: logsAsync.when(
-                  data: (logs) => _LogsListView(logs: logs, isDark: isDark),
-                  loading: () => Center(
-                    child: CircularProgressIndicator(
-                      color: isDark ? Colors.black : Colors.white,
-                    ),
-                  ),
-                  error: (error, stack) => Text(
-                    '[E] ${localizations.error}: $error',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 8,
-                      color: isDark ? Colors.black : Colors.white,
-                    ),
-                    overflow: TextOverflow.clip,
-                  ),
-                ),
+                child: filteredLogs.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No E/W/D logs',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color: isDark ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      )
+                    : _LogsListView(logs: filteredLogs, isDark: isDark),
               ),
             ],
           ),
@@ -691,14 +689,12 @@ class _LogsListViewState extends State<_LogsListView> {
 
   @override
   Widget build(BuildContext context) {
-    final recentLogs =
-        widget.logs.where((log) => log.contains('[E]')).take(10).toList();
-
+    // Logs are already filtered (E/W/D for dashboard tile), just display them
     return ListView.builder(
       controller: _scrollController,
-      itemCount: recentLogs.isEmpty ? widget.logs.length : recentLogs.length,
+      itemCount: widget.logs.length,
       itemBuilder: (context, index) {
-        final log = recentLogs.isEmpty ? widget.logs[index] : recentLogs[index];
+        final log = widget.logs[index];
         return Text(
           log,
           style: GoogleFonts.poppins(

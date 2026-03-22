@@ -531,6 +531,30 @@ class AndroidDataService {
     }
   }
 
+  /// Fetch Magisk logs using root shell (same as original Magisk app)
+  /// Uses: cat /cache/magisk.log || logcat -d -s Magisk
+  static Future<String> fetchMagiskLogs() async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<String>('fetchMagiskLogs');
+      return result ?? '';
+    } catch (e) {
+      debugPrint('fetchMagiskLogs error: $e');
+      return '';
+    }
+  }
+  
+  /// Clear Magisk logs
+  static Future<bool> clearMagiskLogs() async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('clearMagiskLogs');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('clearMagiskLogs error: $e');
+      return false;
+    }
+  }
+  
+  /// Legacy: Get logcat stream (kept for compatibility)
   static Stream<String> getLogcatStream() {
     try {
       return EventChannel('magisk_manager/logs')

@@ -183,12 +183,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get denyListDesc => 'Enable or disable DenyList';
 
   @override
-  String get suList => 'SuList';
-
-  @override
-  String get suListDesc => 'Whitelist mode - only listed apps get root access';
-
-  @override
   String get aggressiveHide => 'Aggressive Hide';
 
   @override
@@ -217,4 +211,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noFileSelected => 'No file selected';
+
+  @override
+  String get enforceDenyList => 'Enforce DenyList';
+
+  @override
+  String get enforceDenyListDesc => 'Apps in DenyList will have root hidden from them';
+
+  @override
+  String get activities => 'Activities';
 }
