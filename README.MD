@@ -45,8 +45,9 @@ Translate each and place them in the respective locations (`[module]/src/main/re
 
 ## Upstream Link
 
-- Magisk
-- [GitHub](https://github.com/topjohnwu/Magisk)
+- [Magisk](https://github.com/topjohnwu/Magisk) Main branch
+- [APatch](https://github.com/bmax121/APatch)  borrow code
+- [KernelSU](https://githun.com/tiann/KernelSU) borrow code
 
 ## License
 
