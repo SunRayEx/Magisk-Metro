@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart' as widgets;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/dashboard_providers.dart';
 import '../models/models.dart';
 import '../services/android_data_service.dart';
+import '../utils/persistent_storage.dart';
 import 'flash_logs_page.dart';
 import 'module_webview_page.dart';
 import '../navigation/flip_page_route.dart';
@@ -1001,7 +1003,9 @@ class _ModulesPageState extends ConsumerState<ModulesPage> {
                         itemCount: modules.length,
                         itemBuilder: (context, index) {
                           final module = modules[index];
-                          return _buildModuleTile(module, widgetColor, isDark);
+                          return RepaintBoundary( // ← 这里改了: 隔离高频重绘列表项，防止滑动卡顿
+                            child: _buildModuleTile(module, widgetColor, isDark),
+                          );
                         },
                       ),
                     ),
@@ -1254,12 +1258,13 @@ class AppsPage extends ConsumerStatefulWidget {
 }
 
 class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClientMixin, RouteAware {
-  bool _showOnlyRootApps = false;
+  bool _showOnlyRootApps = true; // Default to true as requested
   String _searchQuery = '';
   List<AppInfo> _cachedApps = [];
   List<AppInfo> _filteredApps = [];
   bool _isInitialized = false;
   List<String> _packageOrder = []; // Track package order persistently
+  Set<String> _currentDenyList = {}; // Track current DenyList
   
   @override
   bool get wantKeepAlive => true;
@@ -1286,6 +1291,9 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
   
   void _updateFilteredApps() {
     _filteredApps = _cachedApps.where((app) {
+      if (_currentDenyList.contains(app.packageName)) {
+        return false; // Hide if in DenyList
+      }
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         if (!app.name.toLowerCase().contains(query) &&
@@ -1305,6 +1313,9 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
     super.build(context);
     
     final apps = ref.watch(appsProvider);
+    final denyListState = ref.watch(denyListStateProvider);
+    _currentDenyList = denyListState.apps;
+
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final widgetColor = AppTheme.getTileWidgetColor(4, tileColorIndex, isDark);
@@ -1375,8 +1386,6 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
   }
   
   Widget _buildHeader(BuildContext context, AppLocalizations localizations, bool isDark, Color widgetColor) {
-    final rootAppsCount = _cachedApps.where((app) => app.hasRootAccess).length;
-    
     return Column(
       children: [
         Container(
@@ -1395,6 +1404,7 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
                   child: Icon(Icons.chevron_left, color: AppTheme.getFont(isDark), size: 28),
                 ),
               ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   localizations.apps,
@@ -1403,42 +1413,35 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
                     fontSize: 20,
                     color: AppTheme.getFont(isDark),
                   ),
+                  textAlign: TextAlign.left,
                 ),
               ),
-              GestureDetector(
-                onTap: () => setState(() => _showOnlyRootApps = !_showOnlyRootApps),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _showOnlyRootApps ? widgetColor.withValues(alpha: 0.2) : null,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(Icons.filter_list,
-                        color: _showOnlyRootApps 
-                            ? widgetColor 
-                            : AppTheme.getFont(isDark).withValues(alpha: 0.7),
-                        size: 24),
-                      if (_showOnlyRootApps)
-                        Positioned(
-                          right: -4, top: -4,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: widgetColor,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text('$rootAppsCount',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                    ],
+              // 右上角切换按钮 (Dual-mode switch)
+              Semantics(
+                label: '排序方式，按钮',
+                child: InkWell(
+                  onTap: () => setState(() => _showOnlyRootApps = !_showOnlyRootApps),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (Widget child, Animation<double> animation) {
+                        return ScaleTransition(scale: animation, child: child);
+                      },
+                      child: Icon(
+                        _showOnlyRootApps ? Icons.security : Icons.apps,
+                        key: ValueKey<bool>(_showOnlyRootApps),
+                        color: _showOnlyRootApps ? widgetColor : AppTheme.getFont(isDark).withValues(alpha: 0.7),
+                        size: 24,
+                      ),
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
             ],
           ),
         ),
@@ -1521,14 +1524,16 @@ class _AppsPageState extends ConsumerState<AppsPage> with AutomaticKeepAliveClie
         cacheExtent: 500, // Pre-cache items for smoother scrolling
         itemBuilder: (context, index) {
           final app = _filteredApps[index];
-          return _AppTile(
-            key: ValueKey(app.packageName),
-            app: app,
-            widgetColor: widgetColor,
-            isDark: isDark,
-            onToggle: (value) async {
-              await ref.read(appsProvider.notifier).toggleRootAccessViaScript(app.packageName, value);
-            },
+          return RepaintBoundary( // ← 这里改了: 隔离高频重绘列表项
+            child: _AppTile(
+              key: ValueKey(app.packageName),
+              app: app,
+              widgetColor: widgetColor,
+              isDark: isDark,
+              onToggle: (value) async {
+                await ref.read(appsProvider.notifier).toggleRootAccessViaScript(app.packageName, value);
+              },
+            ),
           );
         },
       ),
@@ -1685,15 +1690,17 @@ class _LogsPageState extends ConsumerState<LogsPage> {
                         padding: const EdgeInsets.all(4),
                         itemCount: logs.length,
                         itemBuilder: (context, index) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 2),
-                            padding: const EdgeInsets.all(8),
-                            color: AppTheme.getListItem(isDark),
-                            child: Text(
-                              logs[index],
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: AppTheme.getListItemFont(isDark),
+                          return RepaintBoundary( // ← 这里改了: 隔离大量日志渲染导致的卡顿
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 2),
+                              padding: const EdgeInsets.all(8),
+                              color: AppTheme.getListItem(isDark),
+                              child: Text(
+                                logs[index],
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppTheme.getListItemFont(isDark),
+                                ),
                               ),
                             ),
                           );
@@ -1783,40 +1790,42 @@ class ContributorsPage extends ConsumerWidget {
                 itemCount: contributors.length,
                 itemBuilder: (context, index) {
                   final contributor = contributors[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    color: AppTheme.getListItem(isDark),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: widgetColor,
-                        child: Text(
-                          contributor.name.isNotEmpty
-                              ? contributor.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(color: Colors.white),
+                  return RepaintBoundary( // ← 这里改了: 隔离重绘，提升列表滑动性能
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      color: AppTheme.getListItem(isDark),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: widgetColor,
+                          child: Text(
+                            contributor.name.isNotEmpty
+                                ? contributor.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                         ),
-                      ),
-                      title: Text(
-                        contributor.name,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.getListItemFont(isDark),
+                        title: Text(
+                          contributor.name,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.getListItemFont(isDark),
+                          ),
                         ),
+                        trailing: contributor.github != null && contributor.github != 'none'
+                            ? Icon(Icons.open_in_new,
+                                color: AppTheme.getListItemFont(isDark)
+                                    .withValues(alpha: 0.6))
+                            : null,
+                        onTap: () {
+                          if (contributor.github != null && contributor.github != 'none') {
+                            _openGithub(contributor.github!);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Not valid GitHub Link')),
+                            );
+                          }
+                        },
                       ),
-                      trailing: contributor.github != null && contributor.github != 'none'
-                          ? Icon(Icons.open_in_new,
-                              color: AppTheme.getListItemFont(isDark)
-                                  .withValues(alpha: 0.6))
-                          : null,
-                      onTap: () {
-                        if (contributor.github != null && contributor.github != 'none') {
-                          _openGithub(contributor.github!);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Not valid GitHub Link')),
-                          );
-                        }
-                      },
                     ),
                   );
                 },
@@ -1886,9 +1895,20 @@ class ThemePage extends ConsumerWidget {
                 itemCount: AppTheme.tileColorNames.length,
                 itemBuilder: (context, index) {
                   final isSelected = index == selectedColorIndex;
+                  final isCustom = index == 2; // Custom theme index
+                  
                   return GestureDetector(
-                    onTap: () =>
-                        ref.read(tileColorProvider.notifier).state = index,
+                    onTap: () {
+                      if (isCustom) {
+                        // Navigate to CustomThemePage for Custom theme
+                        Navigator.push(
+                          context,
+                          FlipPageRoute(page: const CustomThemePage()),
+                        );
+                      } else {
+                        ref.read(tileColorProvider.notifier).state = index;
+                      }
+                    },
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 4),
                       padding: const EdgeInsets.all(16),
@@ -1921,7 +1941,12 @@ class ThemePage extends ConsumerWidget {
                               ),
                             ),
                           ),
-                          if (isSelected)
+                          if (isCustom)
+                            Icon(
+                              Icons.chevron_right,
+                              color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                            )
+                          else if (isSelected)
                             Icon(
                               Icons.check_circle,
                               color: AppTheme.getListItemFont(isDark),
@@ -1940,16 +1965,532 @@ class ThemePage extends ConsumerWidget {
   }
 
   Color _getTileColor(int index, bool isDark) {
-    if (index == AppTheme.tileColorNames.length - 1) {
-      // Monet Theme - use a special color to indicate it's dynamic
-      return isDark ? Colors.grey[700]! : Colors.grey[300]!;
-    }
+    // Index mapping:
+    // 0: Default (Teal)
+    // 1: Monet (dynamic from wallpaper)
+    // 2: Custom (user-selected)
+    // 3: Blue -> tileColors[0]
+    // 4: Red -> tileColors[1]
+    // 5: Green -> tileColors[2]
+    // 6: Purple -> tileColors[3]
+    // 7: Yellow -> tileColors[4]
+    
     if (index == 0) {
-      return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+      // Default - Magisk Teal
+      return isDark ? const Color(0xFF00695C) : const Color(0xFF4DB6AC);
     }
-    return AppTheme.tileColors[index];
+    if (index == 1) {
+      // Monet Theme - dynamically loaded color or fallback
+      return AppTheme.monetPrimary ?? (isDark ? Colors.grey[700]! : Colors.grey[300]!);
+    }
+    if (index == 2) {
+      // Custom Theme - user-selected color or fallback
+      return AppTheme.customThemeColor ?? (isDark ? Colors.grey[700]! : Colors.grey[300]!);
+    }
+    // For index 3-7, map to tileColors (0-4)
+    final adjustedIndex = index - 3;
+    if (adjustedIndex >= 0 && adjustedIndex < AppTheme.tileColors.length) {
+      final color = AppTheme.tileColors[adjustedIndex];
+      return isDark ? _darkenColor(color, 0.2) : color;
+    }
+    // Fallback
+    return isDark ? const Color(0xFF00695C) : const Color(0xFF4DB6AC);
+  }
+  
+  static Color _darkenColor(Color color, double factor) {
+    final hsl = HSLColor.fromColor(color);
+    final newLightness = (hsl.lightness * (1 - factor)).clamp(0.0, 1.0);
+    return hsl.withLightness(newLightness).toColor();
   }
 
+  Widget _buildHeader(BuildContext context, String title, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      color: AppTheme.getTile(isDark),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.chevron_left,
+                  color: AppTheme.getFont(isDark), size: 28),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                color: AppTheme.getFont(isDark),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Custom Theme Page - Redesigned with animated tiles and color palette
+class CustomThemePage extends ConsumerStatefulWidget {
+  const CustomThemePage({super.key});
+
+  @override
+  ConsumerState<CustomThemePage> createState() => _CustomThemePageState();
+}
+
+class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerProviderStateMixin {
+  int _selectedTileIndex = -1; // -1 means no selection
+  Map<int, Color> _tileColors = {};
+  
+  // Animation controllers
+  late AnimationController _tileAnimationController;
+  late AnimationController _paletteAnimationController;
+  late List<Animation<double>> _tileAnimations;
+  late Animation<double> _paletteAnimation;
+  
+  // Text input controller for HEX
+  final TextEditingController _hexController = TextEditingController();
+  final FocusNode _hexFocusNode = FocusNode();
+  
+  // 64 vibrant gradient colors organized by hue
+  // Each row: Red → Orange → Yellow → Green → Cyan → Blue → Purple → Magenta
+  // Darkest (90% of max RGB) at top, gradually lighter toward white (40% of darkest)
+  static const List<Color> _materialColors = [
+    // Row 0: 90% - Darkest (max RGB value * 0.9)
+    Color(0xFFE60000), Color(0xFFE65C00), Color(0xFFE6E600), Color(0xFF00E600),
+    Color(0xFF00E6E6), Color(0xFF0000E6), Color(0xFF7A00E6), Color(0xFFE600E6),
+    // Row 1: 100% - Max RGB value (second darkest)
+    Color(0xFFFF0000), Color(0xFFFF6600), Color(0xFFFFFF00), Color(0xFF00FF00),
+    Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8800FF), Color(0xFFFF00FF),
+    // Row 2: Adding other channels to lighten
+    Color(0xFFFF3333), Color(0xFFFF8833), Color(0xFFFFFF33), Color(0xFF33FF33),
+    Color(0xFF33FFFF), Color(0xFF3333FF), Color(0xFFAA33FF), Color(0xFFFF33FF),
+    // Row 3: Continue lightening
+    Color(0xFFFF5555), Color(0xFFFF9955), Color(0xFFFFFF55), Color(0xFF55FF55),
+    Color(0xFF55FFFF), Color(0xFF5555FF), Color(0xFFBB55FF), Color(0xFFFF55FF),
+    // Row 4: Continue lightening
+    Color(0xFFFF7777), Color(0xFFFFAA77), Color(0xFFFFFF77), Color(0xFF77FF77),
+    Color(0xFF77FFFF), Color(0xFF7777FF), Color(0xFFCC77FF), Color(0xFFFF77FF),
+    // Row 5: Continue lightening
+    Color(0xFFFF9999), Color(0xFFFFBB99), Color(0xFFFFFF99), Color(0xFF99FF99),
+    Color(0xFF99FFFF), Color(0xFF9999FF), Color(0xFFDD99FF), Color(0xFFFF99FF),
+    // Row 6: Continue lightening
+    Color(0xFFFFBBBB), Color(0xFFFFCCBB), Color(0xFFFFFFBB), Color(0xFFBBFFBB),
+    Color(0xFFBBFFFF), Color(0xFFBBBBFF), Color(0xFFEEBBFF), Color(0xFFFFBBFF),
+    // Row 7: 40% of darkest - Lightest (tinted toward white)
+    Color(0xFFFFDDDD), Color(0xFFFFE6DD), Color(0xFFFFFFDD), Color(0xFFDDFFDD),
+    Color(0xFFDDFFFF), Color(0xFFDDDDFF), Color(0xFFF0DDFF), Color(0xFFFFDDFF),
+  ];
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedColors();
+    
+    // Tile animation controller
+    _tileAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    // Palette animation controller - smooth fold animation (medium speed, non-linear)
+    _paletteAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    
+    // Create staggered animations for each tile
+    _tileAnimations = List.generate(5, (index) {
+      return Tween<double>(begin: 1.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _tileAnimationController,
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    });
+    
+    // Palette animation with smooth ease-out curve for fold effect
+    _paletteAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _paletteAnimationController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+  
+  @override
+  void dispose() {
+    _tileAnimationController.dispose();
+    _paletteAnimationController.dispose();
+    _hexController.dispose();
+    _hexFocusNode.dispose();
+    super.dispose();
+  }
+  
+  Future<void> _loadSavedColors() async {
+    final storage = PersistentStorage();
+    final savedColors = await storage.loadCustomTileColors();
+    if (savedColors.isNotEmpty) {
+      setState(() {
+        _tileColors = savedColors.map((key, value) => MapEntry(key, Color(value)));
+        AppTheme.customTileColors = _tileColors;
+      });
+    }
+  }
+  
+  Color _getDefaultColorForTile(int index) {
+    switch (index) {
+      case 0: return const Color(0xFF009688); // Magisk - Teal
+      case 1: return const Color(0xFFFFC107); // Settings - Amber
+      case 2: return const Color(0xFF9C27B0); // Contributor - Purple
+      case 3: return const Color(0xFF2196F3); // Modules - Blue
+      case 4: return const Color(0xFFF44336); // Apps - Red
+      default: return const Color(0xFF009688);
+    }
+  }
+  
+  IconData _getIconForTile(int index) {
+    switch (index) {
+      case 0: return Icons.face; // Magisk
+      case 1: return Icons.settings; // Settings
+      case 2: return Icons.people; // Contributor
+      case 3: return Icons.extension; // Modules
+      case 4: return Icons.apps; // Apps
+      default: return Icons.widgets;
+    }
+  }
+  
+  void _selectTile(int index) {
+    setState(() {
+      if (_selectedTileIndex == index) {
+        // Deselect
+        _selectedTileIndex = -1;
+        _paletteAnimationController.reverse();
+      } else {
+        _selectedTileIndex = index;
+        _paletteAnimationController.forward();
+        // Update HEX controller with current color
+        final currentColor = _tileColors[index] ?? _getDefaultColorForTile(index);
+        _hexController.text = '#${currentColor.value.toRadixString(16).substring(2).toUpperCase()}';
+      }
+    });
+  }
+  
+  void _applyColorToSelectedTile(Color color) {
+    if (_selectedTileIndex < 0) return;
+    
+    setState(() {
+      _tileColors[_selectedTileIndex] = color;
+      AppTheme.customTileColors = _tileColors;
+      _hexController.text = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+    });
+  }
+  
+  void _applyHexColor() {
+    final hexText = _hexController.text.trim();
+    if (hexText.isEmpty) return;
+    
+    try {
+      String hex = hexText.replaceFirst('#', '');
+      if (hex.length == 6) {
+        hex = 'FF$hex';
+      }
+      final color = Color(int.parse(hex, radix: 16));
+      _applyColorToSelectedTile(color);
+    } catch (e) {
+      // Invalid hex, show error
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid HEX color format')),
+      );
+    }
+  }
+  
+  void _saveAndApply() {
+    // Save to persistent storage
+    final storage = PersistentStorage();
+    
+    // Save per-tile colors
+    final colorMap = _tileColors.map((key, value) => MapEntry(key, value.value));
+    storage.saveCustomTileColors(colorMap);
+    
+    // Update the static variable for immediate use
+    AppTheme.customTileColors = Map<int, Color>.from(_tileColors);
+    
+    // Update the provider state so Dashboard can reactively rebuild
+    ref.read(customTileColorsProvider.notifier).state = Map<int, Color>.from(_tileColors);
+    
+    // Select Custom theme
+    ref.read(tileColorProvider.notifier).state = 2;
+    
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = ref.watch(themeProvider);
+    final screenSize = MediaQuery.of(context).size;
+    final tileWidth = (screenSize.width - 16 - 32) / 5; // 16 padding each side, 4 gaps of 8
+    
+    return Scaffold(
+      backgroundColor: AppTheme.getBackground(isDark),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context, 'Custom Theme', isDark),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // Five tiles in a row
+                    SizedBox(
+                      height: _selectedTileIndex >= 0 ? tileWidth * 1.1 + 24 : tileWidth + 8,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(5, (index) {
+                          return _buildAnimatedTile(index, tileWidth, isDark);
+                        }),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Color palette with 3D pop animation
+                    widgets.AnimatedBuilder(
+                      animation: _paletteAnimation,
+                      builder: (context, child) {
+                        if (_selectedTileIndex < 0) return const SizedBox.shrink();
+                        
+                        return Transform(
+                          alignment: Alignment.topCenter,
+                          transform: Matrix4.identity()
+                            ..scale(1.0, _paletteAnimation.value)
+                            ..translate(0.0, 50.0 * (1 - _paletteAnimation.value)),
+                          child: Opacity(
+                            opacity: _paletteAnimation.value,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: _buildColorPalette(isDark),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Save button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _tileColors.isNotEmpty ? _saveAndApply : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _selectedTileIndex >= 0 
+                              ? (_tileColors[_selectedTileIndex] ?? _getDefaultColorForTile(_selectedTileIndex))
+                              : AppTheme.getListItemFont(isDark),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                        child: Text(
+                          'SAVE & APPLY',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildAnimatedTile(int index, double tileWidth, bool isDark) {
+    final isSelected = _selectedTileIndex == index;
+    final color = _tileColors[index] ?? _getDefaultColorForTile(index);
+    final icon = _getIconForTile(index);
+    final name = AppTheme.customizableTileNames[index];
+    
+    // Calculate animated values
+    final scale = isSelected ? 1.1 : 1.0;
+    final iconSize = isSelected ? 24.0 : 32.0;
+    
+    return GestureDetector(
+      onTap: () => _selectTile(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        width: tileWidth * scale,
+        height: tileWidth * scale,
+        decoration: BoxDecoration(
+          color: color,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                icon,
+                size: iconSize,
+                color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 4),
+              Text(
+                name.toUpperCase(),
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                  color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildColorPalette(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.getListItem(isDark),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // HEX input row
+          Row(
+            children: [
+              Text(
+                'HEX:',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppTheme.getFont(isDark),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _hexController,
+                  focusNode: _hexFocusNode,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: AppTheme.getFont(isDark),
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '#RRGGBB',
+                    hintStyle: GoogleFonts.poppins(
+                      color: AppTheme.getFont(isDark).withValues(alpha: 0.5),
+                    ),
+                    filled: true,
+                    fillColor: AppTheme.getBackground(isDark),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: const OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: _tileColors[_selectedTileIndex] ?? _getDefaultColorForTile(_selectedTileIndex),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  onSubmitted: (_) => _applyHexColor(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _applyHexColor,
+                icon: Icon(
+                  Icons.check,
+                  color: _tileColors[_selectedTileIndex] ?? _getDefaultColorForTile(_selectedTileIndex),
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppTheme.getBackground(isDark),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 64 color grid (8x8)
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 8,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+            ),
+            itemCount: 64,
+            itemBuilder: (context, index) {
+              final color = _materialColors[index];
+              final currentColor = _selectedTileIndex >= 0 
+                  ? (_tileColors[_selectedTileIndex] ?? _getDefaultColorForTile(_selectedTileIndex))
+                  : null;
+              final isSelected = currentColor != null && color.value == currentColor.value;
+              
+              return GestureDetector(
+                onTap: () => _applyColorToSelectedTile(color),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    color: color,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 3)
+                        : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.5),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+  
   Widget _buildHeader(BuildContext context, String title, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -2018,19 +2559,28 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
     
     // Execute all pending changes to magisk.db
     for (final entry in _pendingChanges.entries) {
-      final packageName = entry.key;
+      final key = entry.key;
       final shouldAdd = entry.value;
+      final isActivity = key.contains('/');
       
       try {
         if (shouldAdd) {
-          await AndroidDataService.addToDenyList(packageName);
-          _confirmedDenyListApps.add(packageName);
+          if (isActivity) {
+            await AndroidDataService.addToDenyListActivity(key);
+          } else {
+            await AndroidDataService.addToDenyList(key);
+            _confirmedDenyListApps.add(key);
+          }
         } else {
-          await AndroidDataService.removeFromDenyList(packageName);
-          _confirmedDenyListApps.remove(packageName);
+          if (isActivity) {
+            await AndroidDataService.removeFromDenyListActivity(key);
+          } else {
+            await AndroidDataService.removeFromDenyList(key);
+            _confirmedDenyListApps.remove(key);
+          }
         }
       } catch (e) {
-        debugPrint('Error flushing denylist change for $packageName: $e');
+        debugPrint('Error flushing denylist change for $key: $e');
       }
     }
     
@@ -2070,6 +2620,8 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
         } else {
           _pendingChanges[fullActivityName] = newState;
         }
+        // Sync local provider state for activities
+        ref.read(denyListStateProvider.notifier).toggleActivity(fullActivityName, newState);
       }
       // Update cached activities UI state
       setState(() {
@@ -2078,6 +2630,9 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
       });
     }
     
+    // Sync local provider state so other pages (like AppsPage) see the change instantly
+    ref.read(denyListStateProvider.notifier).toggleApp(packageName, newState);
+
     // Trigger rebuild to update switch state
     setState(() {});
   }
@@ -2177,10 +2732,16 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
     final fullActivityName = '$packageName/$activityName';
     final denyListState = ref.read(denyListStateProvider);
     final isInList = denyListState.activities.contains(fullActivityName);
+    final newState = !isInList;
     
+    // Add to pending changes
+    final confirmedState = denyListState.activities.contains(fullActivityName); // Wait, this is the original state. Actually we should check Magisk DB state.
+    // Since we don't have _confirmedDenyListActivities, we just add to pending.
+    _pendingChanges[fullActivityName] = newState;
+
     // Update local state
     final notifier = ref.read(denyListStateProvider.notifier);
-    notifier.toggleActivity(fullActivityName, !isInList);
+    notifier.toggleActivity(fullActivityName, newState);
     
     // Update cached activities
     final activities = _appActivities[packageName];
@@ -2190,7 +2751,7 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
         setState(() {
           _appActivities[packageName]![index] = ActivityInfo(
             name: activityName, 
-            isInDenyList: !isInList,
+            isInDenyList: newState,
           );
         });
       }
@@ -2215,10 +2776,13 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
     if (_cachedApps.isEmpty || 
         _cachedApps.length != apps.length ||
         !_listEquals(_cachedApps, apps)) {
-      _cachedApps = _sortApps(apps, _confirmedDenyListApps);
+      _cachedApps.clear();
+      _cachedApps.addAll(_sortApps(apps, _confirmedDenyListApps));
     } else {
       // Just update sort order based on confirmed denylist
-      _cachedApps = _sortApps(_cachedApps, _confirmedDenyListApps);
+      final sorted = _sortApps(_cachedApps, _confirmedDenyListApps);
+      _cachedApps.clear();
+      _cachedApps.addAll(sorted);
     }
     
     // Filter apps based on search
@@ -2317,6 +2881,10 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
                         onRefresh: () async {
                           // Flush pending changes first
                           await _flushPendingChanges();
+                          // Clear cache before refresh to prevent diff-calculation ANR issues during pull-to-refresh
+                          setState(() {
+                            _cachedApps.clear();
+                          });
                           // Then refresh from magisk.db
                           await ref.read(denyListStateProvider.notifier).refresh();
                         },
@@ -2331,27 +2899,29 @@ class _DenyListPageState extends ConsumerState<DenyListPage> with RouteAware {
                             final showLabel = _shouldShowDenyListLabel(app.packageName);
                             final isExpanded = _expandedApps[app.packageName] ?? false;
                             
-                            return _DenyListAppTile(
-                              key: ValueKey(app.packageName),
-                              app: app,
-                              switchState: switchState,
-                              showDenyListLabel: showLabel,
-                              isExpanded: isExpanded,
-                              widgetColor: widgetColor,
-                              isDark: isDark,
-                              activities: _appActivities[app.packageName],
-                              onToggle: () => _toggleAppInDenyList(app.packageName),
-                              onExpand: () async {
-                                setState(() {
-                                  _expandedApps[app.packageName] = !isExpanded;
-                                });
-                                if (!isExpanded) {
-                                  await _loadAppActivities(app.packageName);
-                                }
-                              },
-                              onActivityToggle: (activityName) => 
-                                  _toggleActivityInDenyList(app.packageName, activityName),
-                              localizations: localizations,
+                            return RepaintBoundary( // ← 这里改了: 隔离高频重绘列表项，提升滑动性能
+                              child: _DenyListAppTile(
+                                key: ValueKey(app.packageName),
+                                app: app,
+                                switchState: switchState,
+                                showDenyListLabel: showLabel,
+                                isExpanded: isExpanded,
+                                widgetColor: widgetColor,
+                                isDark: isDark,
+                                activities: _appActivities[app.packageName],
+                                onToggle: () => _toggleAppInDenyList(app.packageName),
+                                onExpand: () async {
+                                  setState(() {
+                                    _expandedApps[app.packageName] = !isExpanded;
+                                  });
+                                  if (!isExpanded) {
+                                    await _loadAppActivities(app.packageName);
+                                  }
+                                },
+                                onActivityToggle: (activityName) => 
+                                    _toggleActivityInDenyList(app.packageName, activityName),
+                                localizations: localizations,
+                              ),
                             );
                           },
                         ),

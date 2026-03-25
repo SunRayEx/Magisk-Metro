@@ -33,10 +33,6 @@ import java.io.InputStreamReader
 class MainActivity : FlutterActivity() {
     private var rootAccessGranted = false
     
-    // WebViewAssetLoader for serving local WebUI content
-    private var webViewAssetLoader: WebViewAssetLoader? = null
-    private var currentModuleWebroot: String? = null
-    
     // Static reference to EventSink for sending logs from anywhere
     companion object {
         var logEventSink: EventChannel.EventSink? = null
@@ -409,13 +405,6 @@ class MainActivity : FlutterActivity() {
                 "hasWebroot" -> {
                     val moduleDir = call.argument<String>("moduleDir") ?: ""
                     result.success(hasWebroot(moduleDir))
-                }
-                "setupWebViewAssetLoader" -> {
-                    val moduleDir = call.argument<String>("moduleDir") ?: ""
-                    result.success(setupWebViewAssetLoader(moduleDir))
-                }
-                "getWebUILoaderUrl" -> {
-                    result.success(getWebUILoaderUrl())
                 }
                 else -> result.notImplemented()
             }
@@ -825,10 +814,45 @@ class MainActivity : FlutterActivity() {
         return try {
             android.util.Log.d("MainActivity", "isZygiskEnabled: checking status")
             
-            // CRITICAL Method 0: Check ro.dalvik.vm.native.bridge property
-            // This is THE indicator that Zygisk is actually loaded and active
-            // Zygisk sets this to "libzygisk.so" (possibly followed by original value)
-            // If this doesn't contain "libzygisk.so", Zygisk is NOT working even if DB says enabled
+            // Method 1: Check database setting first (most reliable for UI state)
+            val magiskConfigFile = File("/data/adb/magisk.db")
+            
+            if (magiskConfigFile.exists()) {
+                // Query both possible keys: zygisk and zygisk_enabled
+                val sqliteResult = executeRootCommand("magisk --sqlite \"SELECT * FROM settings\"")
+                android.util.Log.d("MainActivity", "SQLite query result: '$sqliteResult'")
+                
+                for (line in sqliteResult.split("\n")) {
+                    val trimmed = line.trim()
+                    // Check for zygisk key
+                    if (trimmed.startsWith("key=zygisk|")) {
+                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
+                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
+                            android.util.Log.d("MainActivity", "isZygiskEnabled: TRUE via zygisk key in database")
+                            return true
+                        }
+                    }
+                    // Check for zygisk_enabled key (older Magisk versions)
+                    if (trimmed.startsWith("key=zygisk_enabled|")) {
+                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
+                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
+                            android.util.Log.d("MainActivity", "isZygiskEnabled: TRUE via zygisk_enabled key in database")
+                            return true
+                        }
+                    }
+                }
+                
+                // Also try direct query for zygisk setting
+                val directQuery = executeRootCommand("magisk --sqlite \"SELECT value FROM settings WHERE key='zygisk'\"")
+                android.util.Log.d("MainActivity", "Direct zygisk query: '$directQuery'")
+                if (directQuery.trim() == "1" || directQuery.contains("value=1")) {
+                    android.util.Log.d("MainActivity", "isZygiskEnabled: TRUE via direct query")
+                    return true
+                }
+            }
+            
+            // Method 2: Check ro.dalvik.vm.native.bridge property (runtime indicator)
+            // This shows if Zygisk is actually loaded and active at runtime
             val nativeBridge = executeRootCommand("getprop ro.dalvik.vm.native.bridge")
             android.util.Log.d("MainActivity", "ro.dalvik.vm.native.bridge = '$nativeBridge'")
             
@@ -837,48 +861,14 @@ class MainActivity : FlutterActivity() {
                 return true
             }
             
-            // If native bridge is NOT set to libzygisk.so, check if DB says it should be enabled
-            // This helps diagnose the issue (DB enabled but not actually working)
-            val magiskConfigFile = File("/data/adb/magisk.db")
-            var dbSaysEnabled = false
-            
-            if (magiskConfigFile.exists()) {
-                val sqliteResult = executeRootCommand("magisk --sqlite \"SELECT * FROM settings\"")
-                android.util.Log.d("MainActivity", "SQLite query result: '$sqliteResult'")
-                
-                for (line in sqliteResult.split("\n")) {
-                    val trimmed = line.trim()
-                    if (trimmed.startsWith("key=zygisk|")) {
-                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
-                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
-                            dbSaysEnabled = true
-                        }
-                    }
-                    if (trimmed.startsWith("key=zygisk_enabled|")) {
-                        val valueMatch = Regex("value=(\\d+)").find(trimmed)
-                        if (valueMatch != null && valueMatch.groupValues[1] == "1") {
-                            dbSaysEnabled = true
-                        }
-                    }
-                }
-            }
-            
-            if (dbSaysEnabled && !nativeBridge.contains("libzygisk.so")) {
-                android.util.Log.w("MainActivity", "ZYGISK MISMATCH: DB says enabled but native bridge NOT set!")
-                android.util.Log.w("MainActivity", "This indicates Zygisk was disabled due to zygote crashes or failed to initialize")
-                android.util.Log.w("MainActivity", "Check: 1) zygote crash logs, 2) reboot to re-enable, 3) module compatibility")
-                // Return false because Zygisk is NOT actually working
-                return false
-            }
-            
-            // Method 2: Check if Zygisk is loaded by checking for zygiskd process
+            // Method 3: Check if Zygisk is loaded by checking for zygiskd process
             val zygiskdCheck = executeRootCommand("ps -A | grep zygiskd")
             if (zygiskdCheck.isNotEmpty() && zygiskdCheck.contains("zygiskd")) {
                 android.util.Log.d("MainActivity", "isZygiskEnabled: true via zygiskd process")
                 return true
             }
             
-            // Method 3: Check /data/adb/zygisk directory structure
+            // Method 4: Check /data/adb/zygisk directory structure
             val zygiskDir = File("/data/adb/zygisk")
             android.util.Log.d("MainActivity", "zygisk dir exists: ${zygiskDir.exists()}")
             
@@ -886,6 +876,7 @@ class MainActivity : FlutterActivity() {
                 val zygiskActive = executeRootCommand("ls -la /data/adb/zygisk/")
                 android.util.Log.d("MainActivity", "zygisk directory contents: $zygiskActive")
                 
+                // Check for uninstaller.sh which indicates Zygisk was set up
                 val uninstallerFile = File("/data/adb/zygisk/uninstaller.sh")
                 if (uninstallerFile.exists()) {
                     android.util.Log.d("MainActivity", "isZygiskEnabled: true via uninstaller.sh presence")
@@ -893,12 +884,12 @@ class MainActivity : FlutterActivity() {
                 }
             }
             
-            // Method 4: Check if any Zygisk modules are installed
+            // Method 5: Check if any Zygisk modules are installed
             val zygiskModulesDir = File("/data/adb/modules")
             if (zygiskModulesDir.exists() && zygiskModulesDir.isDirectory) {
                 zygiskModulesDir.listFiles()?.forEach { moduleDir ->
-                    val zygiskDir = File(moduleDir, "zygisk")
-                    if (zygiskDir.exists()) {
+                    val moduleZygiskDir = File(moduleDir, "zygisk")
+                    if (moduleZygiskDir.exists()) {
                         android.util.Log.d("MainActivity", "isZygiskEnabled: true via module ${moduleDir.name} having zygisk folder")
                         return true
                     }
@@ -4748,76 +4739,6 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             false
         }
-    }
-    
-    // ==================== WebViewAssetLoader Methods ====================
-    
-    /**
-     * Setup WebViewAssetLoader for serving module WebUI content
-     * This allows WebView to load local files through a custom domain
-     * avoiding cache miss errors and security restrictions
-     * 
-     * @param moduleDir The module directory path
-     * @return true if setup successful
-     */
-    private fun setupWebViewAssetLoader(moduleDir: String): Boolean {
-        if (moduleDir.isEmpty()) return false
-        
-        return try {
-            val webrootPath = "$moduleDir/webroot"
-            
-            // Check if webroot exists
-            val checkProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "test -d '$webrootPath' && echo 'exists'"))
-            checkProcess.waitFor()
-            val exists = checkProcess.inputStream.bufferedReader().readText().trim()
-            
-            if (exists != "exists") {
-                android.util.Log.e("MainActivity", "Webroot directory not found: $webrootPath")
-                return false
-            }
-            
-            // Create a proxy directory in app's cache that links to module webroot
-            // WebViewAssetLoader can only access app's own directories
-            val proxyDir = File(cacheDir, "webui_proxy")
-            if (proxyDir.exists()) {
-                proxyDir.deleteRecursively()
-            }
-            proxyDir.mkdirs()
-            
-            // Copy webroot contents to proxy directory using root
-            val copyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp -r '$webrootPath'/* '${proxyDir.absolutePath}/'"))
-            copyProcess.waitFor()
-            
-            if (copyProcess.exitValue() != 0) {
-                android.util.Log.e("MainActivity", "Failed to copy webroot to proxy directory")
-                return false
-            }
-            
-            currentModuleWebroot = proxyDir.absolutePath
-            
-            // Create WebViewAssetLoader with the proxy directory
-            webViewAssetLoader = WebViewAssetLoader.Builder()
-                .addPathHandler("/webui/", WebViewAssetLoader.AssetsPathHandler(this))
-                .addPathHandler("/local/", WebViewAssetLoader.InternalStoragePathHandler(this, proxyDir))
-                .setDomain("magiskube.local")
-                .build()
-            
-            android.util.Log.d("MainActivity", "WebViewAssetLoader setup complete for: $moduleDir")
-            android.util.Log.d("MainActivity", "Proxy directory: ${proxyDir.absolutePath}")
-            true
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error setting up WebViewAssetLoader: ${e.message}")
-            false
-        }
-    }
-    
-    /**
-     * Get the URL to load in WebView for WebUI
-     * @return The URL to load (e.g., https://magiskube.local/local/index.html)
-     */
-    private fun getWebUILoaderUrl(): String? {
-        if (currentModuleWebroot == null) return null
-        return "https://magiskube.local/local/index.html"
     }
     
     // ==================== Magisk Logs Methods ====================

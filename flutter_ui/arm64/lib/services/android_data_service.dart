@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate'; // ← 这里改了: 引入 isolate
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -26,9 +27,13 @@ class AndroidDataService {
     try {
       final result = await _channel.invokeMethod<List<dynamic>>('getModules');
       if (result != null) {
-        return result
-            .map((item) => Map<String, dynamic>.from(item as Map))
-            .toList();
+        await Future.delayed(Duration.zero); // ← 这里改了: 强行让出当前帧给 UI 渲染
+        
+        return await Isolate.run(() { // ← 这里改了: 将耗时的解析操作放入后台
+          return result
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+        });
       }
       return [];
     } catch (e) {
@@ -43,9 +48,13 @@ class AndroidDataService {
       debugPrint('AndroidDataService: getApps() result: ${result?.length ?? 0} apps');
       
       if (result != null) {
-        final apps = result
-            .map((item) => Map<String, dynamic>.from(item as Map))
-            .toList();
+        await Future.delayed(Duration.zero); // ← 这里改了: 强行让出当前帧给 UI 渲染，防卡顿
+
+        final apps = await Isolate.run(() { // ← 这里改了: 将耗时的列表遍历与 Map 转换放入后台 Isolate
+          return result
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+        });
         
         // Debug: Log apps with root access
         final rootApps = apps.where((app) => app['hasRootAccess'] == true);

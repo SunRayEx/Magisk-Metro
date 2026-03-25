@@ -11,7 +11,29 @@ final isDarkModeProvider = Provider<bool>((ref) => ref.watch(themeProvider));
 
 final tileColorProvider = StateProvider<int>((ref) => 0);
 
+/// Provider for custom tile colors (per-tile)
+final customTileColorsProvider = StateProvider<Map<int, Color>>((ref) => {});
+
+/// Monet dynamic color providers
+final monetPrimaryProvider = StateProvider<Color?>((ref) => null);
+final monetSecondaryProvider = StateProvider<Color?>((ref) => null);
+final monetTertiaryProvider = StateProvider<Color?>((ref) => null);
+final monetSurfaceProvider = StateProvider<Color?>((ref) => null);
+final monetErrorProvider = StateProvider<Color?>((ref) => null);
+
 class AppTheme {
+  // Core Monet colors from wallpaper
+  static Color? monetPrimary;
+  static Color? monetSecondary;
+  static Color? monetTertiary;
+  static Color? monetSurface;
+  static Color? monetError;
+  
+  // Container variants for better tile colors
+  static Color? monetPrimaryContainer;
+  static Color? monetSecondaryContainer;
+  static Color? monetTertiaryContainer;
+
   static const Color darkBackground = Color(0xFF000000);
   static const Color darkTile = Color(0xFF000000);
   static const Color darkFont = Colors.white;
@@ -22,27 +44,41 @@ class AppTheme {
   static const Color lightFont = Colors.black;
   static const Color lightListItem = Colors.white;
 
+  // Tile colors for presets (Blue, Red, Green, Purple, Yellow)
+  // Indices: 0=Blue, 1=Red, 2=Green, 3=Purple, 4=Yellow
   static const List<Color> tileColors = [
-    Color(0xFF009688),
-    Color(0xFF2196F3),
-    Color(0xFFF44336),
-    Color(0xFF4CAF50),
-    Color(0xFF9C27B0),
-    Color(0xFFFFEB3B),
-    Color(0xFFFF9800),
-    Color(0xFF00BCD4),
+    Color(0xFF2196F3), // 0: Blue
+    Color(0xFFF44336), // 1: Red
+    Color(0xFF4CAF50), // 2: Green
+    Color(0xFF9C27B0), // 3: Purple
+    Color(0xFFFFEB3B), // 4: Yellow
   ];
 
   static const List<String> tileColorNames = [
-    'Default',
-    'Blue',
-    'Red',
-    'Green',
-    'Purple',
-    'Yellow',
-    'Orange',
-    'Cyan',
+    'Default',   // 0
+    'Monet',     // 1 (dynamic from wallpaper)
+    'Custom',    // 2 (user-selected color)
+    'Blue',      // 3 -> tileColors[0]
+    'Red',       // 4 -> tileColors[1]
+    'Green',     // 5 -> tileColors[2]
+    'Purple',    // 6 -> tileColors[3]
+    'Yellow',    // 7 -> tileColors[4]
   ];
+  
+  // Tile names for custom color assignment (5 tiles, excluding Logs)
+  static const List<String> customizableTileNames = [
+    'Magisk',
+    'Settings', 
+    'Contributor',
+    'Modules',
+    'Apps',
+  ];
+  
+  // Custom theme color (user-selected) - used as fallback for custom mode
+  static Color? customThemeColor;
+  
+  // Per-tile custom colors - map of tileIndex -> color
+  static Map<int, Color> customTileColors = {};
 
   static Color getBackground(bool isDark) =>
       isDark ? darkBackground : lightBackground;
@@ -56,61 +92,110 @@ class AppTheme {
     return getTileWidgetColor(tileIndex, colorIndex, isDark);
   }
 
-  static Color getWidgetColor(int colorIndex, bool isDark) {
-    if (colorIndex == 0) {
-      // Default theme - Magisk green, deeper in dark mode
-      return isDark ? const Color(0xFF00695C) : const Color(0xFF4DB6AC);
+  /// Get tile color with reactive custom colors from provider
+  /// This is the preferred method for widgets that need to respond to custom color changes
+  static Color getTileWithCustomColors(int tileIndex, int colorIndex, bool isDark, Map<int, Color> customColors) {
+    if (colorIndex == 1) {
+      // Monet theme - All tiles use the same primary color from wallpaper
+      final baseColor = monetPrimary ?? const Color(0xFF009688);
+      // Minimal adjustment - just return the color as-is or with very subtle tweak
+      return baseColor;
     }
     
-    if (isDark) {
-      // Dark mode: all colors should be deeper
-      return _darkenColor(tileColors[colorIndex], 0.45);
+    if (colorIndex == 2) {
+      // Custom theme - Check if this tile has an individual color assigned
+      // Use the passed customColors parameter for reactivity
+      if (customColors.containsKey(tileIndex)) {
+        return customColors[tileIndex]!;
+      }
+      
+      // Fall back to static customTileColors (for backwards compatibility)
+      if (customTileColors.containsKey(tileIndex)) {
+        return customTileColors[tileIndex]!;
+      }
+      
+      // Fall back to global custom theme color
+      return customThemeColor ?? const Color(0xFF009688);
     }
-    return tileColors[colorIndex];
+
+    // For other themes, use the standard method
+    return getTileWidgetColor(tileIndex, colorIndex, isDark);
+  }
+
+  static Color getWidgetColor(int colorIndex, bool isDark) {
+    // Handle special themes first
+    if (colorIndex == 0) {
+      // Default theme - Magisk green
+      return const Color(0xFF009688);
+    }
+    if (colorIndex == 1) {
+      // Monet theme - return color directly
+      return monetPrimary ?? const Color(0xFF009688);
+    }
+    if (colorIndex == 2) {
+      // Custom theme - return user color directly
+      return customThemeColor ?? const Color(0xFF009688);
+    }
+    
+    // For other themes (3-7), map to tileColors (0-4)
+    // Return preset colors directly without modification
+    final adjustedIndex = colorIndex - 3;
+    if (adjustedIndex >= 0 && adjustedIndex < tileColors.length) {
+      return tileColors[adjustedIndex];
+    }
+    
+    // Fallback to default
+    return const Color(0xFF009688);
   }
 
   static Color getTileWidgetColor(int tileIndex, int colorIndex, bool isDark) {
+    if (colorIndex == 1) {
+      // Monet theme - All tiles use the same primary color from wallpaper
+      return monetPrimary ?? const Color(0xFF009688);
+    }
+    
+    if (colorIndex == 2) {
+      // Custom theme - Check if this tile has an individual color assigned
+      if (customTileColors.containsKey(tileIndex)) {
+        return customTileColors[tileIndex]!;
+      }
+      
+      // Fall back to global custom theme color
+      return customThemeColor ?? const Color(0xFF009688);
+    }
+
     if (colorIndex == 0) {
       // Default theme
       switch (tileIndex) {
         case 0:
-          // Magisk tile - dark mode 10% deeper, light mode 30% lighter
-          return isDark 
-            ? _darkenColor(const Color(0xFF009688), 0)
-            : _lightenColor(const Color(0xFF009688), 0.10);
+          // Magisk tile - 15% lighter than base color
+          return _lightenColor(const Color(0xFF009688), 0.15);
         case 1:
-          // DenyList tile
-          return isDark 
-            ? _darkenColor(const Color(0xFFFFC107), 0.10) 
-            : _lightenColor(const Color(0xFFFFC107), 0.20);
+          // Settings tile
+          return const Color(0xFFFFC107);
         case 2:
           // Contributor tile
-          return isDark 
-            ? _darkenColor(const Color(0xFF9C27B0), 0.10) 
-            : _lightenColor(const Color(0xFF9C27B0), 0.20);
+          return const Color(0xFF9C27B0);
         case 3:
           // Modules tile
-          return isDark 
-            ? _darkenColor(const Color(0xFF2196F3), 0.10) 
-            : _lightenColor(const Color(0xFF2196F3), 0.20);
+          return const Color(0xFF2196F3);
         case 4:
           // Apps tile
-          return isDark 
-            ? _darkenColor(const Color(0xFFF44336), 0.10) 
-            : _lightenColor(const Color(0xFFF44336), 0.20);
+          return const Color(0xFFF44336);
         default:
-          return isDark 
-            ? _darkenColor(const Color(0xFF009688), 0.10)
-            : _lightenColor(const Color(0xFF009688), 0.20);
+          return const Color(0xFF009688);
       }
     }
     
-    if (isDark) {
-      // Other themes in dark mode - 10% deeper
-      return _darkenColor(tileColors[colorIndex], 0.10);
+    // For other themes (3-7), map to tileColors (0-4)
+    final adjustedIndex = colorIndex - 3;
+    if (adjustedIndex >= 0 && adjustedIndex < tileColors.length) {
+      // Return the preset color directly without modification
+      return tileColors[adjustedIndex];
     }
-    // Light mode - 30% lighter
-    return _lightenColor(tileColors[colorIndex], 0.30);
+    
+    // Fallback to default
+    return const Color(0xFF009688);
   }
 
   static Color _darkenColor(Color color, double factor) {
@@ -124,9 +209,34 @@ class AppTheme {
     final newLightness = (hsl.lightness + (1 - hsl.lightness) * factor).clamp(0.0, 1.0);
     return hsl.withLightness(newLightness).toColor();
   }
+
+  /// Ensure the color has sufficient contrast for readability
+  /// If it's too bright in light mode or too dark in dark mode, adjust it
+  static Color _ensureContrast(Color color, bool isDark) {
+    final luminance = color.computeLuminance();
+    
+    if (isDark) {
+      // In dark mode, text is white. Ensure background isn't too bright
+      if (luminance > 0.6) {
+        return _darkenColor(color, 0.5); // Darken it more aggressively to improve contrast with white text
+      }
+      // Or too dark (indistinguishable from black background)
+      if (luminance < 0.1) {
+        return _lightenColor(color, 0.2); 
+      }
+    } else {
+      // In light mode, text is often white inside the colored tile. Ensure background isn't too light
+      if (luminance > 0.7) {
+        return _darkenColor(color, 0.4); // Darken it significantly to make white text readable
+      }
+    }
+    
+    return color;
+  }
 }
 
 /// Cached Magisk status provider with persistent cache
+/// Optimized: Loads cache immediately, refreshes in background
 final magiskStatusProvider =
     StateNotifierProvider<MagiskStatusNotifier, MagiskStatus>((ref) {
   return MagiskStatusNotifier();
@@ -134,21 +244,20 @@ final magiskStatusProvider =
 
 class MagiskStatusNotifier extends StateNotifier<MagiskStatus> {
   static DateTime? _lastUpdate;
-  static const _cacheDuration = Duration(seconds: 5);
+  static const _cacheDuration = Duration(seconds: 10);
   static MagiskStatus? _persistentCache; // In-memory cache for cold start
+  static bool _initialized = false;
   
   MagiskStatusNotifier()
       : super(_persistentCache ?? const MagiskStatus(
-          versionCode: 'Loading...',
+          versionCode: '...',
           isRooted: false,
           isZygiskEnabled: false,
           isRamdiskLoaded: false,
         )) {
-    if (_persistentCache == null) {
+    if (!_initialized) {
+      _initialized = true;
       _loadFromStorage();
-    } else {
-      // Still refresh in background
-      _loadDataIfNeeded();
     }
   }
 
@@ -165,14 +274,14 @@ class MagiskStatusNotifier extends StateNotifier<MagiskStatus> {
       _persistentCache = status;
       state = status;
     }
-    // Always refresh after loading cache
-    _loadDataIfNeeded();
+    // Schedule background refresh without blocking UI
+    Future.microtask(() => _refreshInBackground());
   }
-
-  Future<void> _loadDataIfNeeded() async {
-    final now = DateTime.now();
-    if (_lastUpdate != null && now.difference(_lastUpdate!) < _cacheDuration) {
-      return; // Use cached data
+  
+  Future<void> _refreshInBackground() async {
+    if (_lastUpdate != null && 
+        DateTime.now().difference(_lastUpdate!) < _cacheDuration) {
+      return;
     }
     await _loadData();
   }
@@ -198,21 +307,23 @@ class MagiskStatusNotifier extends StateNotifier<MagiskStatus> {
       _persistentCache = status;
       state = status;
       
-      // Save to persistent storage
+      // Save to persistent storage (non-blocking)
       final storage = PersistentStorage();
-      await storage.saveMagiskStatusCache({
+      storage.saveMagiskStatusCache({
         'versionCode': status.versionCode,
         'isRooted': status.isRooted,
         'isZygiskEnabled': status.isZygiskEnabled,
         'isRamdiskLoaded': status.isRamdiskLoaded,
       });
     } catch (e) {
-      state = const MagiskStatus(
-        versionCode: 'Unknown',
-        isRooted: false,
-        isZygiskEnabled: false,
-        isRamdiskLoaded: false,
-      );
+      if (_persistentCache == null) {
+        state = const MagiskStatus(
+          versionCode: 'Unknown',
+          isRooted: false,
+          isZygiskEnabled: false,
+          isRamdiskLoaded: false,
+        );
+      }
     }
   }
 
@@ -223,6 +334,7 @@ class MagiskStatusNotifier extends StateNotifier<MagiskStatus> {
 }
 
 /// Cached modules provider with persistent cache
+/// Optimized: Non-blocking initial load, background refresh
 final modulesProvider =
     StateNotifierProvider<ModulesNotifier, List<Module>>((ref) {
   return ModulesNotifier();
@@ -230,15 +342,14 @@ final modulesProvider =
 
 class ModulesNotifier extends StateNotifier<List<Module>> {
   static DateTime? _lastUpdate;
-  static const _cacheDuration = Duration(seconds: 10);
+  static const _cacheDuration = Duration(seconds: 15);
   static List<Module> _persistentCache = []; // Persistent cache
+  static bool _initialized = false;
   
   ModulesNotifier() : super(_persistentCache) {
-    if (_persistentCache.isEmpty) {
+    if (!_initialized) {
+      _initialized = true;
       _loadFromStorage();
-    } else {
-      // Refresh in background
-      _loadDataIfNeeded();
     }
   }
   
@@ -263,13 +374,13 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
       _persistentCache = modules;
       state = modules;
     }
-    // Always refresh
-    _loadDataIfNeeded();
+    // Schedule background refresh without blocking
+    Future.microtask(() => _refreshInBackground());
   }
-
-  Future<void> _loadDataIfNeeded() async {
-    final now = DateTime.now();
-    if (_lastUpdate != null && now.difference(_lastUpdate!) < _cacheDuration) {
+  
+  Future<void> _refreshInBackground() async {
+    if (_lastUpdate != null && 
+        DateTime.now().difference(_lastUpdate!) < _cacheDuration) {
       return;
     }
     await _loadModules();
@@ -347,6 +458,7 @@ final suListEnabledProvider = StateProvider<bool>((ref) => false);
 final pendingRootChangesProvider = StateProvider<Map<String, bool>>((ref) => {});
 
 /// Cached apps provider with optimistic updates and delayed persistence
+/// Optimized: Non-blocking initial load
 final appsProvider = StateNotifierProvider<AppsNotifier, List<AppInfo>>((ref) {
   return AppsNotifier(ref);
 });
@@ -354,16 +466,15 @@ final appsProvider = StateNotifierProvider<AppsNotifier, List<AppInfo>>((ref) {
 class AppsNotifier extends StateNotifier<List<AppInfo>> {
   final Ref _ref;
   static DateTime? _lastUpdate;
-  static const _cacheDuration = Duration(seconds: 10);
+  static const _cacheDuration = Duration(seconds: 15);
   bool _isSuListEnabled = false;
   static List<AppInfo> _persistentCache = [];
+  static bool _initialized = false;
   
   AppsNotifier(this._ref) : super(_persistentCache) {
-    if (_persistentCache.isEmpty) {
+    if (!_initialized) {
+      _initialized = true;
       _loadFromStorage();
-    } else {
-      // Refresh in background
-      _loadDataIfNeeded();
     }
   }
   
@@ -388,8 +499,16 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
       state = apps;
     }
     
-    // Always refresh after loading cache
-    _loadDataIfNeeded();
+    // Schedule background refresh without blocking UI
+    Future.microtask(() => _refreshInBackground());
+  }
+  
+  Future<void> _refreshInBackground() async {
+    if (_lastUpdate != null && 
+        DateTime.now().difference(_lastUpdate!) < _cacheDuration) {
+      return;
+    }
+    await _loadApps();
   }
   
   Future<void> _loadSuListState() async {

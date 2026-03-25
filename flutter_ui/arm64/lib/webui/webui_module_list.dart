@@ -285,7 +285,9 @@ class _WebUIModuleListScreenState extends ConsumerState<WebUIModuleListScreen> {
       itemCount: _modules.length,
       itemBuilder: (context, index) {
         final module = _modules[index];
-        return _buildModuleCard(module, isDark, tileColorIndex, widgetColor);
+        return RepaintBoundary( // ← 这里改了: 隔离高频重绘模块列表项
+          child: _buildModuleCard(module, isDark, tileColorIndex, widgetColor),
+        );
       },
     );
   }

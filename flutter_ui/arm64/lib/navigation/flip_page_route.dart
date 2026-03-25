@@ -34,7 +34,8 @@ class FlipPageRoute<T> extends PageRouteBuilder<T> {
 
             return AnimatedBuilder(
               animation: curvedAnimation,
-              builder: (context, _) {
+              child: child, // ← 这里改了: 将子组件作为 child 传入，避免动画过程中的重建
+              builder: (context, cachedChild) {
                 final progress = curvedAnimation.value;
 
                 // ==================== Matrix4 3D 翻转核心实现 ====================
@@ -49,10 +50,9 @@ class FlipPageRoute<T> extends PageRouteBuilder<T> {
                 return Transform(
                   transform: transform,
                   alignment: Alignment.centerRight, // 从右侧翻开
-                  child: child,
+                  child: cachedChild, // ← 这里改了: 直接使用缓存的 cachedChild
                 );
               },
-              child: child,
             );
           },
         );

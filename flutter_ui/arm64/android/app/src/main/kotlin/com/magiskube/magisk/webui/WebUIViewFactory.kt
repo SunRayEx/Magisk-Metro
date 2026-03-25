@@ -1,6 +1,8 @@
 package com.magiskube.magisk.webui
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
@@ -49,34 +51,6 @@ class WebUIView(
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
         
-        // Create cache directory for WebUI
-        val cacheDir = File(context.cacheDir, "webui/$moduleId")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-        
-        // Copy webroot files to cache
-        val webrootSource = File(modulePath, "webroot")
-        if (webrootSource.exists()) {
-            copyDirectory(webrootSource, cacheDir)
-        }
-        
-        // Set up WebViewAssetLoader
-        assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
-            .addPathHandler("/res/", WebViewAssetLoader.ResourcesPathHandler(context))
-            .addPathHandler("/webui/", WebViewAssetLoader.InternalStoragePathHandler(context, cacheDir))
-            .build()
-        
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: android.webkit.WebResourceRequest?
-            ): android.webkit.WebResourceResponse? {
-                return request?.url?.let { assetLoader?.shouldInterceptRequest(it) }
-            }
-        }
-        
         // Add JavaScript interface for native functions
         // IMPORTANT: Use "ksu" as the interface name for KernelSU compatibility
         webView.addJavascriptInterface(
@@ -89,57 +63,75 @@ class WebUIView(
             WebViewInterface(context, webView, modulePath),
             "KernelSU"
         )
+
+        // Load empty or loading state initially to avoid ERR_FILE_NOT_FOUND flash
+        val loadingHtml = "<html><body style='background-color:#1a1a1a;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'><h2>Loading WebUI...</h2></body></html>"
+        webView.loadData(loadingHtml, "text/html", "UTF-8")
         
-        // Load the WebUI
-        val indexFile = File(cacheDir, "index.html")
-        if (indexFile.exists()) {
-            // Load via asset loader
-            webView.loadUrl("https://appassets.androidplatform.net/webui/index.html")
-        } else {
-            // Try direct file path
-            webView.loadUrl("file://${cacheDir.absolutePath}/index.html")
-        }
+        // Run file copying and checks asynchronously to avoid blocking UI thread (App startup stutter fix)
+        Thread {
+            prepareWebrootAndLoad()
+        }.start()
     }
     
-    private fun copyDirectory(source: File, dest: File) {
-        if (!dest.exists()) {
-            dest.mkdirs()
+    private fun prepareWebrootAndLoad() {
+        val cacheDir = File(context.cacheDir, "webui/$moduleId")
+        
+        android.util.Log.d("WebUIView", "Starting WebUI setup for module: $moduleId")
+        android.util.Log.d("WebUIView", "Module path: $modulePath, Target cache dir: ${cacheDir.absolutePath}")
+
+        // Clear existing cache to ensure we get the latest version (Cache cleaning mechanism)
+        if (cacheDir.exists()) {
+            android.util.Log.d("WebUIView", "Clearing existing WebUI cache for $moduleId")
+            cacheDir.deleteRecursively()
+        }
+        cacheDir.mkdirs()
+        
+        // Pre-check if source webroot exists
+        val webrootPath = "$modulePath/webroot"
+        val checkProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "test -d '$webrootPath' && echo 'exists'"))
+        checkProcess.waitFor()
+        val exists = checkProcess.inputStream.bufferedReader().readText().trim() == "exists"
+        
+        var copySuccess = false
+        if (exists) {
+            android.util.Log.d("WebUIView", "Source webroot exists. Copying files...")
+            copySuccess = copyDirectoryWithRoot(webrootPath, cacheDir.absolutePath)
+        } else {
+            android.util.Log.e("WebUIView", "Source webroot does not exist at: $webrootPath")
         }
         
-        // Use root to copy files from /data/adb/modules/
-        // because app doesn't have direct access to that directory
-        try {
-            // First try direct copy (might work for some files)
-            source.listFiles()?.forEach { file ->
-                val destFile = File(dest, file.name)
-                if (file.isDirectory) {
-                    copyDirectory(file, destFile)
-                } else {
-                    try {
-                        file.copyTo(destFile, overwrite = true)
-                    } catch (e: Exception) {
-                        // Try with root for files we can't access directly
-                        copyFileWithRoot(file.absolutePath, destFile.absolutePath)
+        // Post back to main thread
+        Handler(Looper.getMainLooper()).post {
+            val indexFile = File(cacheDir, "index.html")
+            
+            if (copySuccess && indexFile.exists()) {
+                android.util.Log.d("WebUIView", "File verification passed. Index exists at: ${indexFile.absolutePath}")
+                
+                // Set up WebViewAssetLoader matching physical path
+                assetLoader = WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                    .addPathHandler("/res/", WebViewAssetLoader.ResourcesPathHandler(context))
+                    .addPathHandler("/webui/", WebViewAssetLoader.InternalStoragePathHandler(context, cacheDir))
+                    .setDomain("magiskube.local")
+                    .build()
+                
+                webView.webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): android.webkit.WebResourceResponse? {
+                        return request?.url?.let { assetLoader?.shouldInterceptRequest(it) }
                     }
                 }
+                
+                android.util.Log.d("WebUIView", "Loading WebUI via WebViewAssetLoader")
+                webView.loadUrl("https://magiskube.local/webui/index.html")
+            } else {
+                android.util.Log.e("WebUIView", "Fallback strategy: WebUI files missing or copy failed")
+                val errorHtml = "<html><body style='background-color:#1a1a1a;color:#ff5252;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'><h2>Error: WebUI Not Found</h2><p>net::ERR_FILE_NOT_FOUND</p><p>Please check if the module has a valid webroot.</p></body></html>"
+                webView.loadData(errorHtml, "text/html", "UTF-8")
             }
-        } catch (e: Exception) {
-            // If listing fails, use root to copy entire directory
-            copyDirectoryWithRoot(source.absolutePath, dest.absolutePath)
-        }
-    }
-    
-    /**
-     * Copy a file using root shell
-     */
-    private fun copyFileWithRoot(sourcePath: String, destPath: String): Boolean {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cp '$sourcePath' '$destPath'"))
-            process.waitFor()
-            process.exitValue() == 0
-        } catch (e: Exception) {
-            android.util.Log.e("WebUIView", "Failed to copy file with root: ${e.message}")
-            false
         }
     }
     
@@ -148,7 +140,7 @@ class WebUIView(
      */
     private fun copyDirectoryWithRoot(sourcePath: String, destPath: String): Boolean {
         return try {
-            // Remove existing destination
+            // Remove existing destination just in case
             Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -rf '$destPath'")).waitFor()
             // Create parent directory
             Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p '$destPath'")).waitFor()
@@ -160,8 +152,9 @@ class WebUIView(
             // Also copy hidden files (starting with .)
             Runtime.getRuntime().exec(arrayOf("su", "-c", "cp -r '$sourcePath'/.* '$destPath'/ 2>/dev/null || true")).waitFor()
             
-            // Set permissions so app can access
+            // Important: Set permissions so app can access them
             Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod -R 755 '$destPath'")).waitFor()
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "chown -R system:system '$destPath' 2>/dev/null || true")).waitFor()
             
             android.util.Log.d("WebUIView", "Copied directory with root: $sourcePath -> $destPath, success=$success")
             success

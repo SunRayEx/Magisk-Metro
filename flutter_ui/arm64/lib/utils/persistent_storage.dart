@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Unified cache manager for all persistent data
@@ -9,10 +10,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - Modules list
 /// - SuList whitelist
 /// - DenyList (packages and activities)
+/// - Custom theme color
 class PersistentStorage {
   // App Settings Keys
   static const String _darkModeKey = 'dark_mode';
   static const String _tileColorKey = 'tile_color';
+  static const String _customThemeColorKey = 'custom_theme_color';
+  
+  // Custom tile colors for each tile (5 tiles: Magisk, Settings, Contributor, Modules, Apps)
+  static const String _customTileColorsKey = 'custom_tile_colors';
   
   // Data Cache Keys
   static const String _appsCacheKey = 'apps_cache';
@@ -46,11 +52,68 @@ class PersistentStorage {
   Future<void> saveTileColor(int colorIndex) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_tileColorKey, colorIndex);
+    
+    // Support legacy/requested 'pref_theme' string key
+    if (colorIndex == 1) {
+      await prefs.setString('pref_theme', 'monet');
+    } else if (colorIndex == 2) {
+      await prefs.setString('pref_theme', 'custom');
+    } else {
+      await prefs.setString('pref_theme', 'default');
+    }
   }
 
   Future<int> loadTileColor() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_tileColorKey) ?? 0;
+  }
+  
+  // ==================== Custom Theme Color ====================
+  
+  /// Save custom theme color (user-selected from color picker)
+  Future<void> saveCustomThemeColor(int colorValue) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_customThemeColorKey, colorValue);
+  }
+  
+  /// Load custom theme color
+  Future<Color?> loadCustomThemeColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final colorValue = prefs.getInt(_customThemeColorKey);
+    return colorValue != null ? Color(colorValue) : null;
+  }
+  
+  // ==================== Custom Tile Colors (Per-Tile) ====================
+  
+  /// Save custom colors for each tile individually
+  /// Map structure: {'0': colorValue, '1': colorValue, ...} (tileIndex -> color)
+  Future<void> saveCustomTileColors(Map<int, int> colors) async {
+    final prefs = await SharedPreferences.getInstance();
+    final mapString = colors.map((key, value) => MapEntry(key.toString(), value));
+    await prefs.setString(_customTileColorsKey, jsonEncode(mapString));
+  }
+  
+  /// Load custom colors for each tile
+  /// Returns map of tileIndex -> colorValue
+  Future<Map<int, int>> loadCustomTileColors() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_customTileColorsKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return {};
+    }
+    try {
+      final Map<String, dynamic> decoded = jsonDecode(jsonString);
+      return decoded.map((key, value) => MapEntry(int.parse(key), value as int));
+    } catch (e) {
+      return {};
+    }
+  }
+  
+  /// Save a single tile's custom color
+  Future<void> saveCustomTileColor(int tileIndex, int colorValue) async {
+    final colors = await loadCustomTileColors();
+    colors[tileIndex] = colorValue;
+    await saveCustomTileColors(colors);
   }
 
   // ==================== Apps Cache ====================
@@ -287,5 +350,6 @@ class PersistentStorage {
     await prefs.remove(_denyListAppsKey);
     await prefs.remove(_denyListActivitiesKey);
     await prefs.remove(_pendingOperationsKey);
+    await prefs.remove(_customThemeColorKey);
   }
 }

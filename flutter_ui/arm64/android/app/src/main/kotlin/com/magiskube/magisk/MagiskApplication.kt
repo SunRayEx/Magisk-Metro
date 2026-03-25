@@ -25,8 +25,7 @@ class MagiskApplication : Application() {
         )
         
         init {
-            // Try to initialize root access when class is loaded
-            initializeRoot()
+            // Remove synchronous root check to avoid blocking main thread during app startup
         }
         
         private fun findSuPath(): String? {

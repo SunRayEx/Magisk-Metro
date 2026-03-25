@@ -51,7 +51,7 @@ class _AnimatedDashboardScreenState
     _cardAnimations = _cardControllers.map((controller) {
       return CurvedAnimation(
         parent: controller,
-        curve: Curves.easeOutBack,
+        curve: Curves.fastOutSlowIn, // ← 这里改了: 统一替换为更平滑自然的 fastOutSlowIn 曲线
       );
     }).toList();
     
@@ -86,18 +86,21 @@ class _AnimatedDashboardScreenState
     final isDark = ref.watch(themeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
 
-    return Scaffold(
-      backgroundColor: AppTheme.getBackground(isDark),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            children: [
-              _buildTopBar(context, isDark),
-              Expanded(
-                child: _buildMainContent(context, isDark, tileColorIndex),
-              ),
-            ],
+    return TickerMode(
+      enabled: ModalRoute.of(context)?.isCurrent ?? true, // ← 这里改了: 当页面被推入后台或遮挡时暂停动画 Ticker
+      child: Scaffold(
+        backgroundColor: AppTheme.getBackground(isDark),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: Column(
+              children: [
+                _buildTopBar(context, isDark),
+                Expanded(
+                  child: _buildMainContent(context, isDark, tileColorIndex),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -243,8 +246,9 @@ class _MagiskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(magiskStatusProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = AppTheme.getTileWithIndex(0, tileColorIndex, isDark);
+    final tileColor = AppTheme.getTileWithCustomColors(0, tileColorIndex, isDark, customColors);
 
     return _AnimatedTileCard(
       color: tileColor,
@@ -309,8 +313,9 @@ class _SettingsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(magiskStatusProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = AppTheme.getTileWithIndex(1, tileColorIndex, isDark);
+    final tileColor = AppTheme.getTileWithCustomColors(1, tileColorIndex, isDark, customColors);
 
     return _AnimatedTileCard(
       color: tileColor,
@@ -343,8 +348,9 @@ class _ContributorCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contributors = ref.watch(contributorsProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = AppTheme.getTileWithIndex(2, tileColorIndex, isDark);
+    final tileColor = AppTheme.getTileWithCustomColors(2, tileColorIndex, isDark, customColors);
     
     // Get all contributor names for infinite scrolling
     final contributorNames = contributors.map((c) => c.name).toList();
@@ -399,8 +405,9 @@ class _ModulesCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modules = ref.watch(modulesProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = AppTheme.getTileWithIndex(3, tileColorIndex, isDark);
+    final tileColor = AppTheme.getTileWithCustomColors(3, tileColorIndex, isDark, customColors);
     
     // Get only enabled module names for infinite scrolling
     final enabledModules = modules.where((m) => m.isEnabled).toList();
@@ -466,8 +473,9 @@ class _AppsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final apps = ref.watch(appsProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = AppTheme.getTileWithIndex(4, tileColorIndex, isDark);
+    final tileColor = AppTheme.getTileWithCustomColors(4, tileColorIndex, isDark, customColors);
     
     // Get only apps with root access granted for infinite scrolling
     final rootGrantedApps = apps.where((a) => a.hasRootAccess).toList();

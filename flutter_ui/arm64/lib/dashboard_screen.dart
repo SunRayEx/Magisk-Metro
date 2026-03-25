@@ -62,18 +62,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
 
-    return Scaffold(
-      backgroundColor: AppTheme.getBackground(isDark),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            children: [
-              _buildTopBar(context, ref, isDark),
-              Expanded(
-                child: _buildMainContent(context, ref, isDark),
-              ),
-            ],
+    return TickerMode(
+      enabled: ModalRoute.of(context)?.isCurrent ?? true, // ← 这里改了: 当页面被推入后台或遮挡时暂停动画 Ticker
+      child: Scaffold(
+        backgroundColor: AppTheme.getBackground(isDark),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: Column(
+              children: [
+                _buildTopBar(context, ref, isDark),
+                Expanded(
+                  child: _buildMainContent(context, ref, isDark),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -189,22 +192,57 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Color _getTileColor(int tileIndex, int tileColorIndex, bool isDark, Map<int, Color> customColors) {
+    // tileIndex: 0=Magisk, 1=Settings, 2=Contributor, 3=Modules, 4=Apps
+    if (tileColorIndex == 0) {
+      // Default theme
+      switch (tileIndex) {
+        case 0: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+        case 1: return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
+        case 2: return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
+        case 3: return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
+        case 4: return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
+        default: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+      }
+    } else if (tileColorIndex == 1) {
+      // Monet theme
+      final monetColor = AppTheme.monetPrimary ?? const Color(0xFF009688);
+      return isDark ? monetColor : monetColor.withValues(alpha: 0.7);
+    } else if (tileColorIndex == 2) {
+      // Custom theme - use per-tile custom colors directly (user's choice)
+      // Use the passed customColors parameter for reactivity
+      final customColor = customColors[tileIndex] ?? AppTheme.customTileColors[tileIndex];
+      if (customColor != null) {
+        return customColor; // Use the exact color user selected
+      }
+      // Fallback to default if custom color not set
+      switch (tileIndex) {
+        case 0: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+        case 1: return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
+        case 2: return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
+        case 3: return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
+        case 4: return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
+        default: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
+      }
+    } else {
+      // Other preset colors (Blue, Red, Green, Purple, Yellow)
+      final baseColor = AppTheme.tileColors[tileColorIndex - 3];
+      return isDark ? baseColor : baseColor.withValues(alpha: 0.7);
+    }
+  }
+
   Widget _buildMagiskCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFF4DB6AC)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
+    final tileColor = _getTileColor(0, tileColorIndex, isDark, customColors);
 
     // Magisk card is always clickable
     return GestureDetector(
       onTap: () => _navigateTo(context, '/magisk'),
       child: Container(
-        color: isDark ? tileColor : tileColorLight,
+        color: tileColor,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -272,13 +310,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildSettingsCard(BuildContext context, WidgetRef ref, bool isDark) {
     final status = ref.watch(magiskStatusProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFFFD54F)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
+    final tileColor = _getTileColor(1, tileColorIndex, isDark, customColors);
 
     // Only clickable if rooted with Magisk
     final isClickable = status.isRooted;
@@ -288,7 +322,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: GestureDetector(
         onTap: isClickable ? () => _navigateTo(context, '/settings') : null,
         child: Container(
-          color: isDark ? tileColor : tileColorLight,
+          color: tileColor,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Align(
@@ -315,13 +349,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final status = ref.watch(magiskStatusProvider);
     final contributors = ref.watch(contributorsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFBA68C8)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
+    final tileColor = _getTileColor(2, tileColorIndex, isDark, customColors);
 
     // Only clickable if rooted with Magisk
     final isClickable = status.isRooted;
@@ -331,7 +361,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: GestureDetector(
         onTap: isClickable ? () => _navigateTo(context, '/contributors') : null,
         child: Container(
-          color: isDark ? tileColor : tileColorLight,
+          color: tileColor,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -376,13 +406,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final status = ref.watch(magiskStatusProvider);
     final modules = ref.watch(modulesProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFF64B5F6)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
+    final tileColor = _getTileColor(3, tileColorIndex, isDark, customColors);
 
     // Only clickable if rooted with MagiskSU (not other root solutions)
     final isClickable = status.isRooted;
@@ -395,7 +421,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: GestureDetector(
         onTap: isClickable ? () => _navigateTo(context, '/modules') : null,
         child: Container(
-          color: isDark ? tileColor : tileColorLight,
+          color: tileColor,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -452,13 +478,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final status = ref.watch(magiskStatusProvider);
     final apps = ref.watch(appsProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = tileColorIndex == 0
-        ? (isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350))
-        : AppTheme.tileColors[tileColorIndex];
-    final tileColorLight = tileColorIndex == 0
-        ? const Color(0xFFEF5350)
-        : AppTheme.tileColors[tileColorIndex].withValues(alpha: 0.7);
+    final tileColor = _getTileColor(4, tileColorIndex, isDark, customColors);
 
     // Only clickable if rooted with Magisk
     final isClickable = status.isRooted;
@@ -471,7 +493,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: GestureDetector(
         onTap: isClickable ? () => _navigateTo(context, '/apps') : null,
         child: Container(
-          color: isDark ? tileColor : tileColorLight,
+          color: tileColor,
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -632,7 +654,7 @@ class _CarouselItemDisplay extends StatelessWidget {
                 end: Offset.zero,
               ).animate(CurvedAnimation(
                 parent: animation,
-                curve: Curves.easeOut,
+                curve: Curves.fastOutSlowIn, // ← 这里改了: 使用统一的平滑曲线
               )),
               child: FadeTransition(opacity: animation, child: child),
             );
@@ -695,15 +717,17 @@ class _LogsListViewState extends State<_LogsListView> {
       itemCount: widget.logs.length,
       itemBuilder: (context, index) {
         final log = widget.logs[index];
-        return Text(
-          log,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w500,
-            fontSize: 8,
-            color: widget.isDark ? Colors.black : Colors.white,
+        return RepaintBoundary( // ← 这里改了: 隔离高频重绘列表项，防止整个列表甚至页面被污染重绘
+          child: Text(
+            log,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w500,
+              fontSize: 8,
+              color: widget.isDark ? Colors.black : Colors.white,
+            ),
+            overflow: TextOverflow.clip,
+            maxLines: 1,
           ),
-          overflow: TextOverflow.clip,
-          maxLines: 1,
         );
       },
     );

@@ -186,18 +186,20 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
                     textColor = Colors.green;
                   }
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 2),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.getListItem(isDark),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      log,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: textColor,
+                  return RepaintBoundary( // ← 这里改了: 隔离刷机日志的大量文本重绘
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 2),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.getListItem(isDark),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        log,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: textColor,
+                        ),
                       ),
                     ),
                   );
