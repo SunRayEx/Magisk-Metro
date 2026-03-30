@@ -220,4 +220,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activities => '活动';
+
+  @override
+  String get sponsor => '赞助';
+
+  @override
+  String get sponsorInfo => '通过成为赞助商支持 MagisKube 的开发。您的贡献有助于维护和改进本项目。';
+
+  @override
+  String get ok => '确定';
+
+  @override
+  String get lockMode => '锁定模式';
 }

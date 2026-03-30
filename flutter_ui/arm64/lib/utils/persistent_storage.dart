@@ -352,4 +352,52 @@ class PersistentStorage {
     await prefs.remove(_pendingOperationsKey);
     await prefs.remove(_customThemeColorKey);
   }
+  
+  // ==================== Lock Mode & Tile Layout ====================
+  
+  static const String _lockModeKey = 'lock_mode';
+  static const String _tileLayoutKey = 'tile_layout';
+  
+  /// Save lock mode state (true = locked, false = unlocked/editable)
+  Future<void> saveLockMode(bool locked) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_lockModeKey, locked);
+  }
+  
+  /// Load lock mode state (default: true = locked)
+  Future<bool> loadLockMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_lockModeKey) ?? true;
+  }
+  
+  /// Save tile layout configuration
+  /// Format: JSON array of tile configs (each as Map<String, dynamic>)
+  Future<void> saveTileLayout(List<Map<String, dynamic>> tiles) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tileLayoutKey, jsonEncode(tiles));
+  }
+  
+  /// Load tile layout configuration
+  /// Returns empty list if not found (will use defaults)
+  /// Caller should convert Map to TileConfig using TileConfig.fromJson
+  Future<List<Map<String, dynamic>>> loadTileLayout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_tileLayoutKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('PersistentStorage: Error loading tile layout: $e');
+      return [];
+    }
+  }
+  
+  /// Clear tile layout (reset to defaults)
+  Future<void> clearTileLayout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tileLayoutKey);
+  }
 }

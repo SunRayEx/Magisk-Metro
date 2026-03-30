@@ -520,6 +520,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Activities'**
   String get activities;
+
+  /// No description provided for @sponsor.
+  ///
+  /// In en, this message translates to:
+  /// **'Sponsor'**
+  String get sponsor;
+
+  /// No description provided for @sponsorInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Support the development of MagisKube by becoming a sponsor. Your contributions help maintain and improve this project.'**
+  String get sponsorInfo;
+
+  /// No description provided for @ok.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ok;
+
+  /// No description provided for @lockMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock Mode'**
+  String get lockMode;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   google_fonts: ^6.1.0
   flutter_riverpod: ^2.4.0
+  collection: ^1.18.0
+  flutter_svg: ^2.0.9
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.2.2

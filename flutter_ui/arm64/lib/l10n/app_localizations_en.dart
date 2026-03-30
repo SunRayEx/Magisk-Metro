@@ -220,4 +220,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activities => 'Activities';
+
+  @override
+  String get sponsor => 'Sponsor';
+
+  @override
+  String get sponsorInfo => 'Support the development of MagisKube by becoming a sponsor. Your contributions help maintain and improve this project.';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get lockMode => 'Lock Mode';
 }

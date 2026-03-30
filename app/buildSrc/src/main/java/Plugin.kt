@@ -25,8 +25,9 @@ object Config {
 
     fun contains(key: String) = get(key) != null
 
-    val version: String get() = get("version") ?: commitHash
-    val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
+    val version: String get() = get("version") ?: get("magisk.version") ?: commitHash
+    val versionCode: Int get() = (get("magisk.versionCode") ?: get("versionCode"))!!.toInt()
+    val stubVersion: String get() = (get("magisk.stubVersion") ?: get("stubVersion") ?: "0")
     val abiList: Set<String> get() {
         val abiList = get("abiList") ?: return defaultAbis
         return abiList.split(Regex("\\s*,\\s*")).toSet() intersect supportAbis

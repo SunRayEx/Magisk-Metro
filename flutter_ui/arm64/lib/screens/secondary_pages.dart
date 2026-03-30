@@ -639,6 +639,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       isDark,
                       onTap: () => Navigator.push(context, FlipPageRoute(page: const ThemePage())),
                     ),
+                    // Lock Mode toggle - controls tile drag/resize
+                    _buildLockModeTile(context, widgetColor, isDark, localizations),
                   ],
                 ),
               ),
@@ -824,6 +826,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  /// Build the Lock Mode toggle tile - controls whether tiles can be dragged/resized
+  Widget _buildLockModeTile(BuildContext context, Color widgetColor, bool isDark, AppLocalizations localizations) {
+    final isLocked = ref.watch(lockModeProvider);
+    
+    return _buildNavigationTile(
+      context,
+      localizations.lockMode,
+      isLocked ? localizations.enabled : localizations.disabled,
+      Icons.lock,
+      widgetColor,
+      isDark,
+      trailing: Switch(
+        value: isLocked,
+        onChanged: (v) => ref.read(lockModeProvider.notifier).toggle(),
+        activeColor: widgetColor,
       ),
     );
   }
@@ -2055,6 +2076,9 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
   final TextEditingController _hexController = TextEditingController();
   final FocusNode _hexFocusNode = FocusNode();
   
+  // 8 tiles: 5 main + 3 Sponsor tiles
+  static const int _totalTiles = 8;
+  
   // 64 vibrant gradient colors organized by hue
   // Each row: Red → Orange → Yellow → Green → Cyan → Blue → Purple → Magenta
   // Darkest (90% of max RGB) at top, gradually lighter toward white (40% of darkest)
@@ -2133,12 +2157,37 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
   Future<void> _loadSavedColors() async {
     final storage = PersistentStorage();
     final savedColors = await storage.loadCustomTileColors();
-    if (savedColors.isNotEmpty) {
-      setState(() {
-        _tileColors = savedColors.map((key, value) => MapEntry(key, Color(value)));
-        AppTheme.customTileColors = _tileColors;
-      });
+    
+    // Initialize all 8 tiles with their default colors first
+    final loadedColors = <int, Color>{};
+    for (int i = 0; i < _totalTiles; i++) {
+      loadedColors[i] = _getDefaultColorForTile(i);
     }
+    
+    // Then override with saved colors - ensure correct index mapping
+    if (savedColors.isNotEmpty) {
+      for (final entry in savedColors.entries) {
+        // Ensure the key is within valid range (0-7)
+        final tileIndex = entry.key;
+        if (tileIndex >= 0 && tileIndex < _totalTiles) {
+          loadedColors[tileIndex] = Color(entry.value);
+          debugPrint('CustomThemePage: Loaded color for tile $tileIndex: #${Color(entry.value).value.toRadixString(16).substring(2).toUpperCase()}');
+        }
+      }
+    }
+    
+    // Debug: Print all loaded colors for Sponsor tiles
+    debugPrint('CustomThemePage: Sponsor tile 5 color: #${loadedColors[5]!.value.toRadixString(16).substring(2).toUpperCase()}');
+    debugPrint('CustomThemePage: Sponsor tile 6 color: #${loadedColors[6]!.value.toRadixString(16).substring(2).toUpperCase()}');
+    debugPrint('CustomThemePage: Sponsor tile 7 color: #${loadedColors[7]!.value.toRadixString(16).substring(2).toUpperCase()}');
+    
+    setState(() {
+      _tileColors = Map<int, Color>.from(loadedColors);
+      AppTheme.customTileColors = Map<int, Color>.from(loadedColors);
+    });
+    
+    // Also update the provider so Dashboard can reactively rebuild
+    ref.read(customTileColorsProvider.notifier).state = Map<int, Color>.from(loadedColors);
   }
   
   Color _getDefaultColorForTile(int index) {
@@ -2148,6 +2197,9 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
       case 2: return const Color(0xFF9C27B0); // Contributor - Purple
       case 3: return const Color(0xFF2196F3); // Modules - Blue
       case 4: return const Color(0xFFF44336); // Apps - Red
+      case 5: return const Color(0xFFFF69B4); // Sponsor (left) - Pink
+      case 6: return const Color(0xFF69B4FF); // Sponsor (middle) - Light Blue
+      case 7: return const Color(0xFF00BFA5); // Sponsor (right) - Teal/Cyan
       default: return const Color(0xFF009688);
     }
   }
@@ -2159,6 +2211,9 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
       case 2: return Icons.people; // Contributor
       case 3: return Icons.extension; // Modules
       case 4: return Icons.apps; // Apps
+      case 5: return Icons.card_giftcard; // Sponsor 1
+      case 6: return Icons.card_giftcard; // Sponsor 2
+      case 7: return Icons.card_giftcard; // Sponsor 3
       default: return Icons.widgets;
     }
   }
@@ -2182,10 +2237,21 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
   void _applyColorToSelectedTile(Color color) {
     if (_selectedTileIndex < 0) return;
     
+    // Debug: Log the color being applied
+    debugPrint('_applyColorToSelectedTile: Applying color to tile index $_selectedTileIndex: #${color.value.toRadixString(16).substring(2).toUpperCase()}');
+    
     setState(() {
-      _tileColors[_selectedTileIndex] = color;
-      AppTheme.customTileColors = _tileColors;
+      // Create a new map to ensure proper state update (avoid in-place modification)
+      final newColors = Map<int, Color>.from(_tileColors);
+      newColors[_selectedTileIndex] = color;
+      _tileColors = newColors;
+      
+      // Update the static variable
+      AppTheme.customTileColors = Map<int, Color>.from(newColors);
       _hexController.text = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+      
+      // Debug: Verify the color was applied
+      debugPrint('_applyColorToSelectedTile: Tile $_selectedTileIndex now has color: #${_tileColors[_selectedTileIndex]!.value.toRadixString(16).substring(2).toUpperCase()}');
     });
   }
   
@@ -2212,8 +2278,13 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
     // Save to persistent storage
     final storage = PersistentStorage();
     
-    // Save per-tile colors
-    final colorMap = _tileColors.map((key, value) => MapEntry(key, value.value));
+    // Save per-tile colors - ensure all 8 tiles are saved
+    final colorMap = <int, int>{};
+    for (int i = 0; i < _totalTiles; i++) {
+      if (_tileColors.containsKey(i)) {
+        colorMap[i] = _tileColors[i]!.value;
+      }
+    }
     storage.saveCustomTileColors(colorMap);
     
     // Update the static variable for immediate use
@@ -2225,6 +2296,9 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
     // Select Custom theme
     ref.read(tileColorProvider.notifier).state = 2;
     
+    // Force a debug print to verify colors
+    debugPrint('Saved tile colors: ${_tileColors.map((k, v) => MapEntry(k, '#${v.value.toRadixString(16).substring(2).toUpperCase()}')).toString()}');
+    
     Navigator.pop(context);
   }
 
@@ -2232,7 +2306,8 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
   Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
     final screenSize = MediaQuery.of(context).size;
-    final tileWidth = (screenSize.width - 16 - 32) / 5; // 16 padding each side, 4 gaps of 8
+    // Calculate tile width for 3 columns (Sponsor row determines the layout)
+    final tileWidth = (screenSize.width - 48) / 3; // 24 padding each side, 2 gaps
     
     return Scaffold(
       backgroundColor: AppTheme.getBackground(isDark),
@@ -2242,69 +2317,32 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
             _buildHeader(context, 'Custom Theme', isDark),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                 child: Column(
                   children: [
-                    // Five tiles in a row
-                    SizedBox(
-                      height: _selectedTileIndex >= 0 ? tileWidth * 1.1 + 24 : tileWidth + 8,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(5, (index) {
-                          return _buildAnimatedTile(index, tileWidth, isDark);
-                        }),
-                      ),
-                    ),
+                    // Section: Main Tiles
+                    _buildSectionTitle('Main Tiles', isDark),
+                    const SizedBox(height: 12),
+                    // Grid of 5 main tiles (2 rows: 3 + 2)
+                    _buildTileGrid(isDark, tileWidth, startIdx: 0, endIdx: 5),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     
-                    // Color palette with 3D pop animation
-                    widgets.AnimatedBuilder(
-                      animation: _paletteAnimation,
-                      builder: (context, child) {
-                        if (_selectedTileIndex < 0) return const SizedBox.shrink();
-                        
-                        return Transform(
-                          alignment: Alignment.topCenter,
-                          transform: Matrix4.identity()
-                            ..scale(1.0, _paletteAnimation.value)
-                            ..translate(0.0, 50.0 * (1 - _paletteAnimation.value)),
-                          child: Opacity(
-                            opacity: _paletteAnimation.value,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: _buildColorPalette(isDark),
-                    ),
+                    // Section: Sponsor Tiles
+                    _buildSectionTitle('Sponsor Tiles', isDark),
+                    const SizedBox(height: 12),
+                    // Row of 3 Sponsor tiles
+                    _buildTileGrid(isDark, tileWidth, startIdx: 5, endIdx: 8),
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Color palette with animation
+                    _buildColorPaletteSection(isDark),
                     
                     const SizedBox(height: 24),
                     
                     // Save button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _tileColors.isNotEmpty ? _saveAndApply : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _selectedTileIndex >= 0 
-                              ? (_tileColors[_selectedTileIndex] ?? _getDefaultColorForTile(_selectedTileIndex))
-                              : AppTheme.getListItemFont(isDark),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        child: Text(
-                          'SAVE & APPLY',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildSaveButton(isDark),
                   ],
                 ),
               ),
@@ -2315,64 +2353,165 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
     );
   }
   
+  Widget _buildSectionTitle(String title, bool isDark) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          color: AppTheme.getFont(isDark).withValues(alpha: 0.6),
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildTileGrid(bool isDark, double tileWidth, {required int startIdx, required int endIdx}) {
+    final tiles = <Widget>[];
+    final count = endIdx - startIdx;
+    
+    for (int i = startIdx; i < endIdx; i++) {
+      tiles.add(_buildAnimatedTile(i, tileWidth, isDark));
+    }
+    
+    // For 5 tiles: first row 3, second row 2 (centered)
+    if (count == 5) {
+      return Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              tiles[0],
+              tiles[1],
+              tiles[2],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              tiles[3],
+              const SizedBox(width: 12),
+              tiles[4],
+            ],
+          ),
+        ],
+      );
+    }
+    
+    // For 3 tiles: single row with even spacing
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: tiles,
+    );
+  }
+  
   Widget _buildAnimatedTile(int index, double tileWidth, bool isDark) {
     final isSelected = _selectedTileIndex == index;
     final color = _tileColors[index] ?? _getDefaultColorForTile(index);
     final icon = _getIconForTile(index);
     final name = AppTheme.customizableTileNames[index];
     
-    // Calculate animated values
-    final scale = isSelected ? 1.1 : 1.0;
-    final iconSize = isSelected ? 24.0 : 32.0;
+    // Calculate animated values - smaller and softer
+    final scale = isSelected ? 1.06 : 1.0;
+    final iconSize = isSelected ? 18.0 : 24.0;
+    final shadowOpacity = isSelected ? 0.4 : 0.0;
     
     return GestureDetector(
-      onTap: () => _selectTile(index),
+      onTap: () {
+        // Debug print for troubleshooting
+        debugPrint('Selected tile index: $index');
+        _selectTile(index);
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
         width: tileWidth * scale,
         height: tileWidth * scale,
         decoration: BoxDecoration(
           color: color,
+          borderRadius: BorderRadius.circular(20), // Softer corners
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: color.withValues(alpha: 0.4),
+                    color: color.withValues(alpha: shadowOpacity),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ]
-              : null,
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AnimatedSize(
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               child: Icon(
                 icon,
                 size: iconSize,
-                color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                color: color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
               ),
             ),
-            if (isSelected) ...[
-              const SizedBox(height: 4),
-              Text(
-                name.toUpperCase(),
+            const SizedBox(height: 4),
+            Flexible(
+              child: Text(
+                name.length > 10 ? name.substring(0, 9) + '…' : name,
                 style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   fontSize: 10,
-                  color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                  color: color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-            ],
+            ),
           ],
         ),
       ),
+    );
+  }
+  
+  Widget _buildColorPaletteSection(bool isDark) {
+    if (_selectedTileIndex < 0) {
+      return Center(
+        child: Text(
+          'Select a tile to customize its color',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            color: AppTheme.getFont(isDark).withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+    
+    return widgets.AnimatedBuilder(
+      animation: _paletteAnimation,
+      builder: (context, child) {
+        if (_paletteAnimation.value == 0) return const SizedBox.shrink();
+        
+        return Transform(
+          alignment: Alignment.topCenter,
+          transform: Matrix4.identity()
+            ..scale(1.0, _paletteAnimation.value)
+            ..translate(0.0, 30.0 * (1 - _paletteAnimation.value)),
+          child: Opacity(
+            opacity: _paletteAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: _buildColorPalette(isDark),
     );
   }
   
@@ -2491,6 +2630,41 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
     );
   }
   
+  Widget _buildSaveButton(bool isDark) {
+    final hasChanges = _tileColors.isNotEmpty;
+    
+    // Get button color based on dark mode
+    final buttonBgColor = isDark 
+        ? const Color(0xFF2D2D2D)
+        : const Color(0xFFF0F0F0);
+    final buttonTextColor = isDark ? Colors.white : Colors.black87;
+    
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: hasChanges ? _saveAndApply : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hasChanges ? buttonBgColor : buttonBgColor.withValues(alpha: 0.5),
+          foregroundColor: hasChanges ? buttonTextColor : buttonTextColor.withValues(alpha: 0.5),
+          elevation: 0,
+          disabledBackgroundColor: buttonBgColor.withValues(alpha: 0.3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: Text(
+          'SAVE & APPLY',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: hasChanges ? buttonTextColor : buttonTextColor.withValues(alpha: 0.5),
+          ),
+        ),
+      ),
+    );
+  }
+  
   Widget _buildHeader(BuildContext context, String title, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -2521,7 +2695,7 @@ class _CustomThemePageState extends ConsumerState<CustomThemePage> with TickerPr
   }
 }
 
-// Activity info model
+/// Activity info model
 class ActivityInfo {
   final String name;
   final bool isInDenyList;

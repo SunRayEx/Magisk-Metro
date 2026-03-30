@@ -65,13 +65,19 @@ class AppTheme {
     'Yellow',    // 7 -> tileColors[4]
   ];
   
-  // Tile names for custom color assignment (5 tiles, excluding Logs)
+  // Tile names for custom color assignment (8 tiles: 5 main + 3 Sponsor tiles)
+  // Index mapping matches dashboard_screen.dart:
+  // 0=Magisk, 1=Settings, 2=Contributor, 3=Modules, 4=Apps
+  // 5=Sponsor (left), 6=Sponsor (middle), 7=Sponsor (right)
   static const List<String> customizableTileNames = [
     'Magisk',
     'Settings', 
     'Contributor',
     'Modules',
     'Apps',
+    'Sponsor (左)',
+    'Sponsor (中)',
+    'Sponsor (右)',
   ];
   
   // Custom theme color (user-selected) - used as fallback for custom mode
@@ -98,28 +104,44 @@ class AppTheme {
     if (colorIndex == 1) {
       // Monet theme - All tiles use the same primary color from wallpaper
       final baseColor = monetPrimary ?? const Color(0xFF009688);
-      // Minimal adjustment - just return the color as-is or with very subtle tweak
       return baseColor;
     }
     
     if (colorIndex == 2) {
       // Custom theme - Check if this tile has an individual color assigned
-      // Use the passed customColors parameter for reactivity
+      // Priority 1: Use the passed customColors parameter from provider (most reactive)
       if (customColors.containsKey(tileIndex)) {
+        debugPrint('getTileWithCustomColors: tileIndex=$tileIndex using provider color: #${customColors[tileIndex]!.value.toRadixString(16).substring(2).toUpperCase()}');
         return customColors[tileIndex]!;
       }
       
-      // Fall back to static customTileColors (for backwards compatibility)
+      // Priority 2: Fall back to static customTileColors (for backwards compatibility)
       if (customTileColors.containsKey(tileIndex)) {
+        debugPrint('getTileWithCustomColors: tileIndex=$tileIndex using static fallback color: #${customTileColors[tileIndex]!.value.toRadixString(16).substring(2).toUpperCase()}');
         return customTileColors[tileIndex]!;
       }
       
-      // Fall back to global custom theme color
-      return customThemeColor ?? const Color(0xFF009688);
+      // Priority 3: Fall back to default colors for each tile
+      return _getDefaultTileColor(tileIndex);
     }
 
-    // For other themes, use the standard method
+    // For Default theme (0) and preset themes (3-7), use the standard method
     return getTileWidgetColor(tileIndex, colorIndex, isDark);
+  }
+  
+  /// Get default color for a tile index (used as fallback in custom theme)
+  static Color _getDefaultTileColor(int tileIndex) {
+    switch (tileIndex) {
+      case 0: return const Color(0xFF009688); // Magisk - Teal
+      case 1: return const Color(0xFFFFC107); // Settings - Amber
+      case 2: return const Color(0xFF9C27B0); // Contributor - Purple
+      case 3: return const Color(0xFF2196F3); // Modules - Blue
+      case 4: return const Color(0xFFF44336); // Apps - Red
+      case 5: return const Color(0xFFFF69B4); // Sponsor (left) - Pink
+      case 6: return const Color(0xFF69B4FF); // Sponsor (middle) - Light Blue
+      case 7: return const Color(0xFF00BFA5); // Sponsor (right) - Teal/Cyan
+      default: return const Color(0xFF009688);
+    }
   }
 
   static Color getWidgetColor(int colorIndex, bool isDark) {
@@ -165,7 +187,7 @@ class AppTheme {
     }
 
     if (colorIndex == 0) {
-      // Default theme
+      // Default theme - each tile has its own color
       switch (tileIndex) {
         case 0:
           // Magisk tile - 15% lighter than base color
@@ -182,20 +204,16 @@ class AppTheme {
         case 4:
           // Apps tile
           return const Color(0xFFF44336);
+        case 5:
+        case 6:
+        case 7:
+          // Sponsor tiles - Pink color
+          return const Color(0xFFFF69B4);
         default:
           return const Color(0xFF009688);
       }
     }
-    
-    // For other themes (3-7), map to tileColors (0-4)
-    final adjustedIndex = colorIndex - 3;
-    if (adjustedIndex >= 0 && adjustedIndex < tileColors.length) {
-      // Return the preset color directly without modification
-      return tileColors[adjustedIndex];
-    }
-    
-    // Fallback to default
-    return const Color(0xFF009688);
+        return const Color(0xFF009688);
   }
 
   static Color _darkenColor(Color color, double factor) {
@@ -994,3 +1012,279 @@ final contributorsProvider = Provider<List<Contributor>>((ref) {
         github: 'none'),
   ];
 });
+
+// ==================== Tile Layout Configuration ====================
+
+/// Tile configuration model for customizable layout
+/// Each tile has: id, position (row, col), size (width, height in cells), type
+class TileConfig {
+  final String id;           // Unique identifier: 'magisk', 'settings', etc.
+  final int row;             // Grid row position (0-based)
+  final int col;             // Grid column position (0-based)
+  final int width;           // Width in cells (1-3)
+  final int height;          // Height in cells (1-6)
+  final String type;         // Tile type: 'magisk', 'settings', 'modules', etc.
+  
+  const TileConfig({
+    required this.id,
+    required this.row,
+    required this.col,
+    required this.width,
+    required this.height,
+    required this.type,
+  });
+  
+  /// Grid constants
+  static const int gridColumns = 3;
+  static const int gridRows = 6;
+  
+  /// Default tile configurations (matching reference design)
+  /// Grid: 3 columns x 6 rows
+  /// Layout based on image:
+  /// Row 0-1, Col 0-1: Magisk (绿色，2x2)
+  /// Row 0, Col 2: Modules (蓝色，1x1)
+  /// Row 1, Col 2: Apps (红色，1x1)
+  /// Row 2, Col 0-1: Settings (黄色，2x1)
+  /// Row 2-3, Col 2: Logs (白色，1x2)
+  /// Row 3, Col 0-1: Contributor (紫色，2x1)
+  /// Row 4, Col 0-2: Sponsor (粉色，三个 1x1)
+  static List<TileConfig> defaultTiles() => [
+    // Magisk: 2x2 at top-left (rows 0-1, cols 0-1) - Green
+    TileConfig(id: 'magisk', row: 0, col: 0, width: 2, height: 2, type: 'magisk'),
+    // Modules: 1x1 at top-right (row 0, col 2) - Blue
+    TileConfig(id: 'modules', row: 0, col: 2, width: 1, height: 1, type: 'modules'),
+    // Apps: 1x1 at (row 1, col 2) - Red
+    TileConfig(id: 'apps', row: 1, col: 2, width: 1, height: 1, type: 'apps'),
+    // Settings: 2x1 at (row 2, cols 0-1) - Yellow
+    TileConfig(id: 'settings', row: 2, col: 0, width: 2, height: 1, type: 'settings'),
+    // Logs: 1x2 at (rows 2-3, col 2) - White
+    TileConfig(id: 'logs', row: 2, col: 2, width: 1, height: 2, type: 'logs'),
+    // Contributor: 2x1 at (row 3, cols 0-1) - Purple
+    TileConfig(id: 'contributor', row: 3, col: 0, width: 2, height: 1, type: 'contributor'),
+    // Sponsor tiles: 1x1 each at row 4 - Pink
+    TileConfig(id: 'sponsor1', row: 4, col: 0, width: 1, height: 1, type: 'sponsor'),
+    TileConfig(id: 'sponsor2', row: 4, col: 1, width: 1, height: 1, type: 'sponsor'),
+    TileConfig(id: 'sponsor3', row: 4, col: 2, width: 1, height: 1, type: 'sponsor'),
+  ];
+  
+  /// Convert to JSON for storage
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'row': row,
+    'col': col,
+    'width': width,
+    'height': height,
+    'type': type,
+  };
+  
+  /// Create from JSON
+  factory TileConfig.fromJson(Map<String, dynamic> json) => TileConfig(
+    id: json['id'] as String,
+    row: json['row'] as int,
+    col: json['col'] as int,
+    width: json['width'] as int,
+    height: json['height'] as int,
+    type: json['type'] as String,
+  );
+  
+  /// Copy with modifications
+  TileConfig copyWith({
+    String? id,
+    int? row,
+    int? col,
+    int? width,
+    int? height,
+    String? type,
+  }) => TileConfig(
+    id: id ?? this.id,
+    row: row ?? this.row,
+    col: col ?? this.col,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    type: type ?? this.type,
+  );
+  
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TileConfig &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          row == other.row &&
+          col == other.col &&
+          width == other.width &&
+          height == other.height;
+
+  @override
+  int get hashCode => Object.hash(id, row, col, width, height);
+}
+
+/// Lock mode state - when true, tiles are locked and cannot be moved/resized
+final lockModeProvider = StateNotifierProvider<LockModeNotifier, bool>((ref) {
+  return LockModeNotifier();
+});
+
+class LockModeNotifier extends StateNotifier<bool> {
+  static const _defaultLocked = true; // Default: locked mode
+  
+  LockModeNotifier() : super(_defaultLocked) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final locked = await storage.loadLockMode();
+    state = locked;
+  }
+  
+  Future<void> toggle() async {
+    state = !state;
+    final storage = PersistentStorage();
+    await storage.saveLockMode(state);
+    
+    // When locking, also save current tile layout
+    if (state) {
+      // Signal to save tile layout
+      // The tile layout notifier will handle this
+    }
+  }
+  
+  Future<void> setLocked(bool locked) async {
+    state = locked;
+    final storage = PersistentStorage();
+    await storage.saveLockMode(locked);
+  }
+}
+
+/// Tile layout configuration provider
+final tileLayoutProvider = StateNotifierProvider<TileLayoutNotifier, List<TileConfig>>((ref) {
+  return TileLayoutNotifier(ref);
+});
+
+class TileLayoutNotifier extends StateNotifier<List<TileConfig>> {
+  final Ref _ref;
+  
+  TileLayoutNotifier(this._ref) : super(TileConfig.defaultTiles()) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final tileMaps = await storage.loadTileLayout();
+    if (tileMaps.isNotEmpty) {
+      // Convert Map list to TileConfig list
+      final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
+      state = tiles;
+    }
+  }
+  
+  /// Move a tile to a new position
+  void moveTile(String tileId, int newRow, int newCol) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: newRow, col: newCol);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  /// Resize a tile
+  void resizeTile(String tileId, int newWidth, int newHeight) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  /// Update tile position and size
+  void updateTile(String tileId, {int? row, int? col, int? width, int? height}) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: row, col: col, width: width, height: height);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  /// Swap two tiles' positions
+  void swapTiles(String tileId1, String tileId2) {
+    final tile1 = state.firstWhere((t) => t.id == tileId1);
+    final tile2 = state.firstWhere((t) => t.id == tileId2);
+    
+    final updated = state.map((tile) {
+      if (tile.id == tileId1) {
+        return tile.copyWith(row: tile2.row, col: tile2.col);
+      }
+      if (tile.id == tileId2) {
+        return tile.copyWith(row: tile1.row, col: tile1.col);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  /// Reset to default layout
+  void resetToDefault() {
+    state = TileConfig.defaultTiles();
+    saveLayout();
+  }
+  
+  /// Save current layout to storage
+  Future<void> saveLayout() async {
+    final storage = PersistentStorage();
+    // Convert TileConfig list to Map list for storage
+    final tileMaps = state.map((tile) => tile.toJson()).toList();
+    await storage.saveTileLayout(tileMaps);
+  }
+  
+  /// Get tile by ID
+  TileConfig? getTile(String tileId) {
+    try {
+      return state.firstWhere((t) => t.id == tileId);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  /// Check if a position is occupied by any tile (excluding the given tileId)
+  bool isPositionOccupied(int row, int col, String excludeTileId) {
+    for (final tile in state) {
+      if (tile.id == excludeTileId) continue;
+      
+      // Check if the position falls within this tile's area
+      for (int r = tile.row; r < tile.row + tile.height; r++) {
+        for (int c = tile.col; c < tile.col + tile.width; c++) {
+          if (r == row && c == col) return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  /// Find available position for a tile of given size
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId) {
+    // Grid: 3 columns, 5 rows (or more)
+    for (int r = 0; r < 5; r++) {
+      for (int c = 0; c < 3; c++) {
+        // Check if this position and required area is free
+        bool available = true;
+        for (int dr = 0; dr < height && available; dr++) {
+          for (int dc = 0; dc < width && available; dc++) {
+            if (c + dc >= 3 || r + dr >= 5) {
+              available = false;
+            } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
+              available = false;
+            }
+          }
+        }
+        if (available) return (r, c);
+      }
+    }
+    return null;
+  }
+}

@@ -18,6 +18,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Timer? _carouselTimer;
   int _modulesCarouselIndex = 0;
   int _appsCarouselIndex = 0;
+  
+  // Drag state
+  String? _draggingTileId;
+  Offset _dragOffset = Offset.zero;
+  int? _dragTargetRow;
+  int? _dragTargetCol;
+  
+  // Resize state
+  String? _resizingTileId;
+  int _originalWidth = 1;
+  int _originalHeight = 1;
+  int _previewWidth = 1;
+  int _previewHeight = 1;
+  
 
   @override
   void initState() {
@@ -61,19 +75,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
+    final isLocked = ref.watch(lockModeProvider);
+    final tileLayout = ref.watch(tileLayoutProvider);
 
     return TickerMode(
-      enabled: ModalRoute.of(context)?.isCurrent ?? true, // ← 这里改了: 当页面被推入后台或遮挡时暂停动画 Ticker
+      enabled: ModalRoute.of(context)?.isCurrent ?? true,
       child: Scaffold(
-        backgroundColor: AppTheme.getBackground(isDark),
+        backgroundColor: Colors.black,
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(4.0),
+            padding: const EdgeInsets.all(2.0),
             child: Column(
               children: [
-                _buildTopBar(context, ref, isDark),
+                _buildTopBar(context, ref, isDark, isLocked),
                 Expanded(
-                  child: _buildMainContent(context, ref, isDark),
+                  child: _buildTileGrid(context, ref, isDark, tileLayout, isLocked),
                 ),
               ],
             ),
@@ -83,19 +99,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildTopBar(BuildContext context, WidgetRef ref, bool isDark) {
+  Widget _buildTopBar(BuildContext context, WidgetRef ref, bool isDark, bool isLocked) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // Settings button only
           GestureDetector(
             onTap: () => _showSettings(context, ref),
             child: Container(
               padding: const EdgeInsets.all(8),
               child: Icon(
                 Icons.settings,
-                color: AppTheme.getFont(isDark),
+                color: Colors.white,
                 size: 24,
               ),
             ),
@@ -151,155 +168,163 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     Navigator.push(context, FlipPageRoute(page: page));
   }
 
-  Widget _buildMainContent(BuildContext context, WidgetRef ref, bool isDark) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _buildLeftColumn(context, ref, isDark),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: _buildRightColumn(context, ref, isDark),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLeftColumn(BuildContext context, WidgetRef ref, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(flex: 6, child: _buildMagiskCard(context, ref, isDark)),
-        const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildSettingsCard(context, ref, isDark)),
-        const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildContributorCard(context, ref, isDark)),
-      ],
-    );
-  }
-
-  Widget _buildRightColumn(BuildContext context, WidgetRef ref, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(flex: 3, child: _buildModulesCard(context, ref, isDark)),
-        const SizedBox(height: 4),
-        Expanded(flex: 3, child: _buildAppsCard(context, ref, isDark)),
-        const SizedBox(height: 4),
-        Expanded(flex: 6, child: _buildLogsCard(context, ref, isDark)),
-      ],
-    );
-  }
-
-  Color _getTileColor(int tileIndex, int tileColorIndex, bool isDark, Map<int, Color> customColors) {
-    // tileIndex: 0=Magisk, 1=Settings, 2=Contributor, 3=Modules, 4=Apps
-    if (tileColorIndex == 0) {
-      // Default theme
-      switch (tileIndex) {
-        case 0: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
-        case 1: return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
-        case 2: return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
-        case 3: return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
-        case 4: return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
-        default: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
-      }
-    } else if (tileColorIndex == 1) {
-      // Monet theme
-      final monetColor = AppTheme.monetPrimary ?? const Color(0xFF009688);
-      return isDark ? monetColor : monetColor.withValues(alpha: 0.7);
-    } else if (tileColorIndex == 2) {
-      // Custom theme - use per-tile custom colors directly (user's choice)
-      // Use the passed customColors parameter for reactivity
-      final customColor = customColors[tileIndex] ?? AppTheme.customTileColors[tileIndex];
-      if (customColor != null) {
-        return customColor; // Use the exact color user selected
-      }
-      // Fallback to default if custom color not set
-      switch (tileIndex) {
-        case 0: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
-        case 1: return isDark ? const Color(0xFFFFC107) : const Color(0xFFFFD54F);
-        case 2: return isDark ? const Color(0xFF9C27B0) : const Color(0xFFBA68C8);
-        case 3: return isDark ? const Color(0xFF4285F4) : const Color(0xFF64B5F6);
-        case 4: return isDark ? const Color(0xFFD32F2F) : const Color(0xFFEF5350);
-        default: return isDark ? const Color(0xFF009688) : const Color(0xFF4DB6AC);
-      }
-    } else {
-      // Other preset colors (Blue, Red, Green, Purple, Yellow)
-      final baseColor = AppTheme.tileColors[tileColorIndex - 3];
-      return isDark ? baseColor : baseColor.withValues(alpha: 0.7);
+  /// Build the tile grid with drag and resize support
+  Widget _buildTileGrid(BuildContext context, WidgetRef ref, bool isDark, List<TileConfig> tileLayout, bool isLocked) {
+    // Grid configuration: 3 columns, dynamic rows based on tile positions
+    const int gridColumns = 3;
+    const double cellSpacing = 2.0;
+    
+    // Calculate grid height based on tiles
+    int maxRow = 0;
+    for (final tile in tileLayout) {
+      maxRow = maxRow > (tile.row + tile.height) ? maxRow : (tile.row + tile.height);
     }
-  }
-
-  Widget _buildMagiskCard(BuildContext context, WidgetRef ref, bool isDark) {
-    final status = ref.watch(magiskStatusProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final customColors = ref.watch(customTileColorsProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = _getTileColor(0, tileColorIndex, isDark, customColors);
-
-    // Magisk card is always clickable
-    return GestureDetector(
-      onTap: () => _navigateTo(context, '/magisk'),
-      child: Container(
-        color: tileColor,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              Icon(
-                Icons.face,
-                size: 60,
-                color: isDark ? Colors.black : Colors.white,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Magisk ${status.versionCode}',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  color: Colors.black,
+    final gridRows = maxRow;
+    
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cellWidth = (constraints.maxWidth - cellSpacing * (gridColumns - 1)) / gridColumns;
+        final cellHeight = (constraints.maxHeight - cellSpacing * (gridRows - 1)) / gridRows;
+        
+        return Stack(
+          children: [
+            // Grid background (for visual feedback during drag)
+            if (!isLocked)
+              ...List.generate(gridRows * gridColumns, (index) {
+                final row = index ~/ gridColumns;
+                final col = index % gridColumns;
+                return Positioned(
+                  left: col * (cellWidth + cellSpacing),
+                  top: row * (cellHeight + cellSpacing),
+                  width: cellWidth,
+                  height: cellHeight,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _dragTargetRow == row && _dragTargetCol == col
+                            ? Colors.green.withOpacity(0.5)
+                            : Colors.grey.withOpacity(0.2),
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                );
+              }),
+            
+            // Tiles
+            ...tileLayout.map((tile) {
+              final isDragging = _draggingTileId == tile.id;
+              final isResizing = _resizingTileId == tile.id;
+              
+              // Calculate position
+              double left = tile.col * (cellWidth + cellSpacing);
+              double top = tile.row * (cellHeight + cellSpacing);
+              double width = tile.width * cellWidth + (tile.width - 1) * cellSpacing;
+              double height = tile.height * cellHeight + (tile.height - 1) * cellSpacing;
+              
+              // If dragging, show preview at target position
+              if (isDragging && _dragTargetRow != null && _dragTargetCol != null) {
+                left = _dragTargetCol! * (cellWidth + cellSpacing);
+                top = _dragTargetRow! * (cellHeight + cellSpacing);
+              }
+              
+              // If resizing, show preview size
+              if (isResizing) {
+                width = _previewWidth * cellWidth + (_previewWidth - 1) * cellSpacing;
+                height = _previewHeight * cellHeight + (_previewHeight - 1) * cellSpacing;
+              }
+              
+              return Positioned(
+                left: left,
+                top: top,
+                width: width,
+                height: height,
+                child: _buildDraggableTile(
+                  context,
+                  ref,
+                  isDark,
+                  tile,
+                  isLocked,
+                  isDragging,
+                  isResizing,
+                  cellWidth,
+                  cellHeight,
+                ),
+              );
+            }),
+            
+            // Dragging tile overlay (follows finger)
+            if (_draggingTileId != null && _dragOffset != Offset.zero)
+              Positioned(
+                left: _dragOffset.dx,
+                top: _dragOffset.dy,
+                child: _buildTileContent(
+                  context,
+                  ref,
+                  isDark,
+                  tileLayout.firstWhere((t) => t.id == _draggingTileId!),
+                  true, // isDragging
                 ),
               ),
-              Text(
-                '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                  color: Colors.black,
-                ),
-              ),
-              const Spacer(),
-              _buildStatusRow(localizations.root, status.isRooted, localizations),
-              _buildStatusRow(localizations.zygisk, status.isZygiskEnabled, localizations),
-              _buildStatusRow(localizations.ramdisk, status.isRamdiskLoaded, localizations),
-            ],
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildStatusRow(String label, bool value, AppLocalizations localizations) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildDraggableTile(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    TileConfig tile,
+    bool isLocked,
+    bool isDragging,
+    bool isResizing,
+    double cellWidth,
+    double cellHeight,
+  ) {
+    // When unlocked, tiles are draggable directly (no edit mode needed)
+    final canDrag = !isLocked;
+    
+    if (!canDrag) {
+      // Locked mode - just show the tile, tap to navigate
+      return GestureDetector(
+        onTap: () => _onTileTap(context, tile),
+        child: _buildTileContent(context, ref, isDark, tile, false),
+      );
+    }
+    
+    // Unlocked mode - tile is draggable and resizable via long press
+    return GestureDetector(
+      onLongPressStart: (details) => _startDrag(tile, details, cellWidth, cellHeight, context),
+      onLongPressMoveUpdate: (details) => _updateDrag(details, cellWidth, cellHeight, ref, context),
+      onLongPressEnd: (details) => _endDrag(ref),
+      onTap: () => _onTileTap(context, tile),
+      child: Stack(
         children: [
-          Text(
-            '$label:',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 10,
-              color: Colors.black,
-            ),
-          ),
-          Text(
-            value ? localizations.yes : localizations.no,
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-              color: Colors.black,
+          // Tile content
+          _buildTileContent(context, ref, isDark, tile, isDragging),
+          
+          // Resize handles (show when unlocked and not dragging)
+          if (!isDragging)
+            ..._buildResizeHandles(tile, cellWidth, cellHeight, ref, context),
+          
+          // Drag indicator (show when unlocked)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(
+                Icons.drag_indicator,
+                color: Colors.white70,
+                size: 16,
+              ),
             ),
           ),
         ],
@@ -307,329 +332,627 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildSettingsCard(BuildContext context, WidgetRef ref, bool isDark) {
+  List<Widget> _buildResizeHandles(TileConfig tile, double cellWidth, double cellHeight, WidgetRef ref, BuildContext gridContext) {
+    return [
+      // Bottom-right corner resize handle
+      Positioned(
+        bottom: 0,
+        right: 0,
+        child: GestureDetector(
+          onPanStart: (details) => _startResize(tile),
+          onPanUpdate: (details) => _updateResize(details, cellWidth, cellHeight, ref, gridContext),
+          onPanEnd: (details) => _endResize(ref),
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.7),
+              borderRadius: const BorderRadius.only(
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: const Icon(
+              Icons.aspect_ratio,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  void _startDrag(TileConfig tile, LongPressStartDetails details, double cellWidth, double cellHeight, BuildContext gridContext) {
+    // Get the grid's RenderBox for position calculation
+    final RenderBox? gridRenderBox = gridContext.findRenderObject() as RenderBox?;
+    if (gridRenderBox == null) return;
+    
+    final localPosition = gridRenderBox.globalToLocal(details.globalPosition);
+    const cellSpacing = 2.0;
+    
+    // Calculate initial target position
+    int targetCol = (localPosition.dx / (cellWidth + cellSpacing)).floor().clamp(0, 2);
+    int targetRow = (localPosition.dy / (cellHeight + cellSpacing)).floor().clamp(0, 4);
+    
+    setState(() {
+      _draggingTileId = tile.id;
+      _dragOffset = localPosition;
+      _dragTargetRow = targetRow;
+      _dragTargetCol = targetCol;
+    });
+  }
+
+  void _updateDrag(LongPressMoveUpdateDetails details, double cellWidth, double cellHeight, WidgetRef ref, BuildContext gridContext) {
+    final tileLayout = ref.read(tileLayoutProvider);
+    final draggingTile = tileLayout.firstWhere((t) => t.id == _draggingTileId!);
+    
+    // Get the grid's RenderBox for position calculation
+    final RenderBox? gridRenderBox = gridContext.findRenderObject() as RenderBox?;
+    if (gridRenderBox == null) return;
+    
+    final localPosition = gridRenderBox.globalToLocal(details.globalPosition);
+    
+    // Calculate target row and column
+    const cellSpacing = 2.0;
+    int targetCol = (localPosition.dx / (cellWidth + cellSpacing)).floor().clamp(0, 2);
+    int targetRow = (localPosition.dy / (cellHeight + cellSpacing)).floor().clamp(0, 4);
+    
+    // Check if position is available
+    final layoutNotifier = ref.read(tileLayoutProvider.notifier);
+    bool canMove = true;
+    
+    // Check if the tile's new position would overlap with others
+    for (int r = targetRow; r < targetRow + draggingTile.height && canMove; r++) {
+      for (int c = targetCol; c < targetCol + draggingTile.width && canMove; c++) {
+        if (c >= 3) canMove = false; // Out of bounds
+        else if (layoutNotifier.isPositionOccupied(r, c, _draggingTileId!)) {
+          canMove = false;
+        }
+      }
+    }
+    
+    setState(() {
+      _dragOffset = localPosition;
+    });
+    
+    if (canMove && (_dragTargetRow != targetRow || _dragTargetCol != targetCol)) {
+      setState(() {
+        _dragTargetRow = targetRow;
+        _dragTargetCol = targetCol;
+      });
+    }
+  }
+
+  void _endDrag(WidgetRef ref) {
+    if (_draggingTileId != null && _dragTargetRow != null && _dragTargetCol != null) {
+      final layoutNotifier = ref.read(tileLayoutProvider.notifier);
+      layoutNotifier.moveTile(_draggingTileId!, _dragTargetRow!, _dragTargetCol!);
+      layoutNotifier.saveLayout();
+    }
+    
+    setState(() {
+      _draggingTileId = null;
+      _dragOffset = Offset.zero;
+      _dragTargetRow = null;
+      _dragTargetCol = null;
+    });
+  }
+
+  void _startResize(TileConfig tile) {
+    setState(() {
+      _resizingTileId = tile.id;
+      _originalWidth = tile.width;
+      _originalHeight = tile.height;
+      _previewWidth = tile.width;
+      _previewHeight = tile.height;
+    });
+  }
+
+  void _updateResize(DragUpdateDetails details, double cellWidth, double cellHeight, WidgetRef ref, BuildContext gridContext) {
+    // Calculate size change based on global position
+    final RenderBox? gridRenderBox = gridContext.findRenderObject() as RenderBox?;
+    if (gridRenderBox == null) return;
+    
+    final localPosition = gridRenderBox.globalToLocal(details.globalPosition);
+    const cellSpacing = 2.0;
+    
+    // Get current tile position
+    final tileLayout = ref.read(tileLayoutProvider);
+    final resizingTile = tileLayout.firstWhere((t) => t.id == _resizingTileId!);
+    
+    // Calculate new width and height based on position relative to tile's start
+    final tileEndX = (resizingTile.col + 1) * (cellWidth + cellSpacing);
+    final tileEndY = (resizingTile.row + 1) * (cellHeight + cellSpacing);
+    
+    // Calculate how many cells the drag extends beyond the original 1x1
+    final deltaX = localPosition.dx - tileEndX;
+    final deltaY = localPosition.dy - tileEndY;
+    
+    int newWidth = 1 + (deltaX / (cellWidth + cellSpacing)).round().clamp(0, 2);
+    int newHeight = 1 + (deltaY / (cellHeight + cellSpacing)).round().clamp(0, 2);
+    
+    // Maximum size is 3x3
+    newWidth = newWidth.clamp(1, 3);
+    newHeight = newHeight.clamp(1, 3);
+    
+    if (_previewWidth != newWidth || _previewHeight != newHeight) {
+      setState(() {
+        _previewWidth = newWidth;
+        _previewHeight = newHeight;
+      });
+    }
+  }
+
+  void _endResize(WidgetRef ref) {
+    if (_resizingTileId != null) {
+      final layoutNotifier = ref.read(tileLayoutProvider.notifier);
+      layoutNotifier.resizeTile(_resizingTileId!, _previewWidth, _previewHeight);
+      layoutNotifier.saveLayout();
+    }
+    
+    setState(() {
+      _resizingTileId = null;
+    });
+  }
+
+  void _onTileTap(BuildContext context, TileConfig tile) {
+    // When unlocked, don't navigate on tap (use long press to drag)
+    if (!ref.read(lockModeProvider)) return;
+    
+    switch (tile.type) {
+      case 'magisk':
+        _navigateTo(context, '/magisk');
+        break;
+      case 'settings':
+        _navigateTo(context, '/settings');
+        break;
+      case 'modules':
+        _navigateTo(context, '/modules');
+        break;
+      case 'apps':
+        _navigateTo(context, '/apps');
+        break;
+      case 'logs':
+        _navigateTo(context, '/logs');
+        break;
+      case 'contributor':
+        _navigateTo(context, '/contributors');
+        break;
+      case 'sponsor':
+        _navigateTo(context, '/contributors');
+        break;
+    }
+  }
+
+  Widget _buildTileContent(BuildContext context, WidgetRef ref, bool isDark, TileConfig tile, bool isDragging) {
+    // Add opacity when dragging to show it's being moved
+    final opacity = isDragging ? 0.7 : 1.0;
+    
+    return Opacity(
+      opacity: opacity,
+      child: _getTileWidget(context, ref, isDark, tile),
+    );
+  }
+
+  Widget _getTileWidget(BuildContext context, WidgetRef ref, bool isDark, TileConfig tile) {
+    switch (tile.type) {
+      case 'magisk':
+        return _buildMagiskContent(context, ref, tile);
+      case 'settings':
+        return _buildSettingsContent(context, ref, tile);
+      case 'modules':
+        return _buildModulesContent(context, ref, tile);
+      case 'apps':
+        return _buildAppsContent(context, ref, tile);
+      case 'logs':
+        return _buildLogsContent(context, ref, tile);
+      case 'contributor':
+        return _buildContributorContent(context, ref, tile);
+      case 'sponsor':
+        return _buildSponsorContent(context, ref, tile);
+      default:
+        return Container(color: Colors.grey);
+    }
+  }
+
+  // Content builders for each tile type
+  Widget _buildMagiskContent(BuildContext context, WidgetRef ref, TileConfig tile) {
     final status = ref.watch(magiskStatusProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
     final customColors = ref.watch(customTileColorsProvider);
     final localizations = AppLocalizations.of(context)!;
-    final tileColor = _getTileColor(1, tileColorIndex, isDark, customColors);
-
-    // Only clickable if rooted with Magisk
-    final isClickable = status.isRooted;
-
-    return Opacity(
-      opacity: isClickable ? 1.0 : 0.5,
-      child: GestureDetector(
-        onTap: isClickable ? () => _navigateTo(context, '/settings') : null,
-        child: Container(
-          color: tileColor,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Text(
-                isClickable 
-                    ? localizations.settings
-                    : '${localizations.settings} [N/A]',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
+    
+    final tileColor = AppTheme.getTileWithCustomColors(0, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    return Container(
+      color: tileColor,
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: tile.height > 1 ? 60 : 40,
+                height: tile.height > 1 ? 60 : 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.face,
+                  size: tile.height > 1 ? 45 : 30,
                   color: Colors.black,
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContributorCard(
-      BuildContext context, WidgetRef ref, bool isDark) {
-    final status = ref.watch(magiskStatusProvider);
-    final contributors = ref.watch(contributorsProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final customColors = ref.watch(customTileColorsProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = _getTileColor(2, tileColorIndex, isDark, customColors);
-
-    // Only clickable if rooted with Magisk
-    final isClickable = status.isRooted;
-
-    return Opacity(
-      opacity: isClickable ? 1.0 : 0.5,
-      child: GestureDetector(
-        onTap: isClickable ? () => _navigateTo(context, '/contributors') : null,
-        child: Container(
-          color: tileColor,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  localizations.contributors,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  contributors.isNotEmpty ? contributors.first.name : '',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 16,
-                    color: Colors.black,
-                  ),
-                ),
-                if (contributors.length > 1)
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    contributors[1].name,
+                    'Magisk ${status.versionCode}',
                     style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      fontSize: tile.height > 1 ? 24 : 18,
+                      color: textColor,
                     ),
                   ),
-                const Spacer(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModulesCard(BuildContext context, WidgetRef ref, bool isDark) {
-    final status = ref.watch(magiskStatusProvider);
-    final modules = ref.watch(modulesProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final customColors = ref.watch(customTileColorsProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = _getTileColor(3, tileColorIndex, isDark, customColors);
-
-    // Only clickable if rooted with MagiskSU (not other root solutions)
-    final isClickable = status.isRooted;
-
-    // Filter enabled modules for carousel
-    final enabledModules = modules.where((m) => m.isEnabled).toList();
-
-    return Opacity(
-      opacity: isClickable ? 1.0 : 0.5,
-      child: GestureDetector(
-        onTap: isClickable ? () => _navigateTo(context, '/modules') : null,
-        child: Container(
-          color: tileColor,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  localizations.modules,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Display up to 3 modules with carousel effect using ListWheelAnimator
-                _CarouselItemDisplay(
-                  key: const ValueKey('modules_carousel'),
-                  items: enabledModules.map((m) => m.name).toList(),
-                  startIndex: _modulesCarouselIndex,
-                  maxItems: 3,
-                ),
-                const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${enabledModules.length}',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 32,
-                        color: Colors.black,
-                      ),
+                  Text(
+                    '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: tile.height > 1 ? 16 : 12,
+                      color: textColor,
                     ),
-                    if (enabledModules.length > 3)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 8),
-                        child: Icon(
-                          Icons.arrow_forward,
-                          size: 16,
-                          color: Colors.black.withValues(alpha: 0.6),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAppsCard(BuildContext context, WidgetRef ref, bool isDark) {
-    final status = ref.watch(magiskStatusProvider);
-    final apps = ref.watch(appsProvider);
-    final tileColorIndex = ref.watch(tileColorProvider);
-    final customColors = ref.watch(customTileColorsProvider);
-    final localizations = AppLocalizations.of(context)!;
-    final tileColor = _getTileColor(4, tileColorIndex, isDark, customColors);
-
-    // Only clickable if rooted with Magisk
-    final isClickable = status.isRooted;
-
-    // Filter apps with root access for carousel
-    final rootApps = apps.where((a) => a.hasRootAccess).toList();
-
-    return Opacity(
-      opacity: isClickable ? 1.0 : 0.5,
-      child: GestureDetector(
-        onTap: isClickable ? () => _navigateTo(context, '/apps') : null,
-        child: Container(
-          color: tileColor,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  localizations.apps,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: Colors.black,
                   ),
-                ),
-                const SizedBox(height: 4),
-                // Display up to 3 apps with carousel effect
-                _CarouselItemDisplay(
-                  key: const ValueKey('apps_carousel'),
-                  items: rootApps.map((a) => a.name).toList(),
-                  startIndex: _appsCarouselIndex,
-                  maxItems: 3,
-                ),
-                const Spacer(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${rootApps.length}',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 32,
-                        color: Colors.black,
-                      ),
-                    ),
-                    if (rootApps.length > 3)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 8),
-                        child: Icon(
-                          Icons.arrow_forward,
-                          size: 16,
-                          color: Colors.black.withValues(alpha: 0.6),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Get 3 items from a list starting from the carousel index
-  /// Returns items with their global index for proper animation keys
-  List<(T, int)> _getCarouselItemsWithIndex<T>(List<T> items, int startIndex) {
-    if (items.isEmpty) return [];
-    if (items.length <= 3) {
-      return items.asMap().entries.map((e) => (e.value, e.key)).toList();
-    }
-    
-    final result = <(T, int)>[];
-    for (int i = 0; i < 3; i++) {
-      final index = (startIndex + i) % items.length;
-      result.add((items[index], index));
-    }
-    return result;
-  }
-
-  Widget _buildLogsCard(BuildContext context, WidgetRef ref, bool isDark) {
-    final filteredLogs = ref.watch(filteredLogsProvider);
-    final localizations = AppLocalizations.of(context)!;
-
-    // Logs card is always clickable
-    return GestureDetector(
-      onTap: () => _navigateTo(context, '/logs'),
-      child: Container(
-        color: isDark ? Colors.white : Colors.black,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: Text(
-                  localizations.logs,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: isDark ? Colors.black : Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: filteredLogs.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No E/W/D logs',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                            color: isDark ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      )
-                    : _LogsListView(logs: filteredLogs, isDark: isDark),
+                ],
               ),
             ],
           ),
+          if (tile.height > 1) const Spacer(),
+          if (tile.height > 1)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStatusRow(localizations.root, status.isRooted, localizations, textColor),
+                _buildStatusRow(localizations.zygisk, status.isZygiskEnabled, localizations, textColor),
+                if (tile.height >= 2)
+                  _buildStatusRow(localizations.ramdisk, status.isRamdiskLoaded, localizations, textColor),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    final tileColor = AppTheme.getTileWithCustomColors(1, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    return Container(
+      color: tileColor,
+      padding: const EdgeInsets.all(16.0),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Text(
+          localizations.settings,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w900,
+            fontSize: tile.height > 1 && tile.width > 1 ? 28 : 20,
+            color: textColor,
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildModulesContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final status = ref.watch(magiskStatusProvider);
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
+    final modules = ref.watch(modulesProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    final tileColor = AppTheme.getTileWithCustomColors(3, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    final enabledModules = modules.where((m) => m.isEnabled).toList();
+    
+    return Opacity(
+      opacity: status.isRooted ? 1.0 : 0.5,
+      child: Container(
+        color: tileColor,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              localizations.modules,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: tile.height > 1 ? 24 : 18,
+                color: textColor,
+              ),
+            ),
+            if (tile.height > 1) const SizedBox(height: 8),
+            if (tile.height > 1)
+              Expanded(
+                child: _CarouselItemDisplay(
+                  items: enabledModules.map((m) => m.name).toList(),
+                  startIndex: _modulesCarouselIndex,
+                  maxItems: tile.height > 1 ? 3 : 1,
+                  textColor: textColor,
+                ),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '${enabledModules.length}',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w900,
+                    fontSize: tile.height > 1 && tile.width > 1 ? 48 : 24,
+                    color: textColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppsContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final status = ref.watch(magiskStatusProvider);
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
+    final apps = ref.watch(appsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    final tileColor = AppTheme.getTileWithCustomColors(4, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    final rootApps = apps.where((a) => a.hasRootAccess).toList();
+    
+    return Opacity(
+      opacity: status.isRooted ? 1.0 : 0.5,
+      child: Container(
+        color: tileColor,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              localizations.apps,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: tile.height > 1 ? 24 : 18,
+                color: textColor,
+              ),
+            ),
+            if (tile.height > 1) const SizedBox(height: 8),
+            if (tile.height > 1)
+              Expanded(
+                child: _CarouselItemDisplay(
+                  items: rootApps.map((a) => a.name).toList(),
+                  startIndex: _appsCarouselIndex,
+                  maxItems: tile.height > 1 ? 3 : 1,
+                  textColor: textColor,
+                ),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '${rootApps.length}',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w900,
+                    fontSize: tile.height > 1 && tile.width > 1 ? 48 : 24,
+                    color: textColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogsContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final filteredLogs = ref.watch(filteredLogsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    final bgColor = Colors.white;
+    final textColor = Colors.black87;
+    
+    return Container(
+      color: bgColor,
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            localizations.logs,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w900,
+              fontSize: tile.height > 1 ? 24 : 18,
+              color: textColor,
+            ),
+          ),
+          if (tile.height > 1) const SizedBox(height: 8),
+          if (tile.height > 1)
+            Expanded(
+              child: filteredLogs.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No E/W/D logs',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    )
+                  : _LogsListView(logs: filteredLogs, textColor: textColor),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContributorContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final status = ref.watch(magiskStatusProvider);
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
+    final contributors = ref.watch(contributorsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    final tileColor = AppTheme.getTileWithCustomColors(2, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    return Opacity(
+      opacity: status.isRooted ? 1.0 : 0.5,
+      child: Container(
+        color: tileColor,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              localizations.contributors,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w900,
+                fontSize: tile.height > 1 ? 24 : 18,
+                color: textColor,
+              ),
+            ),
+            if (tile.height > 1) const SizedBox(height: 8),
+            if (tile.height > 1 && contributors.isNotEmpty)
+              Text(
+                contributors.first.name,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: textColor,
+                ),
+              ),
+            if (tile.height > 1 && contributors.length > 1)
+              Text(
+                contributors[1].name,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: textColor,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSponsorContent(BuildContext context, WidgetRef ref, TileConfig tile) {
+    final isDarkMode = ref.watch(themeProvider);
+    final colorIndex = ref.watch(tileColorProvider);
+    final customColors = ref.watch(customTileColorsProvider);
+    final localizations = AppLocalizations.of(context)!;
+    
+    // Use tile ID to determine which sponsor slot (sponsor1, sponsor2, sponsor3)
+    int tileIndex = 5;
+    if (tile.id == 'sponsor1') tileIndex = 5;
+    else if (tile.id == 'sponsor2') tileIndex = 6;
+    else if (tile.id == 'sponsor3') tileIndex = 7;
+    
+    final tileColor = AppTheme.getTileWithCustomColors(tileIndex, colorIndex, isDarkMode, customColors);
+    final textColor = Colors.black87;
+    
+    return Container(
+      color: tileColor,
+      padding: const EdgeInsets.all(16.0),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Text(
+          localizations.sponsor ?? 'Sponsor',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w900,
+            fontSize: tile.height > 1 ? 24 : 18,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String label, bool value, AppLocalizations localizations, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$label :',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: textColor,
+            ),
+          ),
+          Text(
+            value ? localizations.yes : localizations.no,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              color: textColor,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 /// A widget that displays carousel items with proper animation
-/// Each item animates independently when the list changes
 class _CarouselItemDisplay extends StatelessWidget {
   final List<String> items;
   final int startIndex;
   final int maxItems;
+  final Color textColor;
 
   const _CarouselItemDisplay({
     super.key,
     required this.items,
     required this.startIndex,
     this.maxItems = 3,
+    this.textColor = Colors.black,
   });
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const SizedBox.shrink();
+      return Center(
+        child: Text(
+          'Empty',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            color: textColor.withOpacity(0.7),
+          ),
+        ),
+      );
     }
     
-    // Get the items to display
     final displayCount = items.length > maxItems ? maxItems : items.length;
     final displayItems = <String>[];
     
@@ -639,34 +962,20 @@ class _CarouselItemDisplay extends StatelessWidget {
     }
     
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: displayItems.asMap().entries.map((entry) {
-        final position = entry.key;
-        final item = entry.value;
-        // Use position + startIndex to create unique key that changes with carousel
-        final uniqueKey = '${item}_${startIndex}_${position}';
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.3, 0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.fastOutSlowIn, // ← 这里改了: 使用统一的平滑曲线
-              )),
-              child: FadeTransition(opacity: animation, child: child),
-            );
-          },
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: displayItems.map((item) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
           child: Text(
             item,
-            key: ValueKey(uniqueKey),
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w500,
-              fontSize: 14,
-              color: Colors.black,
+              fontSize: 13,
+              color: textColor,
+              height: 1.4,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         );
       }).toList(),
@@ -674,59 +983,43 @@ class _CarouselItemDisplay extends StatelessWidget {
   }
 }
 
-class _LogsListView extends StatefulWidget {
+class _LogsListView extends StatelessWidget {
   final List<String> logs;
-  final bool isDark;
+  final Color textColor;
 
-  const _LogsListView({required this.logs, required this.isDark});
-
-  @override
-  State<_LogsListView> createState() => _LogsListViewState();
-}
-
-class _LogsListViewState extends State<_LogsListView> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void didUpdateWidget(_LogsListView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.logs.length > oldWidget.logs.length) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  const _LogsListView({super.key, required this.logs, this.textColor = Colors.black87});
 
   @override
   Widget build(BuildContext context) {
-    // Logs are already filtered (E/W/D for dashboard tile), just display them
+    if (logs.isEmpty) {
+      return Center(
+        child: Text(
+          'No logs available',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            color: Colors.black54,
+          ),
+        ),
+      );
+    }
+    
     return ListView.builder(
-      controller: _scrollController,
-      itemCount: widget.logs.length,
+      itemCount: logs.length,
       itemBuilder: (context, index) {
-        final log = widget.logs[index];
-        return RepaintBoundary( // ← 这里改了: 隔离高频重绘列表项，防止整个列表甚至页面被污染重绘
+        final log = logs[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1.0),
           child: Text(
             log,
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w500,
-              fontSize: 8,
-              color: widget.isDark ? Colors.black : Colors.white,
+              fontSize: 10,
+              color: textColor,
+              height: 1.3,
             ),
-            overflow: TextOverflow.clip,
-            maxLines: 1,
+            overflow: TextOverflow.visible,
+            maxLines: 2,
           ),
         );
       },
