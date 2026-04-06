@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 class MagiskBinaryService {
   static const MethodChannel _channel = MethodChannel('magisk_manager/magisk');
+  static const MethodChannel _rootAccessChannel = MethodChannel('magisk_manager/root_access');
 
   static Future<bool> installMagisk(String bootImagePath) async {
     try {
@@ -91,6 +92,18 @@ class MagiskBinaryService {
       return Map<String, dynamic>.from(result ?? {});
     } catch (e) {
       return {};
+    }
+  }
+
+  /// Request root access with MD3 system dialog
+  /// Returns true if root access was granted, false otherwise
+  static Future<bool> requestRootAccess() async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('requestRootAccess');
+      return result ?? false;
+    } catch (e) {
+      print('requestRootAccess error: $e');
+      return false;
     }
   }
 }

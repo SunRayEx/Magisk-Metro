@@ -10,11 +10,13 @@ import '../services/android_data_service.dart';
 class FlashLogsPage extends ConsumerStatefulWidget {
   final String title;
   final Future<bool> Function() onExecute;
+  final String? moduleActionPath; // Optional: path to module for action script execution
 
   const FlashLogsPage({
     super.key,
     required this.title,
     required this.onExecute,
+    this.moduleActionPath,
   });
 
   @override
@@ -67,6 +69,8 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
     final localizations = AppLocalizations.of(context)!;
     setState(() {
       _isRunning = true;
+      _isCompleted = false;
+      _isSuccess = false;
       _logs.clear();
       
       // Add MagisKube ASCII art banner
@@ -74,11 +78,67 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
       _addLog(localizations.starting + ' ${widget.title}...');
     });
 
+    // If this is a module action execution, use special handling
+    if (widget.moduleActionPath != null) {
+      await _executeModuleAction();
+    } else {
+      await _executeWithLogStream();
+    }
+  }
+
+  /// Execute module action and display output as logs
+  Future<void> _executeModuleAction() async {
+    final localizations = AppLocalizations.of(context)!;
+    
+    try {
+      // Execute the module action and get output
+      final output = await AndroidDataService.executeModuleAction(widget.moduleActionPath!);
+      
+      // Display the output line by line as logs
+      if (output != null && output.isNotEmpty) {
+        final lines = output.split('\n');
+        for (final line in lines) {
+          if (line.trim().isNotEmpty) {
+            _addLog(line, timestamp: true);
+            _scrollToBottom();
+          }
+        }
+      }
+      
+      setState(() {
+        _isRunning = false;
+        _isCompleted = true;
+        _isSuccess = output != null;
+      });
+      
+      if (output == null) {
+        _addLog('${localizations.error}: ${localizations.operationFailed}');
+      }
+    } catch (e) {
+      _addLog('${localizations.error}: $e');
+      setState(() {
+        _isRunning = false;
+        _isCompleted = true;
+        _isSuccess = false;
+      });
+    }
+  }
+
+  /// Execute with log stream subscription (original behavior)
+  Future<void> _executeWithLogStream() async {
+    final localizations = AppLocalizations.of(context)!;
+
     // Subscribe to log stream with completer to ensure it's established
     bool streamListening = false;
+    bool hasError = false;
+    bool hasSuccess = false;
+    
     _logSubscription = AndroidDataService.getLogcatStream().listen(
       (log) {
-        _addLog(log, timestamp: false);
+        // Skip duplicate "starting" messages from native side
+        if (!log.contains('Starting') && !log.contains('[INFO] Starting')) {
+          _addLog(log, timestamp: false);
+        }
         _scrollToBottom();
         // Mark stream as listening on first log received
         if (!streamListening) {
@@ -87,6 +147,13 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
             _logStreamCompleter.complete();
           }
         }
+        // Check for completion/failure markers from native side
+        if (log.contains('[INFO]') && (log.contains('completed') || log.contains('success') || log.contains('Successfully'))) {
+          hasSuccess = true;
+        }
+        if (log.contains('[ERROR]') || log.contains('Error:') || log.contains('failed') || log.contains('Exception')) {
+          hasError = true;
+        }
       },
       onDone: () {
         if (!_logStreamCompleter.isCompleted) {
@@ -94,6 +161,7 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
         }
       },
       onError: (error) {
+        hasError = true;
         if (!_logStreamCompleter.isCompleted) {
           _logStreamCompleter.complete();
         }
@@ -109,21 +177,30 @@ class _FlashLogsPageState extends ConsumerState<FlashLogsPage> {
 
     try {
       final result = await widget.onExecute();
-      if (result) {
-        _addLog(localizations.operationCompleted);
-        _isSuccess = true;
+      // Use the result from onExecute - it takes priority
+      _isSuccess = result;
+      
+      // If result is false, mark error
+      if (!result) {
+        hasError = true;
+        _addLog('${localizations.error}: ${localizations.operationFailed}');
       } else {
-        _addLog(localizations.operationFailed);
-        _isSuccess = false;
+        hasSuccess = true;
       }
     } catch (e) {
       _addLog('${localizations.error}: $e');
       _isSuccess = false;
+      hasError = true;
     } finally {
+      // Give logs a moment to flush before cancelling
+      await Future.delayed(const Duration(milliseconds: 200));
       await _logSubscription?.cancel();
+      
+      // Final success determination: onExecute result takes priority
       setState(() {
         _isRunning = false;
         _isCompleted = true;
+        // _isSuccess already set from onExecute result
       });
     }
   }

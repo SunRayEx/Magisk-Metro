@@ -29,79 +29,306 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileWriter
 import java.io.InputStreamReader
-
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 class MainActivity : FlutterActivity() {
+
     private var rootAccessGranted = false
+    
+    // Root request dialog management
+    private var rootRequestDialog: androidx.appcompat.app.AlertDialog? = null
+    private var rootRequestHandler: Handler? = null
+    private var rootRequestRunnable: Runnable? = null
+    private var pendingRootCallback: ((Boolean) -> Unit)? = null
+    private val rootRequestTimeout = 60000L // 1 minute timeout
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Get root access status from MagiskApplication
+        rootAccessGranted = MagiskApplication.isRootAvailable
+        android.util.Log.d("MainActivity", "onCreate: rootAccessGranted = $rootAccessGranted")
+    }
+    
+    /**
+     * Request root access with MD3 dialog
+     * Shows a Material Design 3 dialog asking user to grant root access
+     * If user clicks "Allow", executes su -c to trigger Magisk/KernelSU authorization
+     * Automatically cancels after 1 minute if no response
+     */
+    private fun requestRootAccess(callback: (Boolean) -> Unit) {
+        // Check if root is already available
+        if (rootAccessGranted) {
+            callback(true)
+            return
+        }
+        
+        // Store callback for later use
+        pendingRootCallback = callback
+        
+        runOnUiThread {
+            try {
+                // Cancel any existing timeout
+                rootRequestRunnable?.let { rootRequestHandler?.removeCallbacks(it) }
+                
+                // Get app name
+                val appName = try {
+                    packageManager.getApplicationLabel(
+                        packageManager.getApplicationInfo(packageName, 0)
+                    ).toString()
+                } catch (e: Exception) {
+                    "此应用"
+                }
+                
+                // Build MD3 dialog using MaterialAlertDialogBuilder
+                val dialog = MaterialAlertDialogBuilder(this)
+                    .setTitle("Root 授权请求")
+                    .setMessage("$appName 想要获取 Root 权限\n\nRoot 权限随意提供可能会导致严重损失，是否为该应用提供 Root 权限？")
+                    .setPositiveButton("允许") { _, _ ->
+                        // User clicked allow - execute su -c to trigger Magisk/KernelSU authorization dialog
+                        grantRootAccessInternal()
+                    }
+                    .setNegativeButton("拒绝") { _, _ ->
+                        handleRootResult(false)
+                    }
+                    .setNeutralButton("仅本次") { _, _ ->
+                        // For "just this once", we still grant root but don't remember
+                        // In practice, Magisk handles this via its own policy system
+                        grantRootAccessInternal()
+                    }
+                    .setCancelable(false)
+                    .create()
+                
+                rootRequestDialog = dialog
+                dialog.show()
+                
+                // Set timeout to auto-cancel after 1 minute
+                rootRequestRunnable = Runnable {
+                    try {
+                        if (dialog.isShowing) {
+                            dialog.dismiss()
+                        }
+                        handleRootResult(false)
+                    } catch (e: Exception) {
+                        // Ignore dismiss errors
+                    }
+                }
+                rootRequestHandler = Handler(Looper.getMainLooper())
+                rootRequestHandler?.postDelayed(rootRequestRunnable!!, rootRequestTimeout)
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Error showing root dialog: ${e.message}")
+                handleRootResult(false)
+            }
+        }
+    }
+    
+    /**
+     * Grant root access internally - called when user clicks "Allow"
+     * Executes su -c command to trigger Magisk/KernelSU authorization
+     */
+    private fun grantRootAccessInternal() {
+        // Dismiss dialog first
+        try {
+            rootRequestDialog?.let { dialog ->
+                if (dialog.isShowing) {
+                    dialog.dismiss()
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+        
+        // Cancel timeout
+        rootRequestRunnable?.let { rootRequestHandler?.removeCallbacks(it) }
+        
+        // Execute su -c command to check/request root access
+        // This will trigger Magisk/KernelSU's own authorization dialog if needed
+        Thread {
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                val output = reader.readLine()
+                process.waitFor()
+                
+                val granted = output != null && output.contains("uid=0")
+                rootAccessGranted = granted
+                
+                android.util.Log.d("MainActivity", "Root access result: granted=$granted, output=$output")
+                handleRootResult(granted)
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Error requesting root: ${e.message}")
+                handleRootResult(false)
+            }
+        }.start()
+    }
+    
+    /**
+     * Handle root result - called from any thread
+     */
+    private fun handleRootResult(granted: Boolean) {
+        runOnUiThread {
+            // Cancel timeout
+            rootRequestRunnable?.let { rootRequestHandler?.removeCallbacks(it) }
+            rootRequestRunnable = null
+            rootRequestHandler = null
+            
+            // Dismiss dialog if still showing
+            try {
+                rootRequestDialog?.let { dialog ->
+                    if (dialog.isShowing) {
+                        dialog.dismiss()
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+            rootRequestDialog = null
+            
+            // Call callback
+            pendingRootCallback?.invoke(granted)
+            pendingRootCallback = null
+        }
+    }
+    
+    /**
+     * Cleanup root request resources
+     */
+    private fun cleanupRootRequest() {
+        rootRequestRunnable?.let { rootRequestHandler?.removeCallbacks(it) }
+        rootRequestRunnable = null
+        rootRequestHandler = null
+        rootRequestDialog = null
+        pendingRootCallback = null
+    }
     
     // Static reference to EventSink for sending logs from anywhere
     companion object {
+        @Volatile
         var logEventSink: EventChannel.EventSink? = null
             private set
         
+        @Volatile
         private var isLogStreamReady = false
+        @Volatile
         private var logcatProcess: Process? = null
-        private var uiHandler: Handler? = null
+        @Volatile
+        private var logcatReader: BufferedReader? = null
+        @Volatile
+        private var logcatThread: Thread? = null
+        private val uiHandler = Handler(Looper.getMainLooper())
+        
+        // Buffer for logs - limited size to prevent memory issues
+        private val bufferedLogs = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        private const val MAX_BUFFERED_LOGS = 100
         
         fun sendLog(log: String) {
-            if (logEventSink != null && isLogStreamReady) {
-                logEventSink?.success(log)
-            } else {
-                // Buffer the log for later sending when stream is ready
-                bufferedLogs.add(log)
-            }
-        }
-        
-        // Buffer for logs sent before stream is ready
-        private val bufferedLogs = mutableListOf<String>()
-        
-        fun flushBufferedLogs() {
-            if (logEventSink != null && bufferedLogs.isNotEmpty()) {
-                for (bufferedLog in bufferedLogs) {
-                    logEventSink?.success(bufferedLog)
-                }
-                bufferedLogs.clear()
-            }
-        }
-        
-        fun startMagiskLogcat(handler: Handler) {
-            uiHandler = handler
-            try {
-                // Start logcat process to capture Magisk-related logs
-                logcatProcess = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "time", "*:V"))
-                val reader = BufferedReader(InputStreamReader(logcatProcess!!.inputStream))
-                
-                Thread {
-                    try {
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            val log = line!!
-                            // Filter and send logs
-                            uiHandler?.post {
-                                sendLog(log)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        uiHandler?.post {
-                            sendLog("[ERROR] Logcat reader error: ${e.message}")
+            // Always try to send immediately if sink is available
+            val sink = logEventSink
+            if (sink != null && isLogStreamReady) {
+                try {
+                    uiHandler.post {
+                        try {
+                            sink.success(log)
+                        } catch (e: Exception) {
+                            // Sink might be closed, buffer the log
+                            bufferLog(log)
                         }
                     }
-                }.start()
+                } catch (e: Exception) {
+                    bufferLog(log)
+                }
+            } else {
+                bufferLog(log)
+            }
+        }
+        
+        private fun bufferLog(log: String) {
+            bufferedLogs.offer(log)
+            // Remove oldest logs if buffer is too large
+            while (bufferedLogs.size > MAX_BUFFERED_LOGS) {
+                bufferedLogs.poll()
+            }
+        }
+        
+        fun flushBufferedLogs() {
+            val sink = logEventSink
+            if (sink != null && isLogStreamReady) {
+                val logs = mutableListOf<String>()
+                var log = bufferedLogs.poll()
+                while (log != null) {
+                    logs.add(log)
+                    log = bufferedLogs.poll()
+                }
+                if (logs.isNotEmpty()) {
+                    uiHandler.post {
+                        for (bufferedLog in logs) {
+                            try {
+                                sink.success(bufferedLog)
+                            } catch (e: Exception) {
+                                // Ignore if sink is closed
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        @Volatile
+        private var isLogcatRunning = false
+        
+        fun startMagiskLogcat() {
+            // Prevent multiple logcat instances
+            if (isLogcatRunning) {
+                return
+            }
+            isLogcatRunning = true
+            
+            // Stop any existing logcat
+            stopMagiskLogcat()
+            
+            try {
+                // Start logcat process to capture all logs with high verbosity
+                logcatProcess = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "time", "*:V"))
+                logcatReader = BufferedReader(InputStreamReader(logcatProcess!!.inputStream))
+                val reader = logcatReader!!
+                
+                logcatThread = Thread {
+                    try {
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null && logcatProcess != null) {
+                            val log = line!!
+                            sendLog(log)
+                        }
+                    } catch (e: Exception) {
+                        sendLog("[ERROR] Logcat reader error: ${e.message}")
+                    } finally {
+                        isLogcatRunning = false
+                    }
+                }
+                logcatThread?.start()
             } catch (e: Exception) {
+                isLogcatRunning = false
                 sendLog("[ERROR] Failed to start logcat: ${e.message}")
             }
         }
         
         fun stopMagiskLogcat() {
-            logcatProcess?.destroy()
+            try {
+                logcatProcess?.destroy()
+            } catch (e: Exception) {}
             logcatProcess = null
+            
+            try {
+                logcatReader?.close()
+            } catch (e: Exception) {}
+            logcatReader = null
+            
+            logcatThread?.interrupt()
+            logcatThread = null
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // Get root access status from MagiskApplication
-        rootAccessGranted = MagiskApplication.isRootAvailable
-    }
+
     private val CHANNEL = "magisk_manager/data"
     private val MAGISK_CHANNEL = "magisk_manager/magisk"
     private val DENYLIST_CHANNEL = "magisk_manager/denylist"
@@ -268,6 +495,12 @@ class MainActivity : FlutterActivity() {
         // Root Access Channel - dedicated channel for root access app management
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ROOT_ACCESS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                "requestRootAccess" -> {
+                    // Show MD3 dialog to request root access
+                    requestRootAccess { granted ->
+                        result.success(granted)
+                    }
+                }
                 "getRootAccessApps" -> result.success(getRootAccessAppsViaScript())
                 "grantRootAccess" -> {
                     val packageName = call.argument<String>("packageName")
@@ -338,7 +571,7 @@ class MainActivity : FlutterActivity() {
                     isLogStreamReady = true
                     
                     // Start Magisk logcat stream
-                    startMagiskLogcat(uiHandler)
+                    startMagiskLogcat()
                     
                     // Send initial log message
                     uiHandler.post {
@@ -4131,6 +4364,9 @@ class MainActivity : FlutterActivity() {
      */
     private fun installModule(zipPath: String): Boolean {
         return try {
+            // Small delay to ensure log stream is established
+            Thread.sleep(100)
+            
             sendLog("[INFO] Starting module installation from: $zipPath")
             
             // Validate zip path

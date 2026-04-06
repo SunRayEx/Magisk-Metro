@@ -41,35 +41,51 @@ class AndroidDataService {
     }
   }
 
+  // Cached app data to avoid repeated expensive operations
+  static List<Map<String, dynamic>>? _cachedApps;
+  static DateTime? _appsCacheTime;
+  static const _appsCacheDuration = Duration(seconds: 30);
+  
   static Future<List<Map<String, dynamic>>> getApps() async {
     try {
-      debugPrint('AndroidDataService: getApps() called');
+      // Return cached data if still valid
+      final now = DateTime.now();
+      if (_cachedApps != null && 
+          _appsCacheTime != null && 
+          now.difference(_appsCacheTime!) < _appsCacheDuration) {
+        return _cachedApps!;
+      }
+      
+      debugPrint('AndroidDataService: getApps() called - fetching fresh data');
       final result = await _channel.invokeMethod<List<dynamic>>('getApps');
       debugPrint('AndroidDataService: getApps() result: ${result?.length ?? 0} apps');
       
       if (result != null) {
-        await Future.delayed(Duration.zero); // ← 这里改了: 强行让出当前帧给 UI 渲染，防卡顿
-
-        final apps = await Isolate.run(() { // ← 这里改了: 将耗时的列表遍历与 Map 转换放入后台 Isolate
-          return result
-              .map((item) => Map<String, dynamic>.from(item as Map))
-              .toList();
-        });
-        
-        // Debug: Log apps with root access
-        final rootApps = apps.where((app) => app['hasRootAccess'] == true);
-        debugPrint('AndroidDataService: Apps with root access: ${rootApps.length}');
-        for (final app in rootApps) {
-          debugPrint('AndroidDataService: Root app: ${app['packageName']}');
-        }
+        // Use compute for heavy data transformation
+        final apps = await compute(_parseAppList, result);
+        _cachedApps = apps;
+        _appsCacheTime = now;
         
         return apps;
       }
       return [];
     } catch (e) {
       debugPrint('AndroidDataService: getApps() error: $e');
-      return [];
+      return _cachedApps ?? [];
     }
+  }
+  
+  /// Parse app list in isolate - top-level function for compute
+  static List<Map<String, dynamic>> _parseAppList(List<dynamic> result) {
+    return result
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
+  
+  /// Invalidate apps cache - call when apps change
+  static void invalidateAppsCache() {
+    _cachedApps = null;
+    _appsCacheTime = null;
   }
 
   static Future<String> getMagiskVersion() async {

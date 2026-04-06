@@ -907,50 +907,28 @@ class _ModulesPageState extends ConsumerState<ModulesPage> {
   }
   
   Future<void> _executeAction(Module module) async {
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('Executing action...'),
-          ],
+    // Navigate to FlashLogsPage to execute module action and display logs
+    Navigator.push(
+      context,
+      FlipPageRoute(
+        page: FlashLogsPage(
+          title: 'Run Action - ${module.name}',
+          moduleActionPath: module.path,
+          onExecute: () async {
+            try {
+              // Execute the action script and get output
+              final output = await AndroidDataService.executeModuleAction(module.path);
+              
+              // Return true if output is not null (script executed)
+              return output != null;
+            } catch (e) {
+              debugPrint('Error executing module action: $e');
+              return false;
+            }
+          },
         ),
       ),
     );
-    
-    final output = await AndroidDataService.executeModuleAction(module.path);
-    
-    if (mounted) {
-      Navigator.pop(context); // Close loading dialog
-      
-      // Show result dialog
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(output != null ? Icons.check_circle : Icons.error,
-                  color: output != null ? Colors.green : Colors.red),
-              SizedBox(width: 8),
-              Text('Action Result'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Text(output ?? 'Failed to execute action script'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('OK'),
-            ),
-          ],
-        ),
-      );
-    }
   }
   
   Future<void> _openWebUI(Module module) async {

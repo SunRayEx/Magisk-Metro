@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
@@ -124,8 +125,17 @@ class AppTheme {
       // Priority 3: Fall back to default colors for each tile
       return _getDefaultTileColor(tileIndex);
     }
+    
+    if (colorIndex >= 3 && colorIndex <= 7) {
+      // Preset themes (Blue/Red/Green/Purple/Yellow) - All tiles use the same theme color
+      // Logs tile is excluded (handled separately in animated_dashboard_screen.dart)
+      final adjustedIndex = colorIndex - 3;
+      if (adjustedIndex >= 0 && adjustedIndex < tileColors.length) {
+        return tileColors[adjustedIndex];
+      }
+    }
 
-    // For Default theme (0) and preset themes (3-7), use the standard method
+    // For Default theme (0), use the standard method
     return getTileWidgetColor(tileIndex, colorIndex, isDark);
   }
   
@@ -186,6 +196,15 @@ class AppTheme {
       return customThemeColor ?? const Color(0xFF009688);
     }
 
+    if (colorIndex >= 3 && colorIndex <= 7) {
+      // Preset themes (Blue/Red/Green/Purple/Yellow) - All tiles use the same theme color
+      // Logs tile is excluded (handled separately in animated_dashboard_screen.dart)
+      final adjustedIndex = colorIndex - 3;
+      if (adjustedIndex >= 0 && adjustedIndex < tileColors.length) {
+        return tileColors[adjustedIndex];
+      }
+    }
+
     if (colorIndex == 0) {
       // Default theme - each tile has its own color
       switch (tileIndex) {
@@ -213,7 +232,8 @@ class AppTheme {
           return const Color(0xFF009688);
       }
     }
-        return const Color(0xFF009688);
+    
+    return const Color(0xFF009688);
   }
 
   static Color _darkenColor(Color color, double factor) {
@@ -481,13 +501,19 @@ final appsProvider = StateNotifierProvider<AppsNotifier, List<AppInfo>>((ref) {
   return AppsNotifier(ref);
 });
 
+/// Optimized AppsNotifier with lazy loading and efficient caching
 class AppsNotifier extends StateNotifier<List<AppInfo>> {
   final Ref _ref;
   static DateTime? _lastUpdate;
-  static const _cacheDuration = Duration(seconds: 15);
+  static const _cacheDuration = Duration(seconds: 30); // Extended cache duration
+  static const _rootPolicyCacheDuration = Duration(seconds: 60); // Cache root policies longer
+  static DateTime? _lastRootPolicyUpdate;
+  static Set<String> _cachedRootPolicies = {}; // Cached root access packages
+  static Set<String> _cachedSuListPackages = {}; // Cached SuList packages
   bool _isSuListEnabled = false;
   static List<AppInfo> _persistentCache = [];
   static bool _initialized = false;
+  bool _isLoading = false; // Prevent concurrent loads
   
   AppsNotifier(this._ref) : super(_persistentCache) {
     if (!_initialized) {
@@ -522,8 +548,11 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
   }
   
   Future<void> _refreshInBackground() async {
+    if (_isLoading) return; // Prevent concurrent loads
+    
+    final now = DateTime.now();
     if (_lastUpdate != null && 
-        DateTime.now().difference(_lastUpdate!) < _cacheDuration) {
+        now.difference(_lastUpdate!) < _cacheDuration) {
       return;
     }
     await _loadApps();
@@ -542,57 +571,58 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
     }
   }
 
-  Future<void> _loadDataIfNeeded() async {
+  /// Load root access policies with caching
+  Future<Set<String>> _loadRootPolicies() async {
     final now = DateTime.now();
-    if (_lastUpdate != null && now.difference(_lastUpdate!) < _cacheDuration) {
-      return;
+    // Return cached policies if still valid
+    if (_lastRootPolicyUpdate != null && 
+        now.difference(_lastRootPolicyUpdate!) < _rootPolicyCacheDuration) {
+      return _cachedRootPolicies;
     }
-    await _loadApps();
+    
+    try {
+      if (_isSuListEnabled) {
+        _cachedSuListPackages = await AndroidDataService.getSuListApps();
+        _cachedRootPolicies = _cachedSuListPackages;
+      } else {
+        _cachedRootPolicies = (await AndroidDataService.getRootAccessApps()).toSet();
+      }
+      _lastRootPolicyUpdate = now;
+      debugPrint('AppsNotifier: Loaded ${_cachedRootPolicies.length} root policies');
+    } catch (e) {
+      debugPrint('AppsNotifier: Error loading root policies: $e');
+    }
+    return _cachedRootPolicies;
+  }
+
+  /// Invalidate root policy cache - call after changes
+  void _invalidateRootPolicyCache() {
+    _lastRootPolicyUpdate = null;
+    _cachedRootPolicies = {};
+    _cachedSuListPackages = {};
   }
 
   Future<void> _loadApps() async {
+    if (_isLoading) return; // Prevent concurrent loads
+    _isLoading = true;
+    
     try {
       // Reload SuList state first
       await _loadSuListState();
       
-      // Get installed apps
+      // Get installed apps (uses internal caching in AndroidDataService)
       final apps = await AndroidDataService.getApps();
       
       if (apps.isNotEmpty) {
-        // Get root access apps from policies database
-        Set<String> rootAccessPackages = {};
-        try {
-          final rootApps = await AndroidDataService.getRootAccessApps();
-          rootAccessPackages = rootApps.toSet();
-          debugPrint('AppsNotifier: Found ${rootAccessPackages.length} apps with root access: $rootAccessPackages');
-        } catch (e) {
-          debugPrint('AppsNotifier: Error getting root access apps: $e');
-        }
+        // Get cached root access policies
+        final rootAccessPackages = await _loadRootPolicies();
         
-        // If SuList is enabled, also load SuList whitelist
-        Set<String> suListPackages = {};
-        if (_isSuListEnabled) {
-          try {
-            suListPackages = await AndroidDataService.getSuListApps();
-            debugPrint('AppsNotifier: SuList enabled, whitelist: $suListPackages');
-          } catch (e) {
-            debugPrint('AppsNotifier: Error getting SuList apps: $e');
-          }
-        }
-        
-        final loadedApps = apps.map((app) {
-          final packageName = app['packageName']?.toString() ?? '';
-          final hasRootAccess = _isSuListEnabled 
-              ? suListPackages.contains(packageName)
-              : rootAccessPackages.contains(packageName);
-          
-          return AppInfo(
-            name: app['name']?.toString() ?? 'Unknown',
-            packageName: packageName,
-            isActive: app['isActive'] as bool? ?? true,
-            hasRootAccess: hasRootAccess,
-          );
-        }).toList();
+        // Build app list with root access status - using compute for heavy work
+        final loadedApps = await compute(_buildAppList, AppListParams(
+          apps: apps,
+          rootAccessPackages: rootAccessPackages,
+          isSuListEnabled: _isSuListEnabled,
+        ));
         
         _lastUpdate = DateTime.now();
         _persistentCache = loadedApps;
@@ -606,6 +636,8 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
     } catch (e) {
       debugPrint('AppsNotifier: Error loading apps: $e');
       // Keep current list on error
+    } finally {
+      _isLoading = false;
     }
   }
   
@@ -676,6 +708,10 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
         }
       }
       
+      // Invalidate cache after changes
+      _invalidateRootPolicyCache();
+      AndroidDataService.invalidateAppsCache();
+      
       // Save updated state to storage
       await _saveAppsToStorage(state);
     } catch (e) {
@@ -716,10 +752,42 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
     final storage = PersistentStorage();
     storage.saveSuListEnabled(enabled);
     
+    // Invalidate caches
+    _invalidateRootPolicyCache();
+    AndroidDataService.invalidateAppsCache();
+    
     // Reload apps to reflect new state
     _lastUpdate = null;
     _loadApps();
   }
+}
+
+/// Parameters for building app list in isolate
+class AppListParams {
+  final List<Map<String, dynamic>> apps;
+  final Set<String> rootAccessPackages;
+  final bool isSuListEnabled;
+  
+  AppListParams({
+    required this.apps,
+    required this.rootAccessPackages,
+    required this.isSuListEnabled,
+  });
+}
+
+/// Build app list with root access status - runs in isolate
+List<AppInfo> _buildAppList(AppListParams params) {
+  return params.apps.map((app) {
+    final packageName = app['packageName']?.toString() ?? '';
+    final hasRootAccess = params.rootAccessPackages.contains(packageName);
+    
+    return AppInfo(
+      name: app['name']?.toString() ?? 'Unknown',
+      packageName: packageName,
+      isActive: app['isActive'] as bool? ?? true,
+      hasRootAccess: hasRootAccess,
+    );
+  }).toList();
 }
 
 /// Logs provider - shows all Magisk logs using root shell fetch
