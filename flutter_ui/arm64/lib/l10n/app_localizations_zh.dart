@@ -231,5 +231,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ok => '确定';
 
   @override
-  String get lockMode => '锁定模式';
+  String get lockMode => '锁定主页';
 }

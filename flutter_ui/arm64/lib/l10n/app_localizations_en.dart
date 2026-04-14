@@ -231,5 +231,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ok => 'OK';
 
   @override
-  String get lockMode => 'Lock Mode';
-}
+  String get lockMode => 'Lock Homepage';
+  }

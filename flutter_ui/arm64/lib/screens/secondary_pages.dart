@@ -1016,135 +1016,257 @@ class _ModulesPageState extends ConsumerState<ModulesPage> {
   }
 
   Widget _buildModuleTile(Module module, Color widgetColor, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      color: AppTheme.getListItem(isDark),
-      child: ExpansionTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: module.isEnabled 
-                ? widgetColor.withValues(alpha: 0.2)
-                : AppTheme.getListItem(isDark).withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            Icons.extension,
-            color: module.isEnabled ? widgetColor : widgetColor.withValues(alpha: 0.5),
-          ),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                module.name,
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w900,
-                  color: AppTheme.getListItemFont(isDark),
+    // Determine tile styling based on module state
+    final bool isMarkedForRemoval = module.hasRemoveTag == true;
+    final bool hasUpdate = module.hasUpdateTag == true;
+    
+    // Calculate opacity and color based on removal/update status
+    // Module is "dimmed" if marked for removal OR has update pending
+    final bool isDimmed = isMarkedForRemoval || hasUpdate;
+    final double tileOpacity = isDimmed ? 0.5 : 1.0;
+    final Color tileBackgroundColor = isDimmed 
+        ? Colors.grey.withValues(alpha: 0.3)
+        : AppTheme.getListItem(isDark);
+    
+    return Opacity(
+      opacity: tileOpacity,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        color: tileBackgroundColor,
+        child: ExpansionTile(
+          leading: Stack(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: module.isEnabled 
+                      ? widgetColor.withValues(alpha: 0.2)
+                      : AppTheme.getListItem(isDark).withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.extension,
+                  color: module.isEnabled ? widgetColor : widgetColor.withValues(alpha: 0.5),
                 ),
               ),
-            ),
-            if (!module.isEnabled)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
+              // Update badge
+              if (hasUpdate)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_upward,
+                      size: 10,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
+            ],
+          ),
+          title: Row(
+            children: [
+              Expanded(
                 child: Text(
-                  'DISABLED',
+                  module.name,
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.red,
+                    fontWeight: FontWeight.w900,
+                    color: isDimmed
+                        ? Colors.grey
+                        : AppTheme.getListItemFont(isDark),
                   ),
                 ),
               ),
+              // Show appropriate label based on module state
+              if (isMarkedForRemoval)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'REMOVE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.orange,
+                    ),
+                  ),
+                )
+              else if (hasUpdate)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'UPDATE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.blue,
+                    ),
+                  ),
+                )
+              else if (!module.isEnabled)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'DISABLED',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          subtitle: Text(
+            '${module.version} • ${module.author}',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: isDimmed
+                  ? Colors.grey.withValues(alpha: 0.6)
+                  : AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+            ),
+          ),
+          trailing: Switch(
+            value: module.isEnabled,
+            onChanged: isMarkedForRemoval ? null : (value) => _toggleModule(module, value),
+            activeColor: widgetColor,
+          ),
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Description
+                  if (module.description.isNotEmpty) ...[
+                    Text(
+                      module.description,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isMarkedForRemoval
+                            ? Colors.grey.withValues(alpha: 0.8)
+                            : AppTheme.getListItemFont(isDark).withValues(alpha: 0.8),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  // Action buttons - using Row with spacing for alignment
+                  Row(
+                    children: [
+                      // Web UI button
+                      if (module.hasWebUI)
+                        Expanded(
+                          child: _buildModuleButton(
+                            icon: Icons.web,
+                            label: 'Web UI',
+                            color: widgetColor,
+                            onTap: isMarkedForRemoval ? () {} : () => _openWebUI(module),
+                          ),
+                        ),
+                      if (module.hasWebUI && (module.hasActionScript || true))
+                        const SizedBox(width: 8),
+                      // Action script button
+                      if (module.hasActionScript)
+                        Expanded(
+                          child: _buildModuleButton(
+                            icon: Icons.play_arrow,
+                            label: 'Run Action',
+                            color: widgetColor.withValues(alpha: 0.85),
+                            onTap: isMarkedForRemoval ? () {} : () => _executeAction(module),
+                          ),
+                        ),
+                      if (module.hasActionScript)
+                        const SizedBox(width: 8),
+                      // Remove/Restore button - toggles based on removal status
+                      Expanded(
+                        child: _buildModuleButton(
+                          icon: isMarkedForRemoval ? Icons.restore : Icons.delete_outline,
+                          label: isMarkedForRemoval ? 'Restore' : 'Remove',
+                          color: isMarkedForRemoval 
+                              ? Colors.green.withValues(alpha: 0.9)
+                              : Colors.red.withValues(alpha: 0.9),
+                          onTap: () => _toggleModuleRemoval(module, !isMarkedForRemoval),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Path info
+                  Text(
+                    'Path: ${module.path}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: isMarkedForRemoval
+                          ? Colors.grey.withValues(alpha: 0.6)
+                          : AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        subtitle: Text(
-          '${module.version} • ${module.author}',
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
-          ),
-        ),
-        trailing: Switch(
-          value: module.isEnabled,
-          onChanged: (value) => _toggleModule(module, value),
-          activeColor: widgetColor,
-        ),
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Description
-                if (module.description.isNotEmpty) ...[
-                  Text(
-                    module.description,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.8),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                // Action buttons - using Row with spacing for alignment
-                Row(
-                  children: [
-                    // Web UI button
-                    if (module.hasWebUI)
-                      Expanded(
-                        child: _buildModuleButton(
-                          icon: Icons.web,
-                          label: 'Web UI',
-                          color: widgetColor,
-                          onTap: () => _openWebUI(module),
-                        ),
-                      ),
-                    if (module.hasWebUI && (module.hasActionScript || true))
-                      const SizedBox(width: 8),
-                    // Action script button
-                    if (module.hasActionScript)
-                      Expanded(
-                        child: _buildModuleButton(
-                          icon: Icons.play_arrow,
-                          label: 'Run Action',
-                          color: widgetColor.withValues(alpha: 0.85),
-                          onTap: () => _executeAction(module),
-                        ),
-                      ),
-                    if (module.hasActionScript)
-                      const SizedBox(width: 8),
-                    // Remove button - always shown
-                    Expanded(
-                      child: _buildModuleButton(
-                        icon: Icons.delete_outline,
-                        label: 'Remove',
-                        color: Colors.red.withValues(alpha: 0.9),
-                        onTap: () => _removeModule(module),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Path info
-                Text(
-                  'Path: ${module.path}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: AppTheme.getListItemFont(isDark).withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
+  }
+  
+  /// Toggle module removal status - mark for removal or restore
+  Future<void> _toggleModuleRemoval(Module module, bool markForRemoval) async {
+    if (markForRemoval) {
+      // Mark module for removal
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Remove Module'),
+          content: Text('Are you sure you want to remove "${module.name}"?\n\nThis will delete the module after reboot.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed == true && mounted) {
+        final success = await ref.read(modulesProvider.notifier).markModuleForRemoval(module.path);
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${module.name} will be removed after reboot')),
+          );
+        }
+      }
+    } else {
+      // Cancel removal - restore module
+      final success = await ref.read(modulesProvider.notifier).cancelModuleRemoval(module.path);
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${module.name} removal cancelled')),
+        );
+      }
+    }
   }
 
   Widget _buildHeader(BuildContext context, String title, bool isDark, Color widgetColor) {

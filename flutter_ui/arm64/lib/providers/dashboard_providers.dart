@@ -1,10 +1,21 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/android_data_service.dart';
 import '../utils/persistent_storage.dart';
+
+/// Provider for getting the MagisKube app version
+final appVersionProvider = FutureProvider<String>((ref) async {
+  try {
+    final result = await const MethodChannel('magisk_manager/data').invokeMethod<String>('getAppVersion');
+    return result ?? '1.0.0';
+  } catch (e) {
+    return '1.0.0';
+  }
+});
 
 final themeProvider = StateProvider<bool>((ref) => false);
 
@@ -407,6 +418,9 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
         hasActionScript: m['hasActionScript'] as bool? ?? false,
         webUIPort: m['webUIPort'] as int?,
         needsReboot: m['needsReboot'] as bool? ?? false,
+        // Load tag fields from cache
+        hasRemoveTag: m['hasRemoveTag'] as bool? ?? false,
+        hasUpdateTag: m['hasUpdateTag'] as bool? ?? false,
       )).toList();
       
       _persistentCache = modules;
@@ -433,7 +447,15 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
         
         for (final m in modules) {
           final modulePath = m['path']?.toString() ?? '';
-          final details = await AndroidDataService.getModuleDetails(modulePath);
+          
+          // Get module details and check for remove/update tags in parallel
+          final results = await Future.wait([
+            AndroidDataService.getModuleDetails(modulePath),
+            AndroidDataService.checkModuleTags(modulePath),
+          ]);
+          
+          final details = results[0] as Map<String, dynamic>;
+          final tags = results[1] as Map<String, bool>;
           
           final module = Module(
             name: m['name']?.toString() ?? 'Unknown',
@@ -447,6 +469,8 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
             hasActionScript: details['hasActionScript'] as bool? ?? false,
             webUIPort: details['webUIPort'] as int?,
             needsReboot: m['needsReboot'] as bool? ?? false,
+            hasRemoveTag: tags['hasRemoveTag'] as bool? ?? false,
+            hasUpdateTag: tags['hasUpdateTag'] as bool? ?? false,
           );
           
           loadedModules.add(module);
@@ -462,6 +486,8 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
             'hasActionScript': module.hasActionScript,
             'webUIPort': module.webUIPort,
             'needsReboot': module.needsReboot,
+            'hasRemoveTag': module.hasRemoveTag,
+            'hasUpdateTag': module.hasUpdateTag,
           });
         }
         
@@ -476,6 +502,40 @@ class ModulesNotifier extends StateNotifier<List<Module>> {
     } catch (e) {
       // Keep current list on error, don't clear
     }
+  }
+  
+  /// Mark a module for removal (creates remove tag file)
+  Future<bool> markModuleForRemoval(String modulePath) async {
+    final success = await AndroidDataService.createRemoveTag(modulePath);
+    if (success) {
+      // Update local state
+      final updated = state.map((m) {
+        if (m.path == modulePath) {
+          return m.copyWith(hasRemoveTag: true);
+        }
+        return m;
+      }).toList();
+      _persistentCache = updated;
+      state = updated;
+    }
+    return success;
+  }
+  
+  /// Cancel module removal (removes remove tag file)
+  Future<bool> cancelModuleRemoval(String modulePath) async {
+    final success = await AndroidDataService.removeRemoveTag(modulePath);
+    if (success) {
+      // Update local state
+      final updated = state.map((m) {
+        if (m.path == modulePath) {
+          return m.copyWith(hasRemoveTag: false);
+        }
+        return m;
+      }).toList();
+      _persistentCache = updated;
+      state = updated;
+    }
+    return success;
   }
 
   void toggleModule(String name, bool enabled) {
@@ -738,9 +798,20 @@ class AppsNotifier extends StateNotifier<List<AppInfo>> {
   }
   
   // Direct toggle via script - used by secondary_pages.dart
-  // Now only updates local state, flush happens on refresh/leave
+  // No optimistic updates - execute service call and refresh UI after
   Future<void> toggleRootAccessViaScript(String packageName, bool hasRootAccess) async {
-    updateLocalRootAccess(packageName, hasRootAccess);
+    try {
+      if (hasRootAccess) {
+        await AndroidDataService.grantRootAccessViaScript(packageName);
+      } else {
+        await AndroidDataService.revokeRootAccessViaScript(packageName);
+      }
+      // Refresh to get actual state from database
+      await refresh();
+    } catch (e) {
+      // On error, refresh to get actual state
+      await refresh();
+    }
   }
   
   // Update SuList state from external source
@@ -1102,37 +1173,115 @@ class TileConfig {
     required this.type,
   });
   
-  /// Grid constants
+  /// Grid constants - these are fallback defaults, actual values come from GridConfig
   static const int gridColumns = 3;
   static const int gridRows = 6;
   
-  /// Default tile configurations (matching reference design)
-  /// Grid: 3 columns x 6 rows
-  /// Layout based on image:
-  /// Row 0-1, Col 0-1: Magisk (绿色，2x2)
-  /// Row 0, Col 2: Modules (蓝色，1x1)
-  /// Row 1, Col 2: Apps (红色，1x1)
-  /// Row 2, Col 0-1: Settings (黄色，2x1)
-  /// Row 2-3, Col 2: Logs (白色，1x2)
-  /// Row 3, Col 0-1: Contributor (紫色，2x1)
-  /// Row 4, Col 0-2: Sponsor (粉色，三个 1x1)
-  static List<TileConfig> defaultTiles() => [
+  /// Default tile configurations
+  /// Phone Portrait: 4 columns x 6 rows
+  /// Phone Landscape: 6 columns x 4 rows
+  /// Tablet Portrait: 6 columns x 6 rows
+  /// Tablet Landscape: 8 columns x 4 rows
+  static List<TileConfig> defaultTiles() => defaultTilesPortrait();
+  
+  /// Default tiles for phone portrait mode (3 columns x 6 rows)
+  /// Layout: 
+  /// - Row 0: Magisk 2x2, Apps 1x1, Modules 1x1
+  /// - Row 2: Settings 2x1, Logs 1x2
+  /// - Row 4: Contributor 2x1
+  /// - Row 5: Sponsor tiles 1x1, 1x1, 1x1 (三个一行，在最后一行)
+  static List<TileConfig> defaultTilesPortrait() => [
     // Magisk: 2x2 at top-left (rows 0-1, cols 0-1) - Green
     TileConfig(id: 'magisk', row: 0, col: 0, width: 2, height: 2, type: 'magisk'),
-    // Modules: 1x1 at top-right (row 0, col 2) - Blue
-    TileConfig(id: 'modules', row: 0, col: 2, width: 1, height: 1, type: 'modules'),
-    // Apps: 1x1 at (row 1, col 2) - Red
-    TileConfig(id: 'apps', row: 1, col: 2, width: 1, height: 1, type: 'apps'),
+    // Apps: 1x1 at (row 0, col 2) - Red
+    TileConfig(id: 'apps', row: 0, col: 2, width: 1, height: 1, type: 'apps'),
+    // Modules: 1x1 at (row 1, col 2) - Blue
+    TileConfig(id: 'modules', row: 1, col: 2, width: 1, height: 1, type: 'modules'),
     // Settings: 2x1 at (row 2, cols 0-1) - Yellow
     TileConfig(id: 'settings', row: 2, col: 0, width: 2, height: 1, type: 'settings'),
     // Logs: 1x2 at (rows 2-3, col 2) - White
-    TileConfig(id: 'logs', row: 2, col: 2, width: 1, height: 2, type: 'logs'),
+    TileConfig(id: 'logs', row: 2, col: 2, width: 1, height: 3, type: 'logs'),
     // Contributor: 2x1 at (row 3, cols 0-1) - Purple
     TileConfig(id: 'contributor', row: 3, col: 0, width: 2, height: 1, type: 'contributor'),
-    // Sponsor tiles: 1x1 each at row 4 - Pink
+    // Sponsor tiles: 1x1 each at row 4 (最后一行), cols 0-2
     TileConfig(id: 'sponsor1', row: 4, col: 0, width: 1, height: 1, type: 'sponsor'),
     TileConfig(id: 'sponsor2', row: 4, col: 1, width: 1, height: 1, type: 'sponsor'),
     TileConfig(id: 'sponsor3', row: 4, col: 2, width: 1, height: 1, type: 'sponsor'),
+  ];
+  
+  /// Default tiles for phone landscape mode (6 columns x 3 rows)
+  /// Layout:
+  /// - Rows 0-1: Magisk 2x2, Apps 1x2, Modules 1x2, Logs 1x2
+  /// - Row 2: Settings 2x1, Contributor 1x1, Three sponsors 1x1 each
+  static List<TileConfig> defaultTilesLandscape() => [
+    // Magisk: 2x2 at top-left (rows 0-1, cols 0-1) - Green
+    TileConfig(id: 'magisk', row: 0, col: 0, width: 2, height: 2, type: 'magisk'),
+    // Apps: 1x2 at (rows 0-1, col 2) - Red
+    TileConfig(id: 'apps', row: 0, col: 2, width: 1, height: 2, type: 'apps'),
+    // Modules: 1x2 at (rows 0-1, col 3) - Blue
+    TileConfig(id: 'modules', row: 0, col: 3, width: 1, height: 2, type: 'modules'),
+    // Logs: 1x2 at (rows 0-1, col 4) - White
+    TileConfig(id: 'logs', row: 0, col: 4, width: 1, height: 2, type: 'logs'),
+    // Settings: 2x1 at (row 2, cols 0-1) - Yellow
+    TileConfig(id: 'settings', row: 2, col: 0, width: 2, height: 1, type: 'settings'),
+    // Contributor: 1x1 at (row 2, col 2) - Purple
+    TileConfig(id: 'contributor', row: 2, col: 2, width: 1, height: 1, type: 'contributor'),
+    // Sponsor tiles: 1x1 each at row 3, cols 3-5
+    TileConfig(id: 'sponsor1', row: 3, col: 3, width: 1, height: 1, type: 'sponsor'),
+    TileConfig(id: 'sponsor2', row: 3, col: 4, width: 1, height: 1, type: 'sponsor'),
+    TileConfig(id: 'sponsor3', row: 3, col: 5, width: 1, height: 1, type: 'sponsor'),
+  ];
+  
+  /// Default tiles for tablet portrait mode (6 columns x 6 rows)
+  /// Layout: more space for tablets
+  /// - Row 0: Magisk 2x2, Apps 1x1, Modules 1x1, Contributor 1x1, Sponsor1 1x1
+  /// - Row 1: (Magisk continues), Logs 1x2, Sponsor2 1x1, Sponsor3 1x1
+  /// - Row 2: Settings 2x1
+  static List<TileConfig> defaultTilesTabletPortrait() => [
+    // Magisk: 2x2 at top-left (rows 0-1, cols 0-1) - Green
+    TileConfig(id: 'magisk', row: 0, col: 0, width: 3, height: 3, type: 'magisk'),
+    // Apps: 1x1 at (row 0, col 2) - Red
+    TileConfig(id: 'apps', row: 0, col: 3, width: 1, height: 3, type: 'apps'),
+    // Modules: 1x1 at (row 0, col 3) - Blue
+    TileConfig(id: 'modules', row: 0, col: 4, width: 1, height: 3, type: 'modules'),
+    // Contributor: 1x1 at (row 0, col 4) - Purple
+    TileConfig(id: 'contributor', row: 0, col: 5, width: 1, height: 3, type: 'contributor'),
+    // Sponsor1: 1x1 at (row 0, col 5)
+    TileConfig(id: 'settings', row: 3, col: 0, width: 3, height: 1, type: 'settings'),
+    // Settings: 2x1 at (row 2, cols 0-1) - Yellow
+    TileConfig(id: 'logs', row: 0, col: 6, width: 1, height: 2, type: 'logs'),
+    // Sponsor2: 1x1 at (row 1, col 3)
+    TileConfig(id: 'sponsor1', row: 3, col: 3, width: 1, height: 1, type: 'sponsor'),
+    // Logs: 1x2 at (rows 1-2, col 2) - White
+    TileConfig(id: 'sponsor2', row: 3, col: 4, width: 1, height: 1, type: 'sponsor'),
+    // Sponsor3: 1x1 at (row 1, col 4)
+    TileConfig(id: 'sponsor3', row: 3, col: 5, width: 1, height: 1, type: 'sponsor'),
+  ];
+  
+  /// Default tiles for tablet landscape mode (8 columns x 4 rows)
+  /// Layout: wide tablet landscape - all tiles on top rows
+  /// - Row 0: Magisk 2x2, Apps 1x2, Modules 1x2, Logs 1x2, Contributor 1x2
+  /// - Row 1: (Magisk continues), Sponsors
+  /// - Row 2: Settings 2x1, Sponsor tiles
+  static List<TileConfig> defaultTilesTabletLandscape() => [
+    // Magisk: 2x2 at top-left (rows 0-1, cols 0-1) - Green
+    TileConfig(id: 'magisk', row: 0, col: 0, width: 4, height: 3, type: 'magisk'),
+    // Apps: 1x2 at (rows 0-1, col 2) - Red
+    TileConfig(id: 'apps', row: 0, col: 4, width: 1, height: 3, type: 'apps'),
+    // Modules: 1x2 at (rows 0-1, col 3) - Blue
+    TileConfig(id: 'modules', row: 0, col: 5, width: 1, height: 3, type: 'modules'),
+    // Logs: 1x2 at (rows 0-1, col 4) - White
+    TileConfig(id: 'logs', row: 0, col: 6, width: 1, height: 3, type: 'logs'),
+    // Contributor: 1x2 at (rows 0-1, col 5) - Purple
+    TileConfig(id: 'contributor', row: 3, col: 2, width: 2, height: 1, type: 'contributor'),
+    // Sponsor1: 1x1 at (row 1, col 2)
+    TileConfig(id: 'sponsor1', row: 0, col: 7, width: 1, height: 1, type: 'sponsor'),
+    // Sponsor2: 1x1 at (row 1, col 3)
+    TileConfig(id: 'sponsor2', row: 1, col: 7, width: 1, height: 1, type: 'sponsor'),
+    // Sponsor3: 1x1 at (row 1, col 4)
+    TileConfig(id: 'sponsor3', row: 2, col: 7, width: 1, height: 1, type: 'sponsor'),
+    // Settings: 2x1 at (row 2, cols 0-1) - Yellow
+    TileConfig(id: 'settings', row: 3, col: 0, width: 2, height: 1, type: 'settings'),
   ];
   
   /// Convert to JSON for storage
@@ -1224,25 +1373,387 @@ class LockModeNotifier extends StateNotifier<bool> {
   }
 }
 
-/// Tile layout configuration provider
-final tileLayoutProvider = StateNotifierProvider<TileLayoutNotifier, List<TileConfig>>((ref) {
-  return TileLayoutNotifier(ref);
+/// Tile layout configuration provider for phone portrait mode
+final tileLayoutPortraitProvider = StateNotifierProvider<TileLayoutPortraitNotifier, List<TileConfig>>((ref) {
+  return TileLayoutPortraitNotifier(ref, false);
 });
 
-class TileLayoutNotifier extends StateNotifier<List<TileConfig>> {
+/// Tile layout configuration provider for tablet portrait mode
+final tileLayoutTabletPortraitProvider = StateNotifierProvider<TileLayoutTabletPortraitNotifier, List<TileConfig>>((ref) {
+  return TileLayoutTabletPortraitNotifier(ref);
+});
+
+/// Tile layout configuration provider for landscape mode
+final tileLayoutLandscapeProvider = StateNotifierProvider<TileLayoutLandscapeNotifier, List<TileConfig>>((ref) {
+  return TileLayoutLandscapeNotifier(ref, false);
+});
+
+/// Tile layout configuration provider for tablet landscape mode
+final tileLayoutTabletLandscapeProvider = StateNotifierProvider<TileLayoutTabletLandscapeNotifier, List<TileConfig>>((ref) {
+  return TileLayoutTabletLandscapeNotifier(ref);
+});
+
+/// Combined tile layout provider that returns the appropriate layout based on orientation
+/// This is the main provider that should be used in the UI
+/// Uses portrait layout by default, can be switched based on orientation
+final tileLayoutProvider = StateNotifierProvider<TileLayoutBaseNotifier, List<TileConfig>>((ref) {
+  return TileLayoutBaseNotifier(ref, false); // Default to portrait
+});
+
+/// Base notifier that delegates to portrait or landscape based on isLandscape flag
+class TileLayoutBaseNotifier extends StateNotifier<List<TileConfig>> {
   final Ref _ref;
+  final bool isLandscape;
   
-  TileLayoutNotifier(this._ref) : super(TileConfig.defaultTiles()) {
+  TileLayoutBaseNotifier(this._ref, this.isLandscape) 
+      : super(isLandscape 
+          ? TileConfig.defaultTilesLandscape() 
+          : TileConfig.defaultTilesPortrait()) {
     _loadFromStorage();
   }
   
   Future<void> _loadFromStorage() async {
     final storage = PersistentStorage();
-    final tileMaps = await storage.loadTileLayout();
+    final tileMaps = isLandscape 
+        ? await storage.loadTileLayoutLandscape() 
+        : await storage.loadTileLayoutPortrait();
+    
+    if (tileMaps.isNotEmpty) {
+      final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
+      final validatedTiles = _validateAndAdjustTiles(
+        tiles, 
+        isLandscape ? 6 : 3, 
+        isLandscape ? 3 : 6
+      );
+      state = validatedTiles;
+    }
+  }
+  
+  List<TileConfig> _validateAndAdjustTiles(List<TileConfig> tiles, int gridColumns, int gridRows) {
+    final validated = <TileConfig>[];
+    for (final tile in tiles) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      if (newWidth > gridColumns) newWidth = gridColumns;
+      if (newHeight > gridRows) newHeight = gridRows;
+      if (newCol >= gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      if (newRow >= gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      if (newCol + newWidth > gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) { newCol = 0; newWidth = gridColumns; }
+      }
+      if (newRow + newHeight > gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) { newRow = 0; newHeight = gridRows; }
+      }
+      
+      newWidth = newWidth.clamp(1, 3);
+      newHeight = newHeight.clamp(1, 6);
+      
+      validated.add(tile.copyWith(
+        row: newRow.clamp(0, gridRows - 1),
+        col: newCol.clamp(0, gridColumns - 1),
+        width: newWidth,
+        height: newHeight,
+      ));
+    }
+    return validated;
+  }
+  
+  void moveTile(String tileId, int newRow, int newCol) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: newRow, col: newCol);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resizeTile(String tileId, int newWidth, int newHeight) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void updateTile(String tileId, {int? row, int? col, int? width, int? height}) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: row, col: col, width: width, height: height);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void swapTiles(String tileId1, String tileId2) {
+    final tile1 = state.firstWhere((t) => t.id == tileId1);
+    final tile2 = state.firstWhere((t) => t.id == tileId2);
+    
+    final updated = state.map((tile) {
+      if (tile.id == tileId1) {
+        return tile.copyWith(row: tile2.row, col: tile2.col);
+      }
+      if (tile.id == tileId2) {
+        return tile.copyWith(row: tile1.row, col: tile1.col);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resetToDefault() {
+    state = isLandscape 
+        ? TileConfig.defaultTilesLandscape() 
+        : TileConfig.defaultTilesPortrait();
+    saveLayout();
+  }
+  
+  Future<void> saveLayout() async {
+    final storage = PersistentStorage();
+    final tileMaps = state.map((tile) => tile.toJson()).toList();
+    if (isLandscape) {
+      await storage.saveTileLayoutLandscape(tileMaps);
+    } else {
+      await storage.saveTileLayoutPortrait(tileMaps);
+    }
+  }
+  
+  TileConfig? getTile(String tileId) {
+    try {
+      return state.firstWhere((t) => t.id == tileId);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  bool isPositionOccupied(int row, int col, String excludeTileId) {
+    for (final tile in state) {
+      if (tile.id == excludeTileId) continue;
+      for (int r = tile.row; r < tile.row + tile.height; r++) {
+        for (int c = tile.col; c < tile.col + tile.width; c++) {
+          if (r == row && c == col) return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId, {int? gridColumns}) {
+    final cols = gridColumns ?? (isLandscape ? 6 : 3);
+    const int maxRows = 10;
+    for (int r = 0; r < maxRows; r++) {
+      for (int c = 0; c < cols; c++) {
+        bool available = true;
+        for (int dr = 0; dr < height && available; dr++) {
+          for (int dc = 0; dc < width && available; dc++) {
+            if (c + dc >= cols || r + dr >= maxRows) {
+              available = false;
+            } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
+              available = false;
+            }
+          }
+        }
+        if (available) return (r, c);
+      }
+    }
+    return null;
+  }
+  
+  /// Switch between portrait and landscape mode
+  void setOrientation(bool landscape) {
+    if (isLandscape != landscape) {
+      // Re-create the notifier with new orientation
+      // This is a workaround - in practice, the widget should rebuild with new provider
+    }
+  }
+}
+
+class TileLayoutPortraitNotifier extends StateNotifier<List<TileConfig>> {
+  final Ref _ref;
+  final bool isTablet;
+  
+  TileLayoutPortraitNotifier(this._ref, [this.isTablet = false]) : super(TileConfig.defaultTilesPortrait()) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final tileMaps = await storage.loadTileLayoutPortrait();
+    
+    // Get default tiles to ensure all tiles exist (including sponsors)
+    final defaultTiles = TileConfig.defaultTilesPortrait();
+    
     if (tileMaps.isNotEmpty) {
       // Convert Map list to TileConfig list
       final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
-      state = tiles;
+      
+      // Validate tile positions against portrait grid (3 columns x 6 rows)
+      final validatedTiles = _validateAndAdjustTiles(tiles, 3, 6);
+      
+      // If validation returns null (overlap detected), reset to defaults
+      if (validatedTiles == null) {
+        debugPrint('TileLayoutPortrait: Overlap detected, resetting to default layout');
+        await storage.clearTileLayout();
+        state = defaultTiles;
+        return;
+      }
+      
+      // Merge with default tiles to ensure all tiles exist (fixes missing sponsors)
+      state = _mergeWithDefaults(validatedTiles, defaultTiles);
+    } else {
+      // No saved layout - use defaults
+      state = defaultTiles;
+    }
+  }
+  
+  /// Merge loaded tiles with defaults to ensure all tiles exist
+  List<TileConfig> _mergeWithDefaults(List<TileConfig> loaded, List<TileConfig> defaults) {
+    // Create a map of existing tiles by id
+    final existingTiles = <String, TileConfig>{};
+    for (final tile in loaded) {
+      existingTiles[tile.id] = tile;
+    }
+    
+    // Build merged list - use loaded position if exists, otherwise use default
+    final merged = <TileConfig>[];
+    for (final defaultTile in defaults) {
+      if (existingTiles.containsKey(defaultTile.id)) {
+        // Use loaded tile
+        merged.add(existingTiles[defaultTile.id]!);
+      } else {
+        // Use default position for missing tiles (like sponsors)
+        merged.add(defaultTile);
+      }
+    }
+    return merged;
+  }
+  
+  /// Validate and adjust tile positions to ensure they fit within grid bounds
+  /// This is called when grid configuration changes
+  /// Returns null if tiles overlap (needs reset to default)
+  List<TileConfig>? _validateAndAdjustTiles(List<TileConfig> tiles, int gridColumns, int gridRows) {
+    final validated = <TileConfig>[];
+    
+    // First pass: validate and clamp positions
+    for (final tile in tiles) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      // Clamp position and size to grid bounds
+      // Ensure width doesn't exceed grid columns
+      if (newWidth > gridColumns) {
+        newWidth = gridColumns;
+      }
+      // Ensure height doesn't exceed grid rows
+      if (newHeight > gridRows) {
+        newHeight = gridRows;
+      }
+      // Ensure column position is valid
+      if (newCol >= gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      // Ensure row position is valid
+      if (newRow >= gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      // Ensure tile doesn't extend beyond grid
+      if (newCol + newWidth > gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) {
+          newCol = 0;
+          newWidth = gridColumns;
+        }
+      }
+      if (newRow + newHeight > gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) {
+          newRow = 0;
+          newHeight = gridRows;
+        }
+      }
+      
+      // Ensure minimum size
+      newWidth = newWidth.clamp(1, 3);
+      newHeight = newHeight.clamp(1, 6);
+      
+      // Create validated tile
+      validated.add(tile.copyWith(
+        row: newRow.clamp(0, gridRows - 1),
+        col: newCol.clamp(0, gridColumns - 1),
+        width: newWidth,
+        height: newHeight,
+      ));
+    }
+    
+    // Second pass: check for overlaps
+    // If any tiles overlap significantly, return null to signal reset needed
+    for (int i = 0; i < validated.length; i++) {
+      for (int j = i + 1; j < validated.length; j++) {
+        final t1 = validated[i];
+        final t2 = validated[j];
+        
+        // Check if rectangles overlap
+        bool overlaps = !(t1.col + t1.width <= t2.col || 
+                         t2.col + t2.width <= t1.col ||
+                         t1.row + t1.height <= t2.row ||
+                         t2.row + t2.height <= t1.row);
+        
+        if (overlaps) {
+          // Overlap detected - return null to trigger reset
+          debugPrint('TileLayout: Overlap detected between ${t1.id} and ${t2.id}, need reset');
+          return null;
+        }
+      }
+    }
+    
+    return validated;
+  }
+  
+  /// Update tiles to fit new grid configuration
+  /// Called when screen size/orientation changes
+  void adjustForGridSize(int gridColumns, int gridRows) {
+    final validatedTiles = _validateAndAdjustTiles(state, gridColumns, gridRows);
+    
+    // If validation returns null (overlap detected), reset to defaults
+    if (validatedTiles == null) {
+      debugPrint('TileLayoutPortrait: Overlap detected in adjustForGridSize, resetting to default');
+      resetToDefault();
+      return;
+    }
+    
+    // Check if any changes were made
+    bool hasChanges = false;
+    for (int i = 0; i < state.length; i++) {
+      if (state[i].row != validatedTiles[i].row ||
+          state[i].col != validatedTiles[i].col ||
+          state[i].width != validatedTiles[i].width ||
+          state[i].height != validatedTiles[i].height) {
+        hasChanges = true;
+        break;
+      }
+    }
+    
+    if (hasChanges) {
+      state = validatedTiles;
+      saveLayout();
     }
   }
   
@@ -1307,7 +1818,7 @@ class TileLayoutNotifier extends StateNotifier<List<TileConfig>> {
     final storage = PersistentStorage();
     // Convert TileConfig list to Map list for storage
     final tileMaps = state.map((tile) => tile.toJson()).toList();
-    await storage.saveTileLayout(tileMaps);
+    await storage.saveTileLayoutPortrait(tileMaps);
   }
   
   /// Get tile by ID
@@ -1335,15 +1846,653 @@ class TileLayoutNotifier extends StateNotifier<List<TileConfig>> {
   }
   
   /// Find available position for a tile of given size
-  (int, int)? findAvailablePosition(int width, int height, String excludeTileId) {
-    // Grid: 3 columns, 5 rows (or more)
-    for (int r = 0; r < 5; r++) {
-      for (int c = 0; c < 3; c++) {
+  /// Uses dynamic grid columns based on screen width
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId, {int gridColumns = 3}) {
+    // Dynamic grid: based on gridColumns parameter, 10 rows max
+    const int maxRows = 10;
+    for (int r = 0; r < maxRows; r++) {
+      for (int c = 0; c < gridColumns; c++) {
         // Check if this position and required area is free
         bool available = true;
         for (int dr = 0; dr < height && available; dr++) {
           for (int dc = 0; dc < width && available; dc++) {
-            if (c + dc >= 3 || r + dr >= 5) {
+            if (c + dc >= gridColumns || r + dr >= maxRows) {
+              available = false;
+            } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
+              available = false;
+            }
+          }
+        }
+        if (available) return (r, c);
+      }
+    }
+    return null;
+  }
+}
+
+/// Landscape tile layout notifier - manages landscape mode layout independently
+class TileLayoutLandscapeNotifier extends StateNotifier<List<TileConfig>> {
+  final Ref _ref;
+  final bool isTablet;
+  
+  TileLayoutLandscapeNotifier(this._ref, [this.isTablet = false]) : super(TileConfig.defaultTilesLandscape()) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final tileMaps = await storage.loadTileLayoutLandscape();
+    
+    // Get default tiles to ensure all tiles exist (including sponsors)
+    final defaultTiles = TileConfig.defaultTilesLandscape();
+    
+    if (tileMaps.isNotEmpty) {
+      final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
+      // Validate tile positions against landscape grid (6 columns x 3 rows)
+      final validatedTiles = _validateAndAdjustTiles(tiles, 6, 3);
+      
+      // If validation returns null (overlap detected), reset to defaults
+      if (validatedTiles == null) {
+        debugPrint('TileLayoutLandscape: Overlap detected, resetting to default layout');
+        await storage.clearTileLayout();
+        state = defaultTiles;
+        return;
+      }
+      
+      // Merge with default tiles to ensure all tiles exist (fixes missing sponsors)
+      state = _mergeWithDefaults(validatedTiles, defaultTiles);
+    } else {
+      // No saved layout - use defaults
+      state = defaultTiles;
+    }
+  }
+  
+  /// Merge loaded tiles with defaults to ensure all tiles exist
+  List<TileConfig> _mergeWithDefaults(List<TileConfig> loaded, List<TileConfig> defaults) {
+    // Create a map of existing tiles by id
+    final existingTiles = <String, TileConfig>{};
+    for (final tile in loaded) {
+      existingTiles[tile.id] = tile;
+    }
+    
+    // Build merged list - use loaded position if exists, otherwise use default
+    final merged = <TileConfig>[];
+    for (final defaultTile in defaults) {
+      if (existingTiles.containsKey(defaultTile.id)) {
+        // Use loaded tile
+        merged.add(existingTiles[defaultTile.id]!);
+      } else {
+        // Use default position for missing tiles (like sponsors)
+        merged.add(defaultTile);
+      }
+    }
+    return merged;
+  }
+  
+  /// Validate and adjust tile positions - returns null if overlap detected
+  List<TileConfig>? _validateAndAdjustTiles(List<TileConfig> tiles, int gridColumns, int gridRows) {
+    final validated = <TileConfig>[];
+    
+    // First pass: validate and clamp positions
+    for (final tile in tiles) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      if (newWidth > gridColumns) newWidth = gridColumns;
+      if (newHeight > gridRows) newHeight = gridRows;
+      if (newCol >= gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      if (newRow >= gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      if (newCol + newWidth > gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) {
+          newCol = 0;
+          newWidth = gridColumns;
+        }
+      }
+      if (newRow + newHeight > gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) {
+          newRow = 0;
+          newHeight = gridRows;
+        }
+      }
+      
+      newWidth = newWidth.clamp(1, 3);
+      newHeight = newHeight.clamp(1, 6);
+      
+      validated.add(tile.copyWith(
+        row: newRow.clamp(0, gridRows - 1),
+        col: newCol.clamp(0, gridColumns - 1),
+        width: newWidth,
+        height: newHeight,
+      ));
+    }
+    
+    // Second pass: check for overlaps
+    for (int i = 0; i < validated.length; i++) {
+      for (int j = i + 1; j < validated.length; j++) {
+        final t1 = validated[i];
+        final t2 = validated[j];
+        
+        // Check if rectangles overlap
+        bool overlaps = !(t1.col + t1.width <= t2.col || 
+                         t2.col + t2.width <= t1.col ||
+                         t1.row + t1.height <= t2.row ||
+                         t2.row + t2.height <= t1.row);
+        
+        if (overlaps) {
+          debugPrint('TileLayout: Overlap detected between ${t1.id} and ${t2.id}, need reset');
+          return null;
+        }
+      }
+    }
+    
+    return validated;
+  }
+  
+  void adjustForGridSize(int gridColumns, int gridRows) {
+    final validatedTiles = _validateAndAdjustTiles(state, gridColumns, gridRows);
+    
+    // If validation returns null (overlap detected), reset to defaults
+    if (validatedTiles == null) {
+      debugPrint('TileLayoutLandscape: Overlap detected in adjustForGridSize, resetting to default');
+      resetToDefault();
+      return;
+    }
+    
+    bool hasChanges = false;
+    for (int i = 0; i < state.length; i++) {
+      if (state[i].row != validatedTiles[i].row ||
+          state[i].col != validatedTiles[i].col ||
+          state[i].width != validatedTiles[i].width ||
+          state[i].height != validatedTiles[i].height) {
+        hasChanges = true;
+        break;
+      }
+    }
+    
+    if (hasChanges) {
+      state = validatedTiles;
+      saveLayout();
+    }
+  }
+  
+  void moveTile(String tileId, int newRow, int newCol) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: newRow, col: newCol);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resizeTile(String tileId, int newWidth, int newHeight) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void updateTile(String tileId, {int? row, int? col, int? width, int? height}) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: row, col: col, width: width, height: height);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void swapTiles(String tileId1, String tileId2) {
+    final tile1 = state.firstWhere((t) => t.id == tileId1);
+    final tile2 = state.firstWhere((t) => t.id == tileId2);
+    
+    final updated = state.map((tile) {
+      if (tile.id == tileId1) {
+        return tile.copyWith(row: tile2.row, col: tile2.col);
+      }
+      if (tile.id == tileId2) {
+        return tile.copyWith(row: tile1.row, col: tile1.col);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resetToDefault() {
+    state = TileConfig.defaultTilesLandscape();
+    saveLayout();
+  }
+  
+  Future<void> saveLayout() async {
+    final storage = PersistentStorage();
+    final tileMaps = state.map((tile) => tile.toJson()).toList();
+    await storage.saveTileLayoutLandscape(tileMaps);
+  }
+  
+  TileConfig? getTile(String tileId) {
+    try {
+      return state.firstWhere((t) => t.id == tileId);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  bool isPositionOccupied(int row, int col, String excludeTileId) {
+    for (final tile in state) {
+      if (tile.id == excludeTileId) continue;
+      
+      for (int r = tile.row; r < tile.row + tile.height; r++) {
+        for (int c = tile.col; c < tile.col + tile.width; c++) {
+          if (r == row && c == col) return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId, {int gridColumns = 6}) {
+    const int maxRows = 10;
+    for (int r = 0; r < maxRows; r++) {
+      for (int c = 0; c < gridColumns; c++) {
+        bool available = true;
+        for (int dr = 0; dr < height && available; dr++) {
+          for (int dc = 0; dc < width && available; dc++) {
+            if (c + dc >= gridColumns || r + dr >= maxRows) {
+              available = false;
+            } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
+              available = false;
+            }
+          }
+        }
+        if (available) return (r, c);
+      }
+    }
+    return null;
+  }
+}
+
+/// Tablet portrait tile layout notifier - manages tablet portrait mode layout (6 columns x 6 rows)
+class TileLayoutTabletPortraitNotifier extends StateNotifier<List<TileConfig>> {
+  final Ref _ref;
+  
+  TileLayoutTabletPortraitNotifier(this._ref) : super(TileConfig.defaultTilesTabletPortrait()) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final tileMaps = await storage.loadTileLayoutTabletPortrait();
+    
+    final defaultTiles = TileConfig.defaultTilesTabletPortrait();
+    
+    if (tileMaps.isNotEmpty) {
+      final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
+      final validatedTiles = _validateAndAdjustTiles(tiles, 6, 6);
+      
+      if (validatedTiles == null) {
+        debugPrint('TileLayoutTabletPortrait: Overlap detected, resetting to default layout');
+        await storage.clearTileLayoutTabletPortrait();
+        state = defaultTiles;
+        return;
+      }
+      
+      state = _mergeWithDefaults(validatedTiles, defaultTiles);
+    } else {
+      state = defaultTiles;
+    }
+  }
+  
+  List<TileConfig> _mergeWithDefaults(List<TileConfig> loaded, List<TileConfig> defaults) {
+    final existingTiles = <String, TileConfig>{};
+    for (final tile in loaded) {
+      existingTiles[tile.id] = tile;
+    }
+    
+    final merged = <TileConfig>[];
+    for (final defaultTile in defaults) {
+      if (existingTiles.containsKey(defaultTile.id)) {
+        merged.add(existingTiles[defaultTile.id]!);
+      } else {
+        merged.add(defaultTile);
+      }
+    }
+    return merged;
+  }
+  
+  List<TileConfig>? _validateAndAdjustTiles(List<TileConfig> tiles, int gridColumns, int gridRows) {
+    final validated = <TileConfig>[];
+    
+    for (final tile in tiles) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      if (newWidth > gridColumns) newWidth = gridColumns;
+      if (newHeight > gridRows) newHeight = gridRows;
+      if (newCol >= gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      if (newRow >= gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      if (newCol + newWidth > gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) { newCol = 0; newWidth = gridColumns; }
+      }
+      if (newRow + newHeight > gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) { newRow = 0; newHeight = gridRows; }
+      }
+      
+      newWidth = newWidth.clamp(1, 6);
+      newHeight = newHeight.clamp(1, 6);
+      
+      validated.add(tile.copyWith(
+        row: newRow.clamp(0, gridRows - 1),
+        col: newCol.clamp(0, gridColumns - 1),
+        width: newWidth,
+        height: newHeight,
+      ));
+    }
+    
+    // Check for overlaps
+    for (int i = 0; i < validated.length; i++) {
+      for (int j = i + 1; j < validated.length; j++) {
+        final t1 = validated[i];
+        final t2 = validated[j];
+        
+        bool overlaps = !(t1.col + t1.width <= t2.col || 
+                         t2.col + t2.width <= t1.col ||
+                         t1.row + t1.height <= t2.row ||
+                         t2.row + t2.height <= t1.row);
+        
+        if (overlaps) {
+          debugPrint('TileLayoutTabletPortrait: Overlap detected between ${t1.id} and ${t2.id}');
+          return null;
+        }
+      }
+    }
+    
+    return validated;
+  }
+  
+  void moveTile(String tileId, int newRow, int newCol) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: newRow, col: newCol);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resizeTile(String tileId, int newWidth, int newHeight) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void updateTile(String tileId, {int? row, int? col, int? width, int? height}) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: row, col: col, width: width, height: height);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resetToDefault() {
+    state = TileConfig.defaultTilesTabletPortrait();
+    saveLayout();
+  }
+  
+  Future<void> saveLayout() async {
+    final storage = PersistentStorage();
+    final tileMaps = state.map((tile) => tile.toJson()).toList();
+    await storage.saveTileLayoutTabletPortrait(tileMaps);
+  }
+  
+  TileConfig? getTile(String tileId) {
+    try {
+      return state.firstWhere((t) => t.id == tileId);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  bool isPositionOccupied(int row, int col, String excludeTileId) {
+    for (final tile in state) {
+      if (tile.id == excludeTileId) continue;
+      
+      for (int r = tile.row; r < tile.row + tile.height; r++) {
+        for (int c = tile.col; c < tile.col + tile.width; c++) {
+          if (r == row && c == col) return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId, {int gridColumns = 6}) {
+    const int maxRows = 10;
+    for (int r = 0; r < maxRows; r++) {
+      for (int c = 0; c < gridColumns; c++) {
+        bool available = true;
+        for (int dr = 0; dr < height && available; dr++) {
+          for (int dc = 0; dc < width && available; dc++) {
+            if (c + dc >= gridColumns || r + dr >= maxRows) {
+              available = false;
+            } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
+              available = false;
+            }
+          }
+        }
+        if (available) return (r, c);
+      }
+    }
+    return null;
+  }
+}
+
+/// Tablet landscape tile layout notifier - manages tablet landscape mode layout (8 columns x 4 rows)
+class TileLayoutTabletLandscapeNotifier extends StateNotifier<List<TileConfig>> {
+  final Ref _ref;
+  
+  TileLayoutTabletLandscapeNotifier(this._ref) : super(TileConfig.defaultTilesTabletLandscape()) {
+    _loadFromStorage();
+  }
+  
+  Future<void> _loadFromStorage() async {
+    final storage = PersistentStorage();
+    final tileMaps = await storage.loadTileLayoutTabletLandscape();
+    
+    final defaultTiles = TileConfig.defaultTilesTabletLandscape();
+    
+    if (tileMaps.isNotEmpty) {
+      final tiles = tileMaps.map((json) => TileConfig.fromJson(json)).toList();
+      final validatedTiles = _validateAndAdjustTiles(tiles, 8, 4);
+      
+      if (validatedTiles == null) {
+        debugPrint('TileLayoutTabletLandscape: Overlap detected, resetting to default layout');
+        await storage.clearTileLayoutTabletLandscape();
+        state = defaultTiles;
+        return;
+      }
+      
+      state = _mergeWithDefaults(validatedTiles, defaultTiles);
+    } else {
+      state = defaultTiles;
+    }
+  }
+  
+  List<TileConfig> _mergeWithDefaults(List<TileConfig> loaded, List<TileConfig> defaults) {
+    final existingTiles = <String, TileConfig>{};
+    for (final tile in loaded) {
+      existingTiles[tile.id] = tile;
+    }
+    
+    final merged = <TileConfig>[];
+    for (final defaultTile in defaults) {
+      if (existingTiles.containsKey(defaultTile.id)) {
+        merged.add(existingTiles[defaultTile.id]!);
+      } else {
+        merged.add(defaultTile);
+      }
+    }
+    return merged;
+  }
+  
+  List<TileConfig>? _validateAndAdjustTiles(List<TileConfig> tiles, int gridColumns, int gridRows) {
+    final validated = <TileConfig>[];
+    
+    for (final tile in tiles) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      if (newWidth > gridColumns) newWidth = gridColumns;
+      if (newHeight > gridRows) newHeight = gridRows;
+      if (newCol >= gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      if (newRow >= gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      if (newCol + newWidth > gridColumns) {
+        newCol = gridColumns - newWidth;
+        if (newCol < 0) { newCol = 0; newWidth = gridColumns; }
+      }
+      if (newRow + newHeight > gridRows) {
+        newRow = gridRows - newHeight;
+        if (newRow < 0) { newRow = 0; newHeight = gridRows; }
+      }
+      
+      newWidth = newWidth.clamp(1, 8);
+      newHeight = newHeight.clamp(1, 4);
+      
+      validated.add(tile.copyWith(
+        row: newRow.clamp(0, gridRows - 1),
+        col: newCol.clamp(0, gridColumns - 1),
+        width: newWidth,
+        height: newHeight,
+      ));
+    }
+    
+    // Check for overlaps
+    for (int i = 0; i < validated.length; i++) {
+      for (int j = i + 1; j < validated.length; j++) {
+        final t1 = validated[i];
+        final t2 = validated[j];
+        
+        bool overlaps = !(t1.col + t1.width <= t2.col || 
+                         t2.col + t2.width <= t1.col ||
+                         t1.row + t1.height <= t2.row ||
+                         t2.row + t2.height <= t1.row);
+        
+        if (overlaps) {
+          debugPrint('TileLayoutTabletLandscape: Overlap detected between ${t1.id} and ${t2.id}');
+          return null;
+        }
+      }
+    }
+    
+    return validated;
+  }
+  
+  void moveTile(String tileId, int newRow, int newCol) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: newRow, col: newCol);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resizeTile(String tileId, int newWidth, int newHeight) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void updateTile(String tileId, {int? row, int? col, int? width, int? height}) {
+    final updated = state.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(row: row, col: col, width: width, height: height);
+      }
+      return tile;
+    }).toList();
+    state = updated;
+  }
+  
+  void resetToDefault() {
+    state = TileConfig.defaultTilesTabletLandscape();
+    saveLayout();
+  }
+  
+  Future<void> saveLayout() async {
+    final storage = PersistentStorage();
+    final tileMaps = state.map((tile) => tile.toJson()).toList();
+    await storage.saveTileLayoutTabletLandscape(tileMaps);
+  }
+  
+  TileConfig? getTile(String tileId) {
+    try {
+      return state.firstWhere((t) => t.id == tileId);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  bool isPositionOccupied(int row, int col, String excludeTileId) {
+    for (final tile in state) {
+      if (tile.id == excludeTileId) continue;
+      
+      for (int r = tile.row; r < tile.row + tile.height; r++) {
+        for (int c = tile.col; c < tile.col + tile.width; c++) {
+          if (r == row && c == col) return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  (int, int)? findAvailablePosition(int width, int height, String excludeTileId, {int gridColumns = 8}) {
+    const int maxRows = 10;
+    for (int r = 0; r < maxRows; r++) {
+      for (int c = 0; c < gridColumns; c++) {
+        bool available = true;
+        for (int dr = 0; dr < height && available; dr++) {
+          for (int dc = 0; dc < width && available; dc++) {
+            if (c + dc >= gridColumns || r + dr >= maxRows) {
               available = false;
             } else if (isPositionOccupied(r + dr, c + dc, excludeTileId)) {
               available = false;

@@ -356,7 +356,13 @@ class PersistentStorage {
   // ==================== Lock Mode & Tile Layout ====================
   
   static const String _lockModeKey = 'lock_mode';
-  static const String _tileLayoutKey = 'tile_layout';
+  
+  // Separate keys for portrait and landscape layouts
+  static const String _tileLayoutPortraitKey = 'tile_layout_portrait';
+  static const String _tileLayoutLandscapeKey = 'tile_layout_landscape';
+  // Tablet layout keys
+  static const String _tileLayoutTabletPortraitKey = 'tile_layout_tablet_portrait';
+  static const String _tileLayoutTabletLandscapeKey = 'tile_layout_tablet_landscape';
   
   /// Save lock mode state (true = locked, false = unlocked/editable)
   Future<void> saveLockMode(bool locked) async {
@@ -370,19 +376,16 @@ class PersistentStorage {
     return prefs.getBool(_lockModeKey) ?? true;
   }
   
-  /// Save tile layout configuration
-  /// Format: JSON array of tile configs (each as Map<String, dynamic>)
-  Future<void> saveTileLayout(List<Map<String, dynamic>> tiles) async {
+  /// Save tile layout configuration for portrait mode
+  Future<void> saveTileLayoutPortrait(List<Map<String, dynamic>> tiles) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tileLayoutKey, jsonEncode(tiles));
+    await prefs.setString(_tileLayoutPortraitKey, jsonEncode(tiles));
   }
   
-  /// Load tile layout configuration
-  /// Returns empty list if not found (will use defaults)
-  /// Caller should convert Map to TileConfig using TileConfig.fromJson
-  Future<List<Map<String, dynamic>>> loadTileLayout() async {
+  /// Load tile layout configuration for portrait mode
+  Future<List<Map<String, dynamic>>> loadTileLayoutPortrait() async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_tileLayoutKey);
+    final jsonString = prefs.getString(_tileLayoutPortraitKey);
     if (jsonString == null || jsonString.isEmpty) {
       return [];
     }
@@ -390,14 +393,95 @@ class PersistentStorage {
       final List<dynamic> decoded = jsonDecode(jsonString);
       return decoded.cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('PersistentStorage: Error loading tile layout: $e');
+      debugPrint('PersistentStorage: Error loading portrait tile layout: $e');
       return [];
     }
   }
   
-  /// Clear tile layout (reset to defaults)
+  /// Save tile layout configuration for landscape mode
+  Future<void> saveTileLayoutLandscape(List<Map<String, dynamic>> tiles) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tileLayoutLandscapeKey, jsonEncode(tiles));
+  }
+  
+  /// Load tile layout configuration for landscape mode
+  Future<List<Map<String, dynamic>>> loadTileLayoutLandscape() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_tileLayoutLandscapeKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('PersistentStorage: Error loading landscape tile layout: $e');
+      return [];
+    }
+  }
+  
+  /// Clear tile layouts (reset to defaults)
   Future<void> clearTileLayout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tileLayoutKey);
+    await prefs.remove(_tileLayoutPortraitKey);
+    await prefs.remove(_tileLayoutLandscapeKey);
+  }
+  
+  // ==================== Tablet Tile Layout ====================
+  
+  /// Save tile layout configuration for tablet portrait mode
+  Future<void> saveTileLayoutTabletPortrait(List<Map<String, dynamic>> tiles) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tileLayoutTabletPortraitKey, jsonEncode(tiles));
+  }
+  
+  /// Load tile layout configuration for tablet portrait mode
+  Future<List<Map<String, dynamic>>> loadTileLayoutTabletPortrait() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_tileLayoutTabletPortraitKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('PersistentStorage: Error loading tablet portrait tile layout: $e');
+      return [];
+    }
+  }
+  
+  /// Save tile layout configuration for tablet landscape mode
+  Future<void> saveTileLayoutTabletLandscape(List<Map<String, dynamic>> tiles) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tileLayoutTabletLandscapeKey, jsonEncode(tiles));
+  }
+  
+  /// Load tile layout configuration for tablet landscape mode
+  Future<List<Map<String, dynamic>>> loadTileLayoutTabletLandscape() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_tileLayoutTabletLandscapeKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('PersistentStorage: Error loading tablet landscape tile layout: $e');
+      return [];
+    }
+  }
+  
+  /// Clear tablet tile layouts
+  Future<void> clearTileLayoutTabletPortrait() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tileLayoutTabletPortraitKey);
+  }
+  
+  /// Clear tablet landscape tile layout
+  Future<void> clearTileLayoutTabletLandscape() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tileLayoutTabletLandscapeKey);
   }
 }

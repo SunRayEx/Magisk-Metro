@@ -352,6 +352,7 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                "getAppVersion" -> result.success(getAppVersion())
                 "getModules" -> result.success(getModulesList())
                 "getApps" -> result.success(getInstalledApps())
                 "getMagiskVersion" -> result.success(getMagiskVersion())
@@ -555,6 +556,18 @@ class MainActivity : FlutterActivity() {
                 }
                 "fetchMagiskLogs" -> result.success(fetchMagiskLogs())
                 "clearMagiskLogs" -> result.success(clearMagiskLogs())
+                "createRemoveTag" -> {
+                    val modulePath = call.argument<String>("modulePath") ?: ""
+                    result.success(createRemoveTag(modulePath))
+                }
+                "removeRemoveTag" -> {
+                    val modulePath = call.argument<String>("modulePath") ?: ""
+                    result.success(removeRemoveTag(modulePath))
+                }
+                "createUpdateTag" -> {
+                    val modulePath = call.argument<String>("modulePath") ?: ""
+                    result.success(createUpdateTag(modulePath))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -2956,6 +2969,19 @@ class MainActivity : FlutterActivity() {
             )
         } catch (e: Exception) {
             emptyMap<String, Any>()
+        }
+    }
+
+    /**
+     * Get the app version from PackageManager
+     * @return The version string of this app, or "Unknown" if not available
+     */
+    private fun getAppVersion(): String {
+        return try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            packageInfo.versionName ?: "Unknown"
+        } catch (e: Exception) {
+            "Unknown"
         }
     }
 
@@ -5425,6 +5451,85 @@ class MainActivity : FlutterActivity() {
             sendLog("[ERROR] Error patching boot image: ${e.message}")
             e.printStackTrace()
             null
+        }
+    }
+    
+    // ==================== Module Tag Management ====================
+    
+    /**
+     * Create a remove tag file for a module (marks for removal on next reboot)
+     * @param modulePath The path to the module directory
+     * @return true if successful, false otherwise
+     */
+    private fun createRemoveTag(modulePath: String): Boolean {
+        if (modulePath.isEmpty()) {
+            android.util.Log.w("MainActivity", "createRemoveTag: modulePath is empty!")
+            return false
+        }
+        return try {
+            val removeFile = "$modulePath/remove"
+            android.util.Log.d("MainActivity", "createRemoveTag: Creating file at $removeFile")
+            
+            // First check if module directory exists
+            val checkDirProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls -la '$modulePath'"))
+            val checkDirReader = BufferedReader(InputStreamReader(checkDirProcess.inputStream))
+            val dirOutput = checkDirReader.readText()
+            checkDirProcess.waitFor()
+            android.util.Log.d("MainActivity", "Module directory contents: $dirOutput")
+            
+            // Create the remove file
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "touch '$removeFile'"))
+            process.waitFor()
+            val exitCode = process.exitValue()
+            android.util.Log.d("MainActivity", "createRemoveTag: touch exit code = $exitCode")
+            
+            // Verify file was created
+            val verifyProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls -la '$removeFile'"))
+            verifyProcess.waitFor()
+            val verifyOutput = verifyProcess.inputStream.bufferedReader().readText()
+            android.util.Log.d("MainActivity", "Verify file exists: $verifyOutput")
+            
+            exitCode == 0
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error creating remove tag: ${e.message}", e)
+            false
+        }
+    }
+    
+    /**
+     * Remove the remove tag file from a module (cancel pending removal)
+     * @param modulePath The path to the module directory
+     * @return true if successful, false otherwise
+     */
+    private fun removeRemoveTag(modulePath: String): Boolean {
+        if (modulePath.isEmpty()) return false
+        return try {
+            val removeFile = "$modulePath/remove"
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "rm -f '$removeFile'"))
+            process.waitFor()
+            process.exitValue() == 0
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error removing remove tag: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Create an update tag file for a module (marks for update on next reboot)
+     * @param modulePath The path to the module directory
+     * @return true if successful, false otherwise
+     */
+    private fun createUpdateTag(modulePath: String): Boolean {
+        if (modulePath.isEmpty()) return false
+        return try {
+            val updateDir = "$modulePath/update"
+            // Create the update directory (not a file - update is a directory in Magisk convention)
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "mkdir -p '$updateDir'"))
+            process.waitFor()
+            process.exitValue() == 0
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error creating update tag: ${e.message}")
+            false
         }
     }
 }

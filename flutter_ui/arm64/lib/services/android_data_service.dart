@@ -742,4 +742,71 @@ class AndroidDataService {
       return {};
     }
   }
+  
+  /// Check if a module has remove or update tag files
+  /// Magisk uses binary files (no extension) named "remove" and "update" directory
+  /// @param modulePath The path to the module directory (e.g., /data/adb/modules/ModuleName)
+  /// @return Map with hasRemoveTag and hasUpdateTag
+  static Future<Map<String, bool>> checkModuleTags(String modulePath) async {
+    try {
+      final removePath = '$modulePath/remove';
+      final updatePath = '$modulePath/update';
+      
+      // Check both - remove is a binary FILE, update is a DIRECTORY
+      // Just check if they exist - that's the Magisk convention
+      final results = await Future.wait([
+        fileExistsAsRoot(removePath),
+        fileExistsAsRoot(updatePath),
+      ]);
+      
+      return {
+        'hasRemoveTag': results[0],
+        'hasUpdateTag': results[1],
+      };
+    } catch (e) {
+      return {'hasRemoveTag': false, 'hasUpdateTag': false};
+    }
+  }
+  
+  /// Create a remove tag file for a module (marks for removal on next reboot)
+  /// @param modulePath The path to the module directory
+  /// @return true if successful, false otherwise
+  static Future<bool> createRemoveTag(String modulePath) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('createRemoveTag', {
+        'modulePath': modulePath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Remove the remove tag file from a module (cancel pending removal)
+  /// @param modulePath The path to the module directory
+  /// @return true if successful, false otherwise
+  static Future<bool> removeRemoveTag(String modulePath) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('removeRemoveTag', {
+        'modulePath': modulePath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Create an update tag file for a module (marks for update on next reboot)
+  /// @param modulePath The path to the module directory
+  /// @return true if successful, false otherwise
+  static Future<bool> createUpdateTag(String modulePath) async {
+    try {
+      final result = await _rootAccessChannel.invokeMethod<bool>('createUpdateTag', {
+        'modulePath': modulePath,
+      });
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
 }

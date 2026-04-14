@@ -3,12 +3,14 @@ class MagiskStatus {
   final bool isRooted;
   final bool isZygiskEnabled;
   final bool isRamdiskLoaded;
+  final String appVersion; // MagisKube app version
 
   const MagiskStatus({
     required this.versionCode,
     required this.isRooted,
     required this.isZygiskEnabled,
     required this.isRamdiskLoaded,
+    this.appVersion = '1.0.0',
   });
 
   MagiskStatus copyWith({
@@ -16,12 +18,14 @@ class MagiskStatus {
     bool? isRooted,
     bool? isZygiskEnabled,
     bool? isRamdiskLoaded,
+    String? appVersion,
   }) {
     return MagiskStatus(
       versionCode: versionCode ?? this.versionCode,
       isRooted: isRooted ?? this.isRooted,
       isZygiskEnabled: isZygiskEnabled ?? this.isZygiskEnabled,
       isRamdiskLoaded: isRamdiskLoaded ?? this.isRamdiskLoaded,
+      appVersion: appVersion ?? this.appVersion,
     );
   }
 }
@@ -38,6 +42,8 @@ class Module {
   final bool hasActionScript; // Whether module has action script (action.sh)
   final int? webUIPort;       // Port for web UI
   final bool needsReboot;     // Whether module needs reboot to take effect (update folder exists)
+  final bool hasRemoveTag;    // Whether module has remove tag (/data/adb/modules/%module%/remove exists)
+  final bool hasUpdateTag;   // Whether module has update tag (/data/adb/modules/%module%/update exists)
 
   const Module({
     required this.name,
@@ -51,7 +57,12 @@ class Module {
     this.hasActionScript = false,
     this.webUIPort,
     this.needsReboot = false,
+    this.hasRemoveTag = false,
+    this.hasUpdateTag = false,
   });
+
+  /// Check if module has any tag (remove or update)
+  bool get hasAnyTag => hasRemoveTag || hasUpdateTag;
 
   Module copyWith({
     String? name,
@@ -65,6 +76,8 @@ class Module {
     bool? hasActionScript,
     int? webUIPort,
     bool? needsReboot,
+    bool? hasRemoveTag,
+    bool? hasUpdateTag,
   }) {
     return Module(
       name: name ?? this.name,
@@ -78,6 +91,8 @@ class Module {
       hasActionScript: hasActionScript ?? this.hasActionScript,
       webUIPort: webUIPort ?? this.webUIPort,
       needsReboot: needsReboot ?? this.needsReboot,
+      hasRemoveTag: hasRemoveTag ?? this.hasRemoveTag,
+      hasUpdateTag: hasUpdateTag ?? this.hasUpdateTag,
     );
   }
 }

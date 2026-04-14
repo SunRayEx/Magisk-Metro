@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'providers/dashboard_providers.dart';
 import 'navigation/flip_page_route.dart' hide AnimatedBuilder;
 import 'screens/secondary_pages.dart';
 import 'l10n/app_localizations.dart';
+import 'utils/persistent_storage.dart';
+
+// 爱发电赞助链接
+const String _afdianSponsorUrl = 'https://afdian.com/a/SunRayEx';
 
 /// Dashboard Screen with Metro-style UI matching the reference design
 /// Features:
@@ -55,6 +60,17 @@ class _AnimatedDashboardScreenState
   double? _resizeStartX;
   double? _resizeStartY;
   
+  // Orientation and grid state tracking
+  Orientation? _lastOrientation;
+  GridConfig? _lastGridConfig;
+  bool _isFirstBuild = true;
+  bool _isRearrangingTiles = false;
+  bool _isInitialized = false;
+  
+  // Current orientation and device type tracking for use in methods
+  bool _currentIsLandscape = false;
+  bool _currentIsTablet = false;
+  
   @override
   bool get wantKeepAlive => true;
 
@@ -71,13 +87,20 @@ class _AnimatedDashboardScreenState
       if (mounted) {
         _entranceController.forward();
         _initTileAnimations();
+        // Mark as initialized after first frame
+        _isInitialized = true;
       }
     });
   }
   
   void _initTileAnimations() {
-    final tileConfigs = ref.read(tileLayoutProvider);
-    for (final tile in tileConfigs) {
+    // Initialize with both portrait and landscape configs
+    final portraitConfigs = ref.read(tileLayoutPortraitProvider);
+    final landscapeConfigs = ref.read(tileLayoutLandscapeProvider);
+    
+    // Merge both configs to ensure all tiles have animation controllers
+    final allConfigs = {...portraitConfigs, ...landscapeConfigs};
+    for (final tile in allConfigs) {
       _createTileAnimationController(tile.id);
     }
   }
@@ -101,31 +124,159 @@ class _AnimatedDashboardScreenState
     super.dispose();
   }
   
+  /// Get grid configuration based on screen size, orientation and device type
+  /// Phone: Portrait 3 columns x 6 rows, Landscape 6 columns x 3 rows
+  /// Tablet: Portrait 6 columns x 6 rows, Landscape 8 columns x 4 rows
+  GridConfig _getGridConfig(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+    
+    // Get the shortest side to determine device type (in dp)
+    final shortestSide = screenWidth < screenHeight ? screenWidth : screenHeight;
+    
+    // Determine device category based on shortest side (layout-sw approach)
+    // Phone: < 600dp
+    // Small tablet: 600dp - 840dp
+    // Large tablet: >= 840dp
+    final isPhone = shortestSide < 600;
+    final isSmallTablet = shortestSide >= 600 && shortestSide < 840;
+    final isLargeTablet = shortestSide >= 840;
+    
+    // Grid configuration based on device type and orientation
+    int columns;
+    int rows;
+    
+    if (isPhone) {
+      // Phone: smaller grid
+      if (isLandscape) {
+        // Landscape phone: 6 columns x 3 rows
+        columns = 6;
+        rows = 3;
+      } else {
+        // Portrait phone: 3 columns x 6 rows
+        columns = 3;
+        rows = 6;
+      }
+    } else {
+      // Tablet: larger grid
+      if (isLandscape) {
+        // Landscape tablet: 8 columns x 4 rows
+        columns = 8;
+        rows = 4;
+      } else {
+        // Portrait tablet: 6 columns x 6 rows
+        columns = 6;
+        rows = 6;
+      }
+    }
+    
+    return GridConfig(
+      columns: columns, 
+      rows: rows, 
+      isTablet: !isPhone, 
+      isLandscape: isLandscape,
+      isSmallTablet: isSmallTablet,
+      isLargeTablet: isLargeTablet,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isDark = ref.watch(isDarkModeProvider);
     final tileColorIndex = ref.watch(tileColorProvider);
     final customTileColors = ref.watch(customTileColorsProvider);
-    final tileConfigs = ref.watch(tileLayoutProvider);
     final isLocked = ref.watch(lockModeProvider);
-    final screenWidth = MediaQuery.of(context).size.width;
     
-    // Grid: 3 columns x 6 rows, each cell is square
-    final cellSize = (screenWidth - 6) / 3;
-    // Grid height = 6 rows
-    final gridHeight = cellSize * 6 + 10; // 6 rows + padding
+    // Determine current orientation and use appropriate layout provider
+    final screenSize = MediaQuery.of(context).size;
+    final isLandscape = screenSize.width > screenSize.height;
+    
+    // Update current orientation tracking for use in methods
+    _currentIsLandscape = isLandscape;
+    
+    // Determine if tablet based on shortest side
+    final shortestSide = screenSize.width < screenSize.height ? screenSize.width : screenSize.height;
+    final isTablet = shortestSide >= 600;
+    
+    // Update tablet tracking for use in save methods
+    _currentIsTablet = isTablet;
+    
+    // Watch the appropriate layout provider based on device type and orientation
+    final tileConfigs;
+    if (isTablet) {
+      if (isLandscape) {
+        tileConfigs = ref.watch(tileLayoutTabletLandscapeProvider);
+      } else {
+        tileConfigs = ref.watch(tileLayoutTabletPortraitProvider);
+      }
+    } else {
+      if (isLandscape) {
+        tileConfigs = ref.watch(tileLayoutLandscapeProvider);
+      } else {
+        tileConfigs = ref.watch(tileLayoutPortraitProvider);
+      }
+    }
+    
+    // Get adaptive grid configuration based on screen size and orientation
+    final gridConfig = _getGridConfig(context);
+    final screenWidth = screenSize.width;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Determine the correct provider for current orientation (for reference)
+    // Note: We're using the tileConfigs from the correct provider already
+    
+    // Check for grid config change - trigger rearrangement when columns change
+    // Important: Check BEFORE updating _lastGridConfig
+    final needsRearrange = _lastGridConfig != null && 
+        (_lastGridConfig!.columns != gridConfig.columns || 
+         _lastGridConfig!.rows != gridConfig.rows);
+    
+    if (needsRearrange) {
+      debugPrint('Grid config changed! columns: ${_lastGridConfig!.columns} -> ${gridConfig.columns}, rows: ${_lastGridConfig!.rows} -> ${gridConfig.rows}');
+      // Use current _lastGridConfig as old config, then update after
+      final oldGridConfig = _lastGridConfig!;
+      _lastGridConfig = gridConfig;
+      _lastOrientation = orientation;
+      
+      // Force update after build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _handleOrientationChange(oldGridConfig, gridConfig, tileConfigs);
+        }
+      });
+    } else {
+      // No change detected, just update tracking
+      _lastOrientation = orientation;
+      _lastGridConfig = gridConfig;
+    }
+    
+    // Calculate cell size based on grid configuration
+    final padding = 4.0;
+    final totalHorizontalPadding = padding * 2 + (gridConfig.columns - 1) * 2;
+    final cellSize = (screenWidth - totalHorizontalPadding) / gridConfig.columns;
+    
+    // Grid height based on rows
+    final totalVerticalPadding = padding * 2 + (gridConfig.rows - 1) * 2;
+    final gridHeight = cellSize * gridConfig.rows + totalVerticalPadding;
     
     final backgroundColor = isDark ? AppTheme.darkBackground : AppTheme.lightBackground;
     
     // Only initialize target positions if they haven't been set yet (first build or after reset)
     // Don't reset during drag - keep the pushed positions
-    if (_draggingTileId == null && _resizingTileId == null) {
+    if (_draggingTileId == null && _resizingTileId == null && !_isRearrangingTiles) {
       // Reset target positions to current config positions when not dragging
       for (final tile in tileConfigs) {
         _targetRows[tile.id] = tile.row;
         _targetCols[tile.id] = tile.col;
       }
+    }
+    
+    // Reset rearrangement flag after first build
+    if (_isFirstBuild) {
+      _isFirstBuild = false;
     }
     
     return TickerMode(
@@ -142,7 +293,7 @@ class _AnimatedDashboardScreenState
               );
             },
             child: Padding(
-              padding: const EdgeInsets.all(2.0),
+              padding: EdgeInsets.all(padding),
               child: SizedBox(
                 height: gridHeight,
                 child: _buildAnimatedGrid(
@@ -152,7 +303,8 @@ class _AnimatedDashboardScreenState
                   tileColorIndex, 
                   customTileColors, 
                   tileConfigs, 
-                  cellSize
+                  cellSize,
+                  gridConfig,
                 ),
               ),
             ),
@@ -160,6 +312,125 @@ class _AnimatedDashboardScreenState
         ),
       ),
     );
+  }
+  
+  /// Handle orientation change by adjusting tiles to fit new grid
+  /// Fixed: Now preserves user arrangements instead of resetting to defaults
+  void _handleOrientationChange(GridConfig oldConfig, GridConfig newConfig, List<TileConfig> currentTiles) {
+    // Skip if we're dragging or resizing
+    if (_draggingTileId != null || _resizingTileId != null) {
+      return;
+    }
+    
+    // Check if grid configuration actually changed
+    final columnsChanged = oldConfig.columns != newConfig.columns;
+    final rowsChanged = oldConfig.rows != newConfig.rows;
+    
+    if (!columnsChanged && !rowsChanged) {
+      debugPrint('GridConfig unchanged, skipping rearrangement');
+      return; // No actual grid change
+    }
+    
+    debugPrint('Orientation changed: ${oldConfig.columns}x${oldConfig.rows} -> ${newConfig.columns}x${newConfig.rows}');
+    debugPrint('Old isLandscape: ${oldConfig.isLandscape}, New isLandscape: ${newConfig.isLandscape}');
+    
+    _isRearrangingTiles = true;
+    
+    // Use the appropriate provider based on new config (considering tablet mode)
+    // Note: _currentIsTablet was updated in build() before this is called
+    final List<TileConfig> freshTiles;
+    if (_currentIsTablet) {
+      freshTiles = _currentIsLandscape 
+        ? ref.read(tileLayoutTabletLandscapeProvider)
+        : ref.read(tileLayoutTabletPortraitProvider);
+    } else {
+      freshTiles = _currentIsLandscape 
+        ? ref.read(tileLayoutLandscapeProvider)
+        : ref.read(tileLayoutPortraitProvider);
+    }
+    
+    // Adjust tiles to fit new grid bounds (only clamp, don't reset positions)
+    final newTileList = freshTiles.map((tile) {
+      int newRow = tile.row;
+      int newCol = tile.col;
+      int newWidth = tile.width;
+      int newHeight = tile.height;
+      
+      // Clamp position and size to new grid bounds
+      if (newWidth > newConfig.columns) newWidth = newConfig.columns;
+      if (newHeight > newConfig.rows) newHeight = newConfig.rows;
+      if (newCol >= newConfig.columns) {
+        newCol = newConfig.columns - newWidth;
+        if (newCol < 0) newCol = 0;
+      }
+      if (newRow >= newConfig.rows) {
+        newRow = newConfig.rows - newHeight;
+        if (newRow < 0) newRow = 0;
+      }
+      if (newCol + newWidth > newConfig.columns) {
+        newCol = newConfig.columns - newWidth;
+        if (newCol < 0) { newCol = 0; newWidth = newConfig.columns; }
+      }
+      if (newRow + newHeight > newConfig.rows) {
+        newRow = newConfig.rows - newHeight;
+        if (newRow < 0) { newRow = 0; newHeight = newConfig.rows; }
+      }
+      
+      // Only update if bounds changed
+      if (newRow != tile.row || newCol != tile.col ||
+          newWidth != tile.width || newHeight != tile.height) {
+        debugPrint('Adjusting tile ${tile.id}: (${tile.row}, ${tile.col}) -> (${newRow}, ${newCol}) size ${tile.width}x${tile.height} -> ${newWidth}x${newHeight}');
+        return tile.copyWith(
+          row: newRow,
+          col: newCol,
+          width: newWidth,
+          height: newHeight,
+        );
+      }
+      return tile;
+    }).toList();
+    
+    // Update state with adjusted layout (preserving user arrangement)
+    // Use the same provider we read from
+    final targetProvider = _currentIsTablet
+        ? (_currentIsLandscape ? tileLayoutTabletLandscapeProvider : tileLayoutTabletPortraitProvider)
+        : (_currentIsLandscape ? tileLayoutLandscapeProvider : tileLayoutPortraitProvider);
+    ref.read(targetProvider.notifier).state = newTileList;
+    
+    // Save the new layout to persistent storage
+    _saveTileLayout(newTileList, newConfig.isLandscape);
+    
+    // Update target positions for animation - read fresh
+    final tilesAfterUpdate = ref.read(targetProvider);
+    for (final tile in tilesAfterUpdate) {
+      _targetRows[tile.id] = tile.row;
+      _targetCols[tile.id] = tile.col;
+    }
+    
+    _isRearrangingTiles = false;
+    debugPrint('Orientation change handling complete - preserved user arrangement');
+  }
+  
+  /// Save tile layout to persistent storage (synchronous)
+  /// Fixed: Now considers tablet mode when saving
+  void _saveTileLayout(List<TileConfig> tiles, bool isLandscape) {
+    final storage = PersistentStorage();
+    final tileMaps = tiles.map((tile) => tile.toJson()).toList();
+    
+    // Save to the correct storage key based on device type and orientation
+    if (_currentIsTablet) {
+      if (isLandscape) {
+        storage.saveTileLayoutTabletLandscape(tileMaps);
+      } else {
+        storage.saveTileLayoutTabletPortrait(tileMaps);
+      }
+    } else {
+      if (isLandscape) {
+        storage.saveTileLayoutLandscape(tileMaps);
+      } else {
+        storage.saveTileLayoutPortrait(tileMaps);
+      }
+    }
   }
 
   Widget _buildAnimatedGrid(
@@ -169,7 +440,8 @@ class _AnimatedDashboardScreenState
     int tileColorIndex,
     Map<int, Color> customTileColors,
     List<TileConfig> tileConfigs,
-    double cellSize
+    double cellSize,
+    GridConfig gridConfig
   ) {
     return Stack(
       clipBehavior: Clip.none,
@@ -229,6 +501,7 @@ class _AnimatedDashboardScreenState
                 tileColorIndex,
                 customTileColors,
                 cellSize,
+                gridConfig,
               ),
             ),
           ),
@@ -245,6 +518,7 @@ class _AnimatedDashboardScreenState
     int tileColorIndex,
     Map<int, Color> customTileColors,
     double cellSize,
+    GridConfig gridConfig,
   ) {
     // Determine tile color index based on type
     int colorTileIndex;
@@ -334,8 +608,9 @@ class _AnimatedDashboardScreenState
       onLongPressMoveUpdate: (details) {
         if (_draggingTileId != tile.id) return;
         
-        final screenWidth = MediaQuery.of(context).size.width;
-        final cellSize = (screenWidth - 6) / 3;
+        // Use dynamic grid config for calculations
+        final gridCols = gridConfig.columns;
+        final gridRows = gridConfig.rows;
         
         // Calculate drag offset from original position
         final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
@@ -360,26 +635,33 @@ class _AnimatedDashboardScreenState
         final floatingLeft = originalLeft + _dragCurrentOffset.dx;
         final floatingTop = originalTop + _dragCurrentOffset.dy;
         
-        // Calculate target grid position
-        final newCol = ((gridLocalPos.dx - 2) / (cellSize + 2)).floor().clamp(0, TileConfig.gridColumns - tile.width).toInt();
-        final newRow = ((gridLocalPos.dy - 2) / (cellSize + 2)).floor().clamp(0, TileConfig.gridRows - tile.height).toInt();
+        // Calculate target grid position using dynamic grid values
+        final newCol = ((gridLocalPos.dx - 2) / (cellSize + 2)).floor().clamp(0, gridCols - tile.width).toInt();
+        final newRow = ((gridLocalPos.dy - 2) / (cellSize + 2)).floor().clamp(0, gridRows - tile.height).toInt();
         
-        // Check if we need to push other tiles based on floating position
-        final allTiles = ref.read(tileLayoutProvider);
-        _pushOtherTilesByFloatingPosition(tile, floatingLeft, floatingTop, newRow, newCol, allTiles, cellSize);
+        // Check if we need to push other tiles based on floating position - use current orientation and tablet provider
+        final allTiles = _currentIsTablet
+            ? (_currentIsLandscape 
+                ? ref.read(tileLayoutTabletLandscapeProvider)
+                : ref.read(tileLayoutTabletPortraitProvider))
+            : (_currentIsLandscape 
+                ? ref.read(tileLayoutLandscapeProvider)
+                : ref.read(tileLayoutPortraitProvider));
+        _pushOtherTilesByFloatingPosition(tile, floatingLeft, floatingTop, newRow, newCol, allTiles, cellSize, gridConfig);
       },
       onLongPressEnd: (details) {
         if (_draggingTileId != tile.id) return;
         
-        final screenWidth = MediaQuery.of(context).size.width;
-        final cellSize = (screenWidth - 6) / 3;
+        // Use dynamic grid config for calculations
+        final gridCols = gridConfig.columns;
+        final gridRows = gridConfig.rows;
         
         // Calculate final grid position
         final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
           final gridLocalPos = renderBox.globalToLocal(details.globalPosition);
-          final newCol = ((gridLocalPos.dx - 2) / (cellSize + 2)).floor().clamp(0, TileConfig.gridColumns - tile.width).toInt();
-          final newRow = ((gridLocalPos.dy - 2) / (cellSize + 2)).floor().clamp(0, TileConfig.gridRows - tile.height).toInt();
+          final newCol = ((gridLocalPos.dx - 2) / (cellSize + 2)).floor().clamp(0, gridCols - tile.width).toInt();
+          final newRow = ((gridLocalPos.dy - 2) / (cellSize + 2)).floor().clamp(0, gridRows - tile.height).toInt();
           
           // Finalize position
           _finalizeTilePosition(tile, newRow, newCol);
@@ -392,8 +674,17 @@ class _AnimatedDashboardScreenState
           _dragCurrentOffset = Offset.zero;
         });
         
-        // Save layout
-        ref.read(tileLayoutProvider.notifier).saveLayout();
+        // Save layout using correct provider - considering tablet mode
+        _saveTileLayout(
+          _currentIsTablet
+            ? (_currentIsLandscape 
+                ? ref.read(tileLayoutTabletLandscapeProvider)
+                : ref.read(tileLayoutTabletPortraitProvider))
+            : (_currentIsLandscape 
+                ? ref.read(tileLayoutLandscapeProvider)
+                : ref.read(tileLayoutPortraitProvider)),
+          _currentIsLandscape
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -444,10 +735,10 @@ class _AnimatedDashboardScreenState
                     final newHeight = (_resizeStartHeight! + (deltaY / cellSize).round()).clamp(1, 6);
                     
                     if (newWidth != tile.width || newHeight != tile.height) {
-                      if (!_wouldOverlap(tile, newWidth, newHeight)) {
-                        ref.read(tileLayoutProvider.notifier).resizeTile(tile.id, newWidth, newHeight);
+                      if (!_wouldOverlap(tile, newWidth, newHeight, gridConfig)) {
+                        _resizeTileDirect(tile.id, newWidth, newHeight);
                         // Push other tiles if needed
-                        _pushOtherTilesForResize(tile, newWidth, newHeight);
+                        _pushOtherTilesForResize(tile, newWidth, newHeight, gridConfig);
                       }
                     }
                   },
@@ -456,7 +747,8 @@ class _AnimatedDashboardScreenState
                       setState(() {
                         _resizingTileId = null;
                       });
-                      ref.read(tileLayoutProvider.notifier).saveLayout();
+                      // Save layout using direct method
+                      _saveCurrentLayout();
                     }
                   },
                   child: Container(
@@ -526,21 +818,23 @@ class _AnimatedDashboardScreenState
         );
         break;
       case 'sponsor':
-        // Sponsor tiles show a simple info dialog
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(localizations.sponsor),
-            content: Text(localizations.sponsorInfo),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(localizations.ok),
-              ),
-            ],
-          ),
-        );
+        // Sponsor tiles open Afdian sponsor page
+        _openSponsorUrl();
         break;
+    }
+  }
+  
+  /// Open sponsor URL in browser
+  Future<void> _openSponsorUrl() async {
+    final uri = Uri.parse(_afdianSponsorUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        debugPrint('Could not launch $_afdianSponsorUrl');
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
     }
   }
   
@@ -573,12 +867,16 @@ class _AnimatedDashboardScreenState
         );
       case 'modules':
         return _ModulesTileContent(
+          tileWidth: tile.width,
+          tileHeight: tile.height,
           cellSize: cellSize,
           textColor: textColor,
           localizations: localizations,
         );
       case 'apps':
         return _AppsTileContent(
+          tileWidth: tile.width,
+          tileHeight: tile.height,
           cellSize: cellSize,
           textColor: textColor,
           localizations: localizations,
@@ -626,6 +924,7 @@ class _AnimatedDashboardScreenState
     int targetCol,
     List<TileConfig> allTiles,
     double cellSize,
+    GridConfig gridConfig,
   ) {
     // Cooldown check - prevent rapid position changes
     final now = DateTime.now();
@@ -699,16 +998,16 @@ class _AnimatedDashboardScreenState
       if (centerRowDiff.abs() > centerColDiff.abs()) {
         // Vertical push
         final pushDir = centerRowDiff > 0 ? 1 : -1;
-        newRow = _findValidRow(overlappingTile, currentRow, pushDir, draggedBounds, allTiles);
+        newRow = _findValidRow(overlappingTile, currentRow, pushDir, draggedBounds, allTiles, gridConfig);
       } else {
         // Horizontal push
         final pushDir = centerColDiff > 0 ? 1 : -1;
-        newCol = _findValidCol(overlappingTile, currentCol, pushDir, draggedBounds, allTiles);
+        newCol = _findValidCol(overlappingTile, currentCol, pushDir, draggedBounds, allTiles, gridConfig);
       }
       
       // If still invalid, find any valid position
       if (_wouldOverlapAtPosition(overlappingTile, newRow, newCol, draggedBounds, allTiles)) {
-        final fallback = _findAnyValidPosition(overlappingTile, draggedBounds, allTiles);
+        final fallback = _findAnyValidPosition(overlappingTile, draggedBounds, allTiles, gridConfig);
         if (fallback != null) {
           newRow = fallback.row;
           newCol = fallback.col;
@@ -746,11 +1045,12 @@ class _AnimatedDashboardScreenState
   }
   
   /// Find valid row by moving in direction
-  int _findValidRow(TileConfig tile, int startRow, int direction, _GridBounds draggedBounds, List<TileConfig> allTiles) {
+  int _findValidRow(TileConfig tile, int startRow, int direction, _GridBounds draggedBounds, List<TileConfig> allTiles, GridConfig gridConfig) {
+    final gridRows = gridConfig.rows;
     int row = startRow;
-    for (int i = 0; i < TileConfig.gridRows; i++) {
+    for (int i = 0; i < gridRows; i++) {
       row += direction;
-      if (row < 0 || row + tile.height > TileConfig.gridRows) break;
+      if (row < 0 || row + tile.height > gridRows) break;
       if (!_wouldOverlapAtPosition(tile, row, _targetCols[tile.id] ?? tile.col, draggedBounds, allTiles)) {
         return row;
       }
@@ -759,11 +1059,12 @@ class _AnimatedDashboardScreenState
   }
   
   /// Find valid col by moving in direction
-  int _findValidCol(TileConfig tile, int startCol, int direction, _GridBounds draggedBounds, List<TileConfig> allTiles) {
+  int _findValidCol(TileConfig tile, int startCol, int direction, _GridBounds draggedBounds, List<TileConfig> allTiles, GridConfig gridConfig) {
+    final gridColumns = gridConfig.columns;
     int col = startCol;
-    for (int i = 0; i < TileConfig.gridColumns; i++) {
+    for (int i = 0; i < gridColumns; i++) {
       col += direction;
-      if (col < 0 || col + tile.width > TileConfig.gridColumns) break;
+      if (col < 0 || col + tile.width > gridColumns) break;
       if (!_wouldOverlapAtPosition(tile, _targetRows[tile.id] ?? tile.row, col, draggedBounds, allTiles)) {
         return col;
       }
@@ -772,9 +1073,11 @@ class _AnimatedDashboardScreenState
   }
   
   /// Find any valid position for tile
-  _GridPosition? _findAnyValidPosition(TileConfig tile, _GridBounds draggedBounds, List<TileConfig> allTiles) {
-    for (int r = 0; r <= TileConfig.gridRows - tile.height; r++) {
-      for (int c = 0; c <= TileConfig.gridColumns - tile.width; c++) {
+  _GridPosition? _findAnyValidPosition(TileConfig tile, _GridBounds draggedBounds, List<TileConfig> allTiles, GridConfig gridConfig) {
+    final gridRows = gridConfig.rows;
+    final gridColumns = gridConfig.columns;
+    for (int r = 0; r <= gridRows - tile.height; r++) {
+      for (int c = 0; c <= gridColumns - tile.width; c++) {
         if (!_wouldOverlapAtPosition(tile, r, c, draggedBounds, allTiles)) {
           return _GridPosition(row: r, col: c);
         }
@@ -784,12 +1087,18 @@ class _AnimatedDashboardScreenState
   }
   
   
-  /// Push tiles when resizing
-  void _pushOtherTilesForResize(TileConfig resizedTile, int newWidth, int newHeight) {
-    final allTiles = ref.read(tileLayoutProvider);
+  /// Push tiles when resizing - direct state manipulation
+  void _pushOtherTilesForResize(TileConfig resizedTile, int newWidth, int newHeight, GridConfig gridConfig) {
+    // Get current tiles from correct provider - considering tablet mode
+    final targetProvider = _currentIsTablet
+        ? (_currentIsLandscape ? tileLayoutTabletLandscapeProvider : tileLayoutTabletPortraitProvider)
+        : (_currentIsLandscape ? tileLayoutLandscapeProvider : tileLayoutPortraitProvider);
+    final allTiles = ref.read(targetProvider);
+    final gridRows = gridConfig.rows;
+    final gridColumns = gridConfig.columns;
     
-    for (final otherTile in allTiles) {
-      if (otherTile.id == resizedTile.id) continue;
+    final updatedTiles = allTiles.map((otherTile) {
+      if (otherTile.id == resizedTile.id) return otherTile;
       
       // Check if new size overlaps
       bool overlaps = false;
@@ -806,18 +1115,21 @@ class _AnimatedDashboardScreenState
       
       if (overlaps) {
         final pushDir = _calculatePushDirectionForResize(resizedTile, otherTile, newWidth, newHeight);
-        final newRow = (otherTile.row + pushDir.dy).round().clamp(0, TileConfig.gridRows - otherTile.height);
-        final newCol = (otherTile.col + pushDir.dx).round().clamp(0, TileConfig.gridColumns - otherTile.width);
+        final newRow = (otherTile.row + pushDir.dy).round().clamp(0, gridRows - otherTile.height);
+        final newCol = (otherTile.col + pushDir.dx).round().clamp(0, gridColumns - otherTile.width);
         
         setState(() {
           _targetRows[otherTile.id] = newRow;
           _targetCols[otherTile.id] = newCol;
         });
         
-        // Also update in provider
-        ref.read(tileLayoutProvider.notifier).moveTile(otherTile.id, newRow, newCol);
+        return otherTile.copyWith(row: newRow, col: newCol);
       }
-    }
+      return otherTile;
+    }).toList();
+    
+    // Update state directly
+    ref.read(targetProvider.notifier).state = updatedTiles;
   }
   
   Offset _calculatePushDirectionForResize(TileConfig resized, TileConfig other, int newWidth, int newHeight) {
@@ -861,28 +1173,64 @@ class _AnimatedDashboardScreenState
     return Offset(pushCol.toDouble(), pushRow.toDouble());
   }
   
-  /// Finalize tile position after drag ends
-  void _finalizeTilePosition(TileConfig tile, int newRow, int newCol) {
-    final layoutNotifier = ref.read(tileLayoutProvider.notifier);
-    final allTiles = ref.read(tileLayoutProvider);
-    
-    // First, move all pushed tiles to their target positions
-    for (final otherTile in allTiles) {
-      if (otherTile.id == tile.id) continue;
-      
-      final targetRow = _targetRows[otherTile.id] ?? otherTile.row;
-      final targetCol = _targetCols[otherTile.id] ?? otherTile.col;
-      
-      if (targetRow != otherTile.row || targetCol != otherTile.col) {
-        layoutNotifier.moveTile(otherTile.id, targetRow, targetCol);
+  /// Resize a tile directly in the state
+  void _resizeTileDirect(String tileId, int newWidth, int newHeight) {
+    final targetProvider = _currentIsTablet
+        ? (_currentIsLandscape ? tileLayoutTabletLandscapeProvider : tileLayoutTabletPortraitProvider)
+        : (_currentIsLandscape ? tileLayoutLandscapeProvider : tileLayoutPortraitProvider);
+    final tiles = ref.read(targetProvider);
+    final updatedTiles = tiles.map((tile) {
+      if (tile.id == tileId) {
+        return tile.copyWith(width: newWidth, height: newHeight);
       }
+      return tile;
+    }).toList();
+    ref.read(targetProvider.notifier).state = updatedTiles;
+  }
+  
+  /// Save current layout to persistent storage
+  void _saveCurrentLayout() {
+    List<TileConfig> tiles;
+    if (_currentIsTablet) {
+      tiles = _currentIsLandscape 
+        ? ref.read(tileLayoutTabletLandscapeProvider)
+        : ref.read(tileLayoutTabletPortraitProvider);
+    } else {
+      tiles = _currentIsLandscape 
+        ? ref.read(tileLayoutLandscapeProvider)
+        : ref.read(tileLayoutPortraitProvider);
     }
+    _saveTileLayout(tiles, _currentIsLandscape);
+  }
+  
+  /// Finalize tile position after drag ends - direct state manipulation
+  void _finalizeTilePosition(TileConfig tile, int newRow, int newCol) {
+    final targetProvider = _currentIsTablet
+        ? (_currentIsLandscape ? tileLayoutTabletLandscapeProvider : tileLayoutTabletPortraitProvider)
+        : (_currentIsLandscape ? tileLayoutLandscapeProvider : tileLayoutPortraitProvider);
+    final allTiles = ref.read(targetProvider);
     
-    // Then move the dragged tile to its final position
-    layoutNotifier.moveTile(tile.id, newRow, newCol);
+    // Build updated list - first move pushed tiles, then move dragged tile
+    final updatedTiles = allTiles.map((otherTile) {
+      if (otherTile.id == tile.id) {
+        // This is the dragged tile - move to final position
+        return otherTile.copyWith(row: newRow, col: newCol);
+      }
+      
+      final targetRow = _targetRows[otherTile.id];
+      final targetCol = _targetCols[otherTile.id];
+      
+      if (targetRow != null && targetCol != null && 
+          (targetRow != otherTile.row || targetCol != otherTile.col)) {
+        return otherTile.copyWith(row: targetRow, col: targetCol);
+      }
+      return otherTile;
+    }).toList();
     
-    // Update all target positions to match final positions
-    final updatedTiles = ref.read(tileLayoutProvider);
+    // Update state directly
+    ref.read(targetProvider.notifier).state = updatedTiles;
+    
+    // Update target positions
     setState(() {
       for (final t in updatedTiles) {
         _targetRows[t.id] = t.row;
@@ -891,20 +1239,74 @@ class _AnimatedDashboardScreenState
     });
   }
   
-  /// Check if resizing would overlap
-  bool _wouldOverlap(TileConfig tile, int newWidth, int newHeight) {
-    final layoutNotifier = ref.read(tileLayoutProvider.notifier);
+  /// Check if resizing would overlap - direct calculation
+  bool _wouldOverlap(TileConfig tile, int newWidth, int newHeight, GridConfig gridConfig) {
+    final targetProvider = _currentIsTablet
+        ? (_currentIsLandscape ? tileLayoutTabletLandscapeProvider : tileLayoutTabletPortraitProvider)
+        : (_currentIsLandscape ? tileLayoutLandscapeProvider : tileLayoutPortraitProvider);
+    final allTiles = ref.read(targetProvider);
     
-    for (int r = tile.row; r < tile.row + newHeight; r++) {
-      for (int c = tile.col; c < tile.col + newWidth; c++) {
-        if (c >= TileConfig.gridColumns) return true;
-        if (layoutNotifier.isPositionOccupied(r, c, tile.id)) {
-          return true;
-        }
+    // Check bounds
+    if (tile.col + newWidth > gridConfig.columns) return true;
+    if (tile.row + newHeight > gridConfig.rows) return true;
+    
+    // Check overlap with other tiles
+    for (final otherTile in allTiles) {
+      if (otherTile.id == tile.id) continue;
+      
+      // Check if the new size overlaps with this tile
+      final newLeft = tile.col;
+      final newRight = tile.col + newWidth;
+      final newTop = tile.row;
+      final newBottom = tile.row + newHeight;
+      
+      final otherLeft = otherTile.col;
+      final otherRight = otherTile.col + otherTile.width;
+      final otherTop = otherTile.row;
+      final otherBottom = otherTile.row + otherTile.height;
+      
+      // Check for overlap
+      if (newLeft < otherRight && newRight > otherLeft &&
+          newTop < otherBottom && newBottom > otherTop) {
+        return true;
       }
     }
     return false;
   }
+}
+
+/// Grid configuration class for adaptive layouts
+class GridConfig {
+  final int columns;
+  final int rows;
+  final bool isTablet;
+  final bool isLandscape;
+  final bool isSmallTablet;
+  final bool isLargeTablet;
+  
+  const GridConfig({
+    required this.columns,
+    required this.rows,
+    required this.isTablet,
+    required this.isLandscape,
+    this.isSmallTablet = false,
+    this.isLargeTablet = false,
+  });
+  
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GridConfig &&
+          runtimeType == other.runtimeType &&
+          columns == other.columns &&
+          rows == other.rows &&
+          isTablet == other.isTablet &&
+          isLandscape == other.isLandscape &&
+          isSmallTablet == other.isSmallTablet &&
+          isLargeTablet == other.isLargeTablet;
+
+  @override
+  int get hashCode => Object.hash(columns, rows, isTablet, isLandscape, isSmallTablet, isLargeTablet);
 }
 
 /// Grid bounds helper class for overlap detection
@@ -1045,8 +1447,120 @@ class _MagiskTileContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(magiskStatusProvider);
-    final isSmallTile = tileWidth == 1;
-    final titleFontSize = isSmallTile ? cellSize * 0.12 : cellSize * 0.14;
+    final appVersionAsync = ref.watch(appVersionProvider);
+    
+    // 1x1 tile: only show icon with left offset (15% offset) with smooth scale animation
+    if (tileWidth == 1 && tileHeight == 1) {
+      return Center(
+        child: Container(
+          margin: EdgeInsets.only(right: cellSize * 0.15),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (child, animation) {
+              return ScaleTransition(
+                scale: animation,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: child,
+                ),
+              );
+            },
+            child: SvgPicture.asset(
+              'assets/magisk_icon1.svg',
+              key: ValueKey('magisk_1x1_${cellSize.hashCode}'),
+              width: cellSize * 0.7125,
+              height: cellSize * 0.7125,
+              colorFilter: ColorFilter.mode(textColor, BlendMode.srcIn),
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 1x2 tile: icon in top half (偏左), title and status in bottom left with smooth scale animation
+    if (tileWidth == 1 && tileHeight == 2) {
+      return Padding(
+        padding: const EdgeInsets.all(6.0),
+        child: Column(
+          children: [
+            // Top half: icon 偏左 (offset 15% to left using margin)
+            Expanded(
+              flex: 3,
+              child: Center(
+                child: Container(
+                  margin: EdgeInsets.only(right: cellSize * 0.15),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) {
+                      return ScaleTransition(
+                        scale: animation,
+                        child: FadeTransition(
+                          opacity: animation,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: SvgPicture.asset(
+                      'assets/magisk_icon1.svg',
+                      key: ValueKey('magisk_1x2_${cellSize.hashCode}'),
+                      width: cellSize * 0.7125,
+                      height: cellSize * 0.7125,
+                      colorFilter: ColorFilter.mode(textColor, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Bottom half: title + status on left
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'MagisKube',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w900,
+                        fontSize: cellSize * 0.13,
+                        color: textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    Text(
+                      'v${appVersionAsync.valueOrNull ?? '1.0'}',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: cellSize * 0.09,
+                        color: textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    Text(
+                      '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: cellSize * 0.08,
+                        color: textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 2x1 or larger: show icon + title on left, status below
+    final titleFontSize = cellSize * 0.14;
     final contextFontSize = cellSize * 0.08;
 
     return Padding(
@@ -1068,7 +1582,7 @@ class _MagiskTileContent extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSmallTile ? 'Magisk' : 'Magisk ${status.versionCode}',
+                      'MagisKube v${appVersionAsync.valueOrNull ?? '1.0'}',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w900,
                         fontSize: titleFontSize,
@@ -1077,17 +1591,16 @@ class _MagiskTileContent extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
-                    if (!isSmallTile || tileHeight >= 2)
-                      Text(
-                        '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          fontSize: titleFontSize * 0.7,
-                          color: textColor,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                    Text(
+                      '[${status.isRooted ? localizations.enabled : localizations.disabled}]',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: titleFontSize * 0.7,
+                        color: textColor,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ],
                 ),
               ),
@@ -1210,15 +1723,27 @@ class _ContributorTileContent extends ConsumerWidget {
 }
 
 class _ModulesTileContent extends ConsumerWidget {
+  final int tileWidth;
+  final int tileHeight;
   final double cellSize;
   final Color textColor;
   final AppLocalizations localizations;
   
   const _ModulesTileContent({
+    required this.tileWidth,
+    required this.tileHeight,
     required this.cellSize,
     required this.textColor,
     required this.localizations,
   });
+  
+  int _getVisibleItems() {
+    // 1x2: 5 items, 1x3: 8 items, 1x4: 10 items
+    if (tileHeight >= 4) return 10;
+    if (tileHeight >= 3) return 8;
+    if (tileHeight >= 2) return 5;
+    return 1;
+  }
   
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1227,6 +1752,7 @@ class _ModulesTileContent extends ConsumerWidget {
     final titleSize = cellSize * 0.16;
     final textSize = cellSize * 0.1;
     final countSize = cellSize * 0.25;
+    final visibleItems = _getVisibleItems();
 
     return Padding(
       padding: const EdgeInsets.all(6.0),
@@ -1241,9 +1767,9 @@ class _ModulesTileContent extends ConsumerWidget {
           Expanded(
             child: _ScrollingTextCarousel(
               items: enabledModules.map((m) => m.name).toList(),
-              visibleItems: 1,
-              infinite: true,
-              duration: const Duration(seconds: 2),
+              visibleItems: visibleItems,
+              infinite: visibleItems > 1,
+              duration: const Duration(seconds: 3),
               textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: textSize, color: textColor),
             ),
           ),
@@ -1261,15 +1787,27 @@ class _ModulesTileContent extends ConsumerWidget {
 }
 
 class _AppsTileContent extends ConsumerWidget {
+  final int tileWidth;
+  final int tileHeight;
   final double cellSize;
   final Color textColor;
   final AppLocalizations localizations;
   
   const _AppsTileContent({
+    required this.tileWidth,
+    required this.tileHeight,
     required this.cellSize,
     required this.textColor,
     required this.localizations,
   });
+  
+  int _getVisibleItems() {
+    // 1x2: 5 items, 1x3: 8 items, 1x4: 10 items
+    if (tileHeight >= 4) return 10;
+    if (tileHeight >= 3) return 8;
+    if (tileHeight >= 2) return 5;
+    return 1;
+  }
   
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1278,6 +1816,7 @@ class _AppsTileContent extends ConsumerWidget {
     final titleSize = cellSize * 0.16;
     final textSize = cellSize * 0.1;
     final countSize = cellSize * 0.25;
+    final visibleItems = _getVisibleItems();
 
     return Padding(
       padding: const EdgeInsets.all(6.0),
@@ -1292,9 +1831,9 @@ class _AppsTileContent extends ConsumerWidget {
           Expanded(
             child: _ScrollingTextCarousel(
               items: rootApps.map((a) => a.name).toList(),
-              visibleItems: 1,
-              infinite: true,
-              duration: const Duration(seconds: 2),
+              visibleItems: visibleItems,
+              infinite: visibleItems > 1,
+              duration: const Duration(seconds: 3),
               textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: textSize, color: textColor),
             ),
           ),

@@ -1,7 +1,7 @@
 name: magiskube
 description: MagisKube - Metro UI style dashboard for Magisk
 publish_to: 'none'
-version: 10001.0.0+10001
+version: 1.0.0+10101
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
