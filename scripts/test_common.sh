@@ -9,9 +9,8 @@ export ANDROID_AVD_HOME="$ANDROID_EMULATOR_HOME/avd"
 export PATH="$PATH:$ANDROID_HOME/platform-tools"
 
 emu="$ANDROID_HOME/emulator/emulator"
-cli_tools="$ANDROID_HOME/cmdline-tools/latest"
-sdk="$cli_tools/bin/sdkmanager"
-avd="$cli_tools/bin/avdmanager"
+sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+avd="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
 
 boot_timeout=100
 
@@ -43,32 +42,30 @@ am_instrument() {
   fi
 }
 
+# $1 = pkg
+wait_for_pm() {
+  sleep 5
+  adb shell pm uninstall $1 || true
+}
+
 run_setup() {
-  local apk=$1
+  local variant=$1
   adb shell 'PATH=$PATH:/debug_ramdisk magisk -v'
 
   # Install the Magisk app
-  adb install -r -g $apk
+  adb install -r -g out/app-${variant}.apk
 
   # Install the test app
   adb install -r -g out/test.apk
 
-  local app='com.MagisKube.magisk.test/com.MagisKube.magisk.test.AppTestRunner'
+  local app='com.topjohnwu.magisk.test/com.topjohnwu.magisk.test.AppTestRunner'
 
   # Run setup through the test app
   am_instrument '.Environment#setupEnvironment' $app
 }
 
-print_apks() {
-  if [ "$#" -eq 0 ]; then
-    find out -maxdepth 1 -type f -name "app-*.apk" -or -name "apk-*.apk"
-  else
-    echo "$@"
-  fi
-}
-
 run_tests() {
-  local pkg='com.MagisKube.magisk.test'
+  local pkg='com.topjohnwu.magisk.test'
   local self="$pkg/$pkg.TestRunner"
   local app="$pkg/$pkg.AppTestRunner"
   local stub="repackaged.$pkg/$pkg.AppTestRunner"

@@ -12,8 +12,10 @@
     </data>
 
     <FrameLayout
+        style="@style/WidgetFoundation.Metro.Page"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="?colorSurface">
 
         <include
             android:id="@+id/log_filter_magisk"
@@ -33,13 +35,15 @@
             android:layout_marginBottom="72dp"
             app:layout_fitsSystemWindowsInsets="bottom"
             app:backgroundTint="?colorSurfaceSurfaceVariant"
+            app:elevation="0dp"
+            app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Metro.Square"
             app:srcCompat="@drawable/ic_folder_list"
             app:tint="?colorPrimary"
             tools:layout_marginBottom="64dp" />
 
         <com.google.android.material.circularreveal.cardview.CircularRevealCardView
             android:id="@+id/log_filter"
-            style="@style/WidgetFoundation.Card"
+            style="@style/WidgetFoundation.Card.Metro"
             app:cardBackgroundColor="?colorSurface"
             android:layout_width="match_parent"
             android:layout_height="match_parent"

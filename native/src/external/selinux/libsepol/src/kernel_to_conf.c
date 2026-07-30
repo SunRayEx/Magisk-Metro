@@ -463,30 +463,53 @@ static int write_class_decl_rules_to_conf(FILE *out, struct policydb *pdb)
 static int write_sids_to_conf(FILE *out, const char *const *sid_to_str,
 			      unsigned num_sids, struct ocontext *isids)
 {
+	struct ocontext *isid;
 	struct strs *strs;
 	char *sid;
+	char unknown[18];
 	unsigned i;
+	int rc;
 
-	strs = isids_to_strs(sid_to_str, num_sids, isids);
-	if (!strs) {
-		ERR(NULL, "Error writing sid rules to policy.conf");
-		return -1;
+	rc = strs_init(&strs, num_sids+1);
+	if (rc != 0) {
+		goto exit;
 	}
 
-	if (strs_num_items(strs) == 0) {
-		strs_destroy(&strs);
-		return 0;
+	for (isid = isids; isid != NULL; isid = isid->next) {
+		i = isid->sid[0];
+		if (i < num_sids && sid_to_str[i]) {
+			sid = strdup(sid_to_str[i]);
+		} else {
+			snprintf(unknown, sizeof(unknown), "%s%u", "UNKNOWN", i);
+			sid = strdup(unknown);
+		}
+		if (!sid) {
+			rc = -1;
+			goto exit;
+		}
+		rc = strs_add_at_index(strs, sid, i);
+		if (rc != 0) {
+			free(sid);
+			goto exit;
+		}
 	}
 
-	for (i=1; i < strs_num_items(strs); i++) {
+	for (i=0; i<strs_num_items(strs); i++) {
 		sid = strs_read_at_index(strs, i);
+		if (!sid) {
+			continue;
+		}
 		sepol_printf(out, "sid %s\n", sid);
 	}
 
+exit:
 	strs_free_all(strs);
 	strs_destroy(&strs);
+	if (rc != 0) {
+		ERR(NULL, "Error writing sid rules to policy.conf");
+	}
 
-	return 0;
+	return rc;
 }
 
 static int write_sid_decl_rules_to_conf(FILE *out, struct policydb *pdb)
@@ -1662,48 +1685,6 @@ exit:
 
 	if (rc != 0) {
 		ERR(NULL, "Error writing typepermissive rules to policy.conf");
-	}
-
-	return rc;
-}
-
-static int write_type_neveraudit_rules_to_conf(FILE *out, struct policydb *pdb)
-{
-	struct strs *strs;
-	char *name;
-	struct ebitmap_node *node;
-	unsigned i, num;
-	int rc = 0;
-
-	rc = strs_init(&strs, pdb->p_types.nprim);
-	if (rc != 0) {
-		goto exit;
-	}
-
-	ebitmap_for_each_positive_bit(&pdb->neveraudit_map, node, i) {
-		rc = strs_add(strs, pdb->p_type_val_to_name[i-1]);
-		if (rc != 0) {
-			goto exit;
-		}
-	}
-
-	strs_sort(strs);
-
-	num = strs_num_items(strs);
-	for (i=0; i<num; i++) {
-		name = strs_read_at_index(strs, i);
-		if (!name) {
-			rc = -1;
-			goto exit;
-		}
-		sepol_printf(out, "neveraudit %s;\n", name);
-	}
-
-exit:
-	strs_destroy(&strs);
-
-	if (rc != 0) {
-		ERR(NULL, "Error writing typeneveraudit rules to policy.conf");
 	}
 
 	return rc;
@@ -3244,11 +3225,6 @@ int sepol_kernel_policydb_to_conf(FILE *out, struct policydb *pdb)
 	}
 
 	rc = write_type_permissive_rules_to_conf(out, pdb);
-	if (rc != 0) {
-		goto exit;
-	}
-
-	rc = write_type_neveraudit_rules_to_conf(out, pdb);
 	if (rc != 0) {
 		goto exit;
 	}

@@ -100,9 +100,7 @@ impl DbEntryKey {
             DbEntryKey::ZygiskConfig => "zygisk",
             DbEntryKey::BootloopCount => "bootloop",
             DbEntryKey::SuManager => "requester",
-            DbEntryKey::SulistConfig => "sulist",
-            // Handle any future keys
-            _ => "unknown",
+            _ => "",
         }
     }
 }
@@ -256,10 +254,7 @@ impl MagiskD {
             DbEntryKey::DenylistConfig => 0,
             DbEntryKey::ZygiskConfig => self.is_emulator as i32,
             DbEntryKey::BootloopCount => 0,
-            DbEntryKey::SuManager => 0,
-            DbEntryKey::SulistConfig => 0,
-            // Handle any future keys
-            _ => 0,
+            _ => -1,
         };
         let mut func = |_: &[String], values: &DbValues| {
             val = values.get_int(0);

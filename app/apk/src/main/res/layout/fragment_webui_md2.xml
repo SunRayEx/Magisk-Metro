@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data />
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        style="@style/WidgetFoundation.Metro.Page"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?colorSurface">
+
+        <WebView
+            android:id="@+id/module_webview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="@dimen/internal_action_bar_size"
+            android:background="?colorSurface"
+            app:layout_fitsSystemWindowsInsets="top|bottom"
+            tools:ignore="WebViewLayout" />
+
+        <LinearLayout
+            android:id="@+id/loading_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                style="@style/WidgetFoundation.ProgressBar.Indeterminate" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/l1"
+                android:text="@string/loading"
+                android:textAppearance="@style/AppearanceFoundation.Title"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/error_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="@string/metro_module_webui_missing"
+            android:textAppearance="@style/AppearanceFoundation.Title"
+            android:visibility="gone" />
+
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
+            android:id="@+id/snackbar_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:fitsSystemWindowsInsets="top|bottom" />
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+</layout>

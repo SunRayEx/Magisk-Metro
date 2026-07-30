@@ -5,9 +5,11 @@ import android.content.res.Resources
 import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.databinding.Bindable
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.core.BuildConfig
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
@@ -15,12 +17,12 @@ import com.topjohnwu.magisk.core.ktx.activity
 import com.topjohnwu.magisk.core.tasks.AppMigration
 import com.topjohnwu.magisk.core.utils.LocaleSetting
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils
-import com.topjohnwu.magisk.core.utils.TextHolder
-import com.topjohnwu.magisk.core.utils.asText
 import com.topjohnwu.magisk.databinding.DialogSettingsAppNameBinding
 import com.topjohnwu.magisk.databinding.DialogSettingsDownloadPathBinding
 import com.topjohnwu.magisk.databinding.DialogSettingsUpdateChannelBinding
 import com.topjohnwu.magisk.databinding.set
+import com.topjohnwu.magisk.utils.TextHolder
+import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.magisk.core.R as CoreR
@@ -59,6 +61,26 @@ object LanguageSystem : BaseSettingsItem.Blank() {
 object Theme : BaseSettingsItem.Blank() {
     override val icon = R.drawable.ic_paint
     override val title = CoreR.string.section_theme.asText()
+}
+
+object DarkMode : BaseSettingsItem.Selector() {
+    override val icon = R.drawable.ic_day_night
+    override val title = R.string.metro_dark_mode_title.asText()
+    override val entryRes = R.array.metro_dark_mode_entries
+
+    override var value: Int
+        get() = when (Config.darkTheme) {
+            AppCompatDelegate.MODE_NIGHT_NO -> 1
+            AppCompatDelegate.MODE_NIGHT_YES -> 2
+            else -> 0
+        }
+        set(value) {
+            Config.darkTheme = when (value) {
+                1 -> AppCompatDelegate.MODE_NIGHT_NO
+                2 -> AppCompatDelegate.MODE_NIGHT_YES
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+        }
 }
 
 // --- App
@@ -116,6 +138,7 @@ object Restore : BaseSettingsItem.Blank() {
 }
 
 object AddShortcut : BaseSettingsItem.Blank() {
+    override val icon = R.drawable.ic_forth_md2
     override val title = CoreR.string.add_shortcut_title.asText()
     override val description = CoreR.string.setting_add_shortcut_summary.asText()
 }
@@ -205,6 +228,7 @@ object Magisk : BaseSettingsItem.Section() {
 }
 
 object Zygisk : BaseSettingsItem.Toggle() {
+    override val icon = CoreR.drawable.ic_magisk_outline
     override val title = CoreR.string.zygisk.asText()
     override val description get() =
         if (mismatch) CoreR.string.reboot_apply_change.asText()
@@ -219,8 +243,9 @@ object Zygisk : BaseSettingsItem.Toggle() {
 }
 
 object DenyList : BaseSettingsItem.Toggle() {
-    override val title = CoreR.string.settings_denylist_title.asText()
-    override val description get() = CoreR.string.settings_denylist_summary.asText()
+    override val icon = CoreR.drawable.ic_magisk_outline
+    override val title = R.string.metro_sulist_enable.asText()
+    override val description get() = R.string.metro_sulist_enable_summary.asText()
 
     override var value = Config.denyList
         set(value) {
@@ -238,8 +263,9 @@ object DenyList : BaseSettingsItem.Toggle() {
 }
 
 object DenyListConfig : BaseSettingsItem.Blank() {
-    override val title = CoreR.string.settings_denylist_config_title.asText()
-    override val description = CoreR.string.settings_denylist_config_summary.asText()
+    override val icon = R.drawable.ic_forth_md2
+    override val title = R.string.metro_sulist_config.asText()
+    override val description = R.string.metro_sulist_config_summary.asText()
 }
 
 // --- Superuser
@@ -251,6 +277,7 @@ object Tapjack : BaseSettingsItem.Toggle() {
 }
 
 object Authentication : BaseSettingsItem.Toggle() {
+    override val icon = R.drawable.ic_forth_md2
     override val title = CoreR.string.settings_su_auth_title.asText()
     override var description = CoreR.string.settings_su_auth_summary.asText()
     override var value by Config::suAuth

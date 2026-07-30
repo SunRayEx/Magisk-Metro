@@ -20,5 +20,11 @@ clean:
 	$(MAKE) -C utils clean
 	$(MAKE) -C tests clean
 
+indent:
+	$(MAKE) -C src $@
+	$(MAKE) -C include $@
+	$(MAKE) -C utils $@
+
 test:
 	$(MAKE) -C tests test
+

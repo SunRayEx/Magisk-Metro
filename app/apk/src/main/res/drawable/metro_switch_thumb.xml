@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Windows 10 style flat rectangular switch thumb -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Disabled state -->
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <size android:width="12dp" android:height="12dp" />
+            <solid android:color="#FF9E9E9E" />
+            <corners android:radius="1dp" />
+        </shape>
+    </item>
+    <!-- Checked (on) state -->
+    <item android:state_checked="true">
+        <shape android:shape="rectangle">
+            <size android:width="12dp" android:height="12dp" />
+            <solid android:color="#FFFFFFFF" />
+            <corners android:radius="1dp" />
+        </shape>
+    </item>
+    <!-- Default (off) state -->
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="12dp" android:height="12dp" />
+            <solid android:color="#FF616161" />
+            <corners android:radius="1dp" />
+        </shape>
+    </item>
+</selector>

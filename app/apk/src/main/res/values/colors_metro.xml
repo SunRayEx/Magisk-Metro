@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Metro accent palette, sampled from the Windows 8 style reference artwork.
+         These are the single source of truth for both Compose and View based UI. -->
+    <color name="metro_accent_magisk">#FF1FB153</color>
+    <color name="metro_accent_modules">#FF2479C9</color>
+    <color name="metro_accent_apps">#FFC21C20</color>
+    <color name="metro_accent_settings">#FFFFC512</color>
+    <color name="metro_accent_contributors">#FFA748AA</color>
+    <color name="metro_accent_logs">#FFF7F7F7</color>
+    <color name="metro_accent_sponsor">#FFF56FB5</color>
+
+    <color name="metro_on_accent">#FF000000</color>
+</resources>

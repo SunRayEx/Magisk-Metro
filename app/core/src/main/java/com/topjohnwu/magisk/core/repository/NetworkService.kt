@@ -3,8 +3,6 @@ package com.topjohnwu.magisk.core.repository
 import com.topjohnwu.magisk.core.BuildConfig
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Config.Value.BETA_CHANNEL
-import com.topjohnwu.magisk.core.Config.Value.CUSTOM_CHANNEL
-import com.topjohnwu.magisk.core.Config.Value.DEBUG_CHANNEL
 import com.topjohnwu.magisk.core.Config.Value.DEFAULT_CHANNEL
 import com.topjohnwu.magisk.core.Config.Value.STABLE_CHANNEL
 import com.topjohnwu.magisk.core.Info
@@ -24,12 +22,9 @@ class NetworkService(
 ) {
     suspend fun fetchUpdate() = safe {
         var info = when (Config.updateChannel) {
-            DEFAULT_CHANNEL -> if (BuildConfig.DEBUG) fetchDebugUpdate() else fetchStableUpdate()
             STABLE_CHANNEL -> fetchStableUpdate()
             BETA_CHANNEL -> fetchBetaUpdate()
-            DEBUG_CHANNEL -> fetchDebugUpdate()
-            CUSTOM_CHANNEL -> fetchCustomUpdate(Config.customChannelUrl)
-            else -> throw IllegalArgumentException()
+            else -> fetchStableUpdate()
         }
         if (info.versionCode < Info.env.versionCode &&
             Config.updateChannel == DEFAULT_CHANNEL &&

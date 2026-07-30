@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="metro_dark_mode_title">Dark mode</string>
+    <string name="metro_dynamic_color_title">Wallpaper colors</string>
+    <string name="metro_dynamic_color_summary">Use Material You colors from the current wallpaper on Android 12 and newer</string>
+    <string name="metro_magisk_version">MagisKube %1$s</string>
+    <string name="metro_enabled">Enabled</string>
+    <string name="metro_disabled">Disabled</string>
+    <string name="metro_root_status">Root</string>
+    <string name="metro_zygisk_status">Zygisk</string>
+    <string name="metro_ramdisk_status">Ramdisk</string>
+    <string name="metro_yes">Yes</string>
+    <string name="metro_no">No</string>
+    <string name="metro_modules">Modules</string>
+    <string name="metro_apps">Apps</string>
+    <string name="metro_settings">Settings</string>
+    <string name="metro_contributor">Contributors</string>
+    <string name="metro_contributors">Contributors</string>
+    <string name="metro_logs">Logs</string>
+    <string name="metro_no_modules">No modules</string>
+    <string name="metro_no_rooted_apps">No rooted apps</string>
+    <string name="metro_no_contributors">No contributors</string>
+    <string name="metro_no_warnings">No warnings or errors</string>
+    <string name="metro_sponsor">Sponsor</string>
+    <string name="metro_support">Sponsor</string>
+    <string name="metro_donate">Sponsor</string>
+    <string name="metro_community">MagisKube community</string>
+    <string name="metro_open">Open</string>
+    <string name="metro_sulist">SUList</string>
+    <string name="metro_sulist_enable">Enforce SUList</string>
+    <string name="metro_sulist_enable_summary">Only processes selected in SUList retain the Magisk environment</string>
+    <string name="metro_sulist_config">Configure SUList</string>
+    <string name="metro_sulist_config_summary">Select processes allowed to retain the Magisk environment</string>
+    <string name="metro_magisk_manager">Magisk Manager</string>
+    <string name="metro_install_magisk">Install Magisk</string>
+    <string name="metro_install_magisk_summary">Install, upgrade, or patch Magisk</string>
+    <string name="metro_uninstall_magisk">Uninstall Magisk</string>
+    <string name="metro_uninstall_magisk_summary">Remove Magisk from this device</string>
+    <string name="metro_update_manager">Update Manager</string>
+    <string name="metro_update_manager_summary">Check and install manager updates</string>
+    <string name="metro_magisk_info">Magisk information</string>
+    <string name="metro_info_version">Version</string>
+    <string name="metro_info_root">Root</string>
+    <string name="metro_info_zygisk">Zygisk</string>
+    <string name="metro_info_ramdisk">Ramdisk</string>
+    <string name="metro_release_notes">Release notes</string>
+    <string name="metro_root_granted">ROOT</string>
+    <string name="metro_module_webui">WebUI</string>
+    <string name="metro_module_webui_missing">This module does not provide a WebUI</string>
+
+    <string-array name="metro_dark_mode_entries">
+        <item>Follow system</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
+</resources>

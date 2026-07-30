@@ -14,16 +14,17 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
+        android:paddingStart="@dimen/l_50"
         android:paddingTop="@dimen/l1"
+        android:paddingEnd="@dimen/l_50"
         android:paddingBottom="@dimen/l_50">
 
         <TextView
+            style="@style/WidgetFoundation.Metro.SectionText"
             gone="@{item.title.empty}"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@{item.title}"
-            android:textAppearance="@style/AppearanceFoundation.Large.Secondary"
-            android:textStyle="bold"
             tools:text="@tools:sample/lorem" />
 
         <TextView

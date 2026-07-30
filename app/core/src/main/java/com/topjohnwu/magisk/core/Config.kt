@@ -13,7 +13,6 @@ object Config : PreferenceConfig, DBConfig {
     override val stringDB get() = ServiceLocator.stringDB
     override val settingsDB get() = ServiceLocator.settingsDB
     override val context get() = ServiceLocator.deContext
-    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
     override val coroutineScope get() = GlobalScope
 
     object Key {
@@ -39,7 +38,7 @@ object Config : PreferenceConfig, DBConfig {
         const val CUSTOM_CHANNEL = "custom_channel"
         const val LOCALE = "locale"
         const val DARK_THEME = "dark_theme_extended"
-        const val COLOR_MODE = "color_mode"
+        const val DYNAMIC_COLOR = "dynamic_color"
         const val DOWNLOAD_DIR = "download_dir"
         const val SAFETY = "safety_notice"
         const val THEME_ORDINAL = "theme_ordinal"
@@ -88,7 +87,6 @@ object Config : PreferenceConfig, DBConfig {
         // su notification
         const val NO_NOTIFICATION = 0
         const val NOTIFICATION_TOAST = 1
-        const val NOTIFICATION_STATUS_BAR = 2
 
         // su auto response
         const val SU_PROMPT = 0
@@ -109,8 +107,9 @@ object Config : PreferenceConfig, DBConfig {
 
     var safetyNotice by preference(Key.SAFETY, true)
     var darkTheme by preference(Key.DARK_THEME, -1)
-    var themeOrdinal by preference(Key.THEME_ORDINAL, 0)
-    var colorMode by preference(Key.COLOR_MODE, 0)
+    var dynamicColor by preference(Key.DYNAMIC_COLOR, true)
+    // Default is appended to the app theme enum to preserve ordinals of existing installs.
+    var themeOrdinal by preference(Key.THEME_ORDINAL, 8)
 
     private var checkUpdatePrefs by preference(Key.CHECK_UPDATES, true)
     private var localePrefs by preference(Key.LOCALE, "")

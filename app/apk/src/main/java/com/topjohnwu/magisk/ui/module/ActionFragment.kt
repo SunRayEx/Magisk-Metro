@@ -17,11 +17,13 @@ import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.databinding.FragmentActionMd2Binding
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.core.R as CoreR
 
 class ActionFragment : BaseFragment<FragmentActionMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_action_md2
+    override val metroAccentRole = MetroAccentRole.MODULES
     override val viewModel by viewModel<ActionViewModel>()
     override val snackbarView: View get() = binding.snackbarContainer
 

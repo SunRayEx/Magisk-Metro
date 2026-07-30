@@ -13,7 +13,9 @@ import com.topjohnwu.magisk.arch.AsyncLoadViewModel
 import com.topjohnwu.magisk.arch.ContextExecutor
 import com.topjohnwu.magisk.arch.UIActivity
 import com.topjohnwu.magisk.arch.ViewEvent
+import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.BuildConfig
+
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.download.Subject
@@ -21,13 +23,13 @@ import com.topjohnwu.magisk.core.download.Subject.App
 import com.topjohnwu.magisk.core.ktx.await
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.repository.NetworkService
-import com.topjohnwu.magisk.core.utils.asText
 import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.databinding.set
 import com.topjohnwu.magisk.dialog.EnvFixDialog
 import com.topjohnwu.magisk.dialog.ManagerInstallDialog
 import com.topjohnwu.magisk.dialog.UninstallDialog
 import com.topjohnwu.magisk.events.SnackbarEvent
+import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.superuser.Shell
 import kotlin.math.roundToInt
 import com.topjohnwu.magisk.core.R as CoreR
@@ -77,6 +79,11 @@ class HomeViewModel(
         get() = "${BuildConfig.APP_VERSION_NAME} (${BuildConfig.APP_VERSION_CODE})" +
             if (BuildConfig.DEBUG) " (D)" else ""
 
+    val rooted get() = Info.isRooted
+
+    val zygiskEnabled get() = Info.isZygiskEnabled
+    val ramdisk get() = Info.ramdisk
+
     @get:Bindable
     var stateManagerProgress = 0
         set(value) = set(value, field, { field = it }, BR.stateManagerProgress)
@@ -97,9 +104,7 @@ class HomeViewModel(
                 else -> State.UP_TO_DATE
             }
 
-            val isDebug = Config.updateChannel == Config.Value.DEBUG_CHANNEL
-            managerRemoteVersion =
-                ("$version (${versionCode})" + if (isDebug) " (D)" else "").asText()
+            managerRemoteVersion = "$version (${versionCode})".asText()
         } ?: run {
             appState = State.INVALID
             managerRemoteVersion = CoreR.string.not_available.asText()
@@ -139,7 +144,7 @@ class HomeViewModel(
     }
 
     fun onMagiskPressed() = withExternalRW {
-        HomeFragmentDirections.actionHomeFragmentToInstallFragment().navigate()
+        HomeFragmentDirections.actionHomeFragmentToMagiskManagerFragment().navigate()
     }
 
     fun hideNotice() {

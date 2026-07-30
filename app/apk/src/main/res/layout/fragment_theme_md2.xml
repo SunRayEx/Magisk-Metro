@@ -13,13 +13,14 @@
     </data>
 
     <androidx.core.widget.NestedScrollView
+        style="@style/WidgetFoundation.Metro.Page"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:fillViewport="true"
-        android:paddingStart="@dimen/l1"
+        android:paddingStart="8dp"
         android:paddingTop="@dimen/internal_action_bar_size"
-        android:paddingEnd="@dimen/l1"
+        android:paddingEnd="8dp"
         android:paddingBottom="@dimen/l1"
         app:fitsSystemWindowsInsets="top|bottom">
 

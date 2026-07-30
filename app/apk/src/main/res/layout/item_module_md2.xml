@@ -18,12 +18,13 @@
     </data>
 
     <FrameLayout
+        metroRole="modules"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/module"
-            style="@style/WidgetFoundation.Card"
+            style="@style/WidgetFoundation.Card.Metro"
             isEnabled="@{!item.removed &amp;&amp; item.enabled &amp;&amp; !item.showNotice}"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -57,8 +58,27 @@
                 android:animateLayoutChanges="true"
                 android:duplicateParentState="true">
 
+                <FrameLayout
+                    android:id="@+id/module_metro_icon"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="@dimen/l1"
+                    android:layout_marginTop="@dimen/l1"
+                    android:tag="metroAccentBgSoft"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:padding="12dp"
+                        android:tag="metroAccentTint"
+                        app:srcCompat="@drawable/ic_extension" />
+                </FrameLayout>
+
                 <TextView
                     android:id="@+id/module_title"
+                    style="@style/WidgetFoundation.Metro.TitleText"
                     strikeThrough="@{item.removed}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -67,23 +87,19 @@
                     android:layout_marginEnd="@dimen/l_50"
                     android:duplicateParentState="true"
                     android:text="@{item.item.name}"
-                    android:textAppearance="@style/AppearanceFoundation.Body"
-                    android:textColor="?android:textColorPrimary"
-                    android:textStyle="bold"
                     app:layout_constraintEnd_toStartOf="@+id/module_indicator"
-                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/module_metro_icon"
                     app:layout_constraintTop_toTopOf="parent"
                     tools:text="@tools:sample/lorem" />
 
                 <TextView
                     android:id="@+id/module_version_author"
+                    style="@style/WidgetFoundation.Metro.BodyText"
                     strikeThrough="@{item.removed}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:duplicateParentState="true"
                     android:text="@{@string/module_version_author(item.item.version, item.item.author)}"
-                    android:textAppearance="@style/AppearanceFoundation.Caption.Variant"
-                    android:textColor="?android:textColorSecondary"
                     app:layout_constraintEnd_toEndOf="@+id/module_title"
                     app:layout_constraintStart_toStartOf="@+id/module_title"
                     app:layout_constraintTop_toBottomOf="@+id/module_title"
@@ -91,6 +107,7 @@
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/module_indicator"
+                    style="@style/WidgetFoundation.Switch.Metro"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="@dimen/l_50"
@@ -104,6 +121,7 @@
 
                 <TextView
                     android:id="@+id/module_description"
+                    style="@style/WidgetFoundation.Metro.BodyText"
                     gone="@{item.item.description.empty}"
                     strikeThrough="@{item.removed}"
                     android:layout_width="match_parent"
@@ -114,8 +132,6 @@
                     android:duplicateParentState="true"
                     android:maxLines="5"
                     android:text="@{item.item.description}"
-                    android:textAppearance="@style/AppearanceFoundation.Caption.Variant"
-                    android:textColor="?android:textColorSecondary"
                     app:layout_constraintTop_toBottomOf="@+id/module_version_author"
                     tools:lines="4"
                     tools:text="@tools:sample/lorem/random" />
@@ -130,7 +146,7 @@
 
                 <Button
                     android:id="@+id/module_update"
-                    style="@style/WidgetFoundation.Button.Text"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
                     goneUnless="@{item.showUpdate}"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -149,7 +165,7 @@
 
                 <Button
                     android:id="@+id/module_remove"
-                    style="@style/WidgetFoundation.Button.Text"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:clickable="true"
@@ -187,7 +203,7 @@
                     android:textColor="?colorError"
                     app:layout_constraintBottom_toBottomOf="@+id/module_remove"
                     app:layout_constraintEnd_toStartOf="@+id/bottom_bar_barrier"
-                    app:layout_constraintStart_toEndOf="@id/module_config"
+                    app:layout_constraintStart_toEndOf="@id/module_webui"
                     app:layout_constraintTop_toTopOf="@+id/module_remove"
                     tools:lines="2"
                     tools:text="@tools:sample/lorem/random"
@@ -195,7 +211,7 @@
 
                 <Button
                     android:id="@+id/module_config"
-                    style="@style/WidgetFoundation.Button.Text"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
                     goneUnless="@{item.showAction}"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -212,6 +228,24 @@
                     app:layout_constraintTop_toTopOf="@+id/module_remove"
                     app:layout_constraintStart_toStartOf="parent"
                     app:srcCompat="@drawable/ic_download_md2" />
+
+                <Button
+                    android:id="@+id/module_webui"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
+                    goneUnless="@{item.showWebUi}"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:enabled="@{item.enabled}"
+                    android:focusable="true"
+                    android:onClick="@{() -> viewModel.openWebUi(item.item.id, item.item.name)}"
+                    android:text="@string/metro_module_webui"
+                    android:textAllCaps="false"
+                    app:icon="@drawable/ic_language_md2"
+                    app:iconGravity="textStart"
+                    app:layout_constraintBottom_toBottomOf="@+id/module_remove"
+                    app:layout_constraintStart_toEndOf="@+id/module_config"
+                    app:layout_constraintTop_toTopOf="@+id/module_remove" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

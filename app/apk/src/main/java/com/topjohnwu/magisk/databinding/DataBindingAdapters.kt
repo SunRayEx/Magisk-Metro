@@ -39,7 +39,9 @@ import com.google.android.material.textfield.TextInputLayout
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.model.su.SuPolicy
-import com.topjohnwu.magisk.core.utils.TextHolder
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
+import com.topjohnwu.magisk.utils.TextHolder
 import com.topjohnwu.superuser.internal.UiThreadHandler
 import com.topjohnwu.widget.IndeterminateCheckBox
 import kotlin.math.roundToInt
@@ -47,6 +49,20 @@ import kotlin.math.roundToInt
 @BindingAdapter("gone")
 fun setGone(view: View, gone: Boolean) {
     view.isGone = gone
+}
+
+/**
+ * Entry point for Metro accent coloring inside RecyclerView items.
+ *
+ * The recursive pass done by BaseFragment cannot reach views inflated by adapters, so item
+ * layouts declare their own role and let [MetroColors] repaint every tagged child.
+ */
+@BindingAdapter("metroRole")
+fun setMetroRole(view: View, role: String?) {
+    val parsed = runCatching {
+        MetroAccentRole.valueOf(role!!.uppercase(java.util.Locale.ROOT))
+    }.getOrNull() ?: return
+    MetroColors.applyMetroAccent(view, parsed)
 }
 
 @BindingAdapter("invisible")

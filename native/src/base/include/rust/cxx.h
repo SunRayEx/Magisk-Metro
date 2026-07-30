@@ -1,3 +1,1 @@
-#pragma once
-
-#include "../../../external/cxx-rs/include/cxx.h"
+../../../external/cxx-rs/include/cxx.h

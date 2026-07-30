@@ -12,8 +12,10 @@
     </data>
 
     <FrameLayout
+        style="@style/WidgetFoundation.Metro.Page"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="?colorSurface">
 
         <HorizontalScrollView
             android:id="@+id/log_scroll_magisk"
@@ -24,12 +26,12 @@
             android:fillViewport="true">
 
             <androidx.recyclerview.widget.RecyclerView
+                style="@style/WidgetFoundation.Metro.List"
                 android:id="@+id/log_magisk"
                 app:items="@{viewModel.logs}"
                 app:extraBindings="@{viewModel.extraBindings}"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:clipToPadding="false"
                 android:orientation="vertical"
                 android:paddingTop="@dimen/internal_action_bar_size"
                 android:paddingBottom="@dimen/internal_action_bar_size"

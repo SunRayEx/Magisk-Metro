@@ -46,15 +46,7 @@ class DenyListRvItem(
                     .filter { isExpanded || it.defaultSelection }
                     .forEach { it.toggle() }
             } else {
-                Shell.cmd("magisk --denylist rm ${info.packageName}").submit()
-                processes.filter { it.isEnabled }.forEach {
-                    if (it.process.isIsolated) {
-                        it.toggle()
-                    } else {
-                        it.isEnabled = !it.isEnabled
-                        notifyPropertyChanged(BR.enabled)
-                    }
-                }
+                processes.filter { it.isEnabled }.forEach { it.toggle() }
             }
         }
 
@@ -110,7 +102,8 @@ class ProcessRvItem(
     var isEnabled
         get() = process.isEnabled
         set(value) = set(value, process.isEnabled, { process.isEnabled = it }, BR.enabled) {
-            val arg = if (it) "add" else "rm"
+            // SUList is the UI complement of the compatible native DenyList.
+            val arg = if (it) "rm" else "add"
             val (name, pkg) = process
             Shell.cmd("magisk --denylist $arg $pkg \'$name\'").submit()
         }

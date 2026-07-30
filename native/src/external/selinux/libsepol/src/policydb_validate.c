@@ -22,7 +22,6 @@ typedef struct map_arg {
 	validate_t *flavors;
 	sepol_handle_t *handle;
 	const policydb_t *policy;
-	int conditional;
 } map_arg_t;
 
 typedef struct perm_arg {
@@ -566,27 +565,6 @@ bad:
 	return -1;
 }
 
-static int validate_types_in_attribute(const ebitmap_t *map, const policydb_t *p, const validate_t flavors[SYM_NUM])
-{
-	ebitmap_node_t *node;
-	uint32_t i;
-
-	if (validate_ebitmap(map, &flavors[SYM_TYPES]))
-		goto bad;
-
-	if (p->policy_type != POLICY_KERN && p->policyvers < MOD_POLICYDB_VERSION_TYPE_ATTR_ATTRS) {
-		ebitmap_for_each_positive_bit(map, node, i) {
-			if (validate_simpletype(i+1, p, flavors))
-				goto bad;
-		}
-	}
-
-	return 0;
-
-bad:
-	return -1;
-}
-
 static int validate_type_datum(sepol_handle_t *handle, const type_datum_t *type, const policydb_t *p, validate_t flavors[])
 {
 	if (validate_value(type->s.value, &flavors[SYM_TYPES]))
@@ -603,13 +581,8 @@ static int validate_type_datum(sepol_handle_t *handle, const type_datum_t *type,
 			goto bad;
 		break;
 	case TYPE_ATTRIB:
-		if (p->policy_type == POLICY_KERN) {
-			if (!ebitmap_is_empty(&type->types))
-				goto bad;
-		} else {
-			if (validate_types_in_attribute(&type->types, p, flavors))
-				goto bad;
-		}
+		if (validate_ebitmap(&type->types, &flavors[SYM_TYPES]))
+			goto bad;
 		if (type->bounds)
 			goto bad;
 		break;
@@ -619,9 +592,7 @@ static int validate_type_datum(sepol_handle_t *handle, const type_datum_t *type,
 
 	switch (type->flags) {
 	case 0:
-	case TYPE_FLAGS_NEVERAUDIT:
 	case TYPE_FLAGS_PERMISSIVE:
-	case TYPE_FLAGS_NEVERAUDIT|TYPE_FLAGS_PERMISSIVE:
 	case TYPE_FLAGS_EXPAND_ATTR_TRUE:
 	case TYPE_FLAGS_EXPAND_ATTR_FALSE:
 	case TYPE_FLAGS_EXPAND_ATTR:
@@ -661,9 +632,9 @@ bad:
 	return -1;
 }
 
-static int validate_mls_semantic_level(const mls_semantic_level_t *level, const validate_t *sens, const validate_t *cats, int allow_unset)
+static int validate_mls_semantic_level(const mls_semantic_level_t *level, const validate_t *sens, const validate_t *cats)
 {
-	if (allow_unset && level->sens == 0)
+	if (level->sens == 0)
 		return 0;
 	if (validate_value(level->sens, sens))
 		goto bad;
@@ -676,11 +647,11 @@ bad:
 	return -1;
 }
 
-static int validate_mls_semantic_range(const mls_semantic_range_t *range, const validate_t *sens, const validate_t *cats, int allow_unset)
+static int validate_mls_semantic_range(const mls_semantic_range_t *range, const validate_t *sens, const validate_t *cats)
 {
-	if (validate_mls_semantic_level(&range->level[0], sens, cats, allow_unset))
+	if (validate_mls_semantic_level(&range->level[0], sens, cats))
 		goto bad;
-	if (validate_mls_semantic_level(&range->level[1], sens, cats, allow_unset))
+	if (validate_mls_semantic_level(&range->level[1], sens, cats))
 		goto bad;
 
 	return 0;
@@ -689,10 +660,8 @@ bad:
 	return -1;
 }
 
-static int validate_mls_level(const mls_level_t *level, const validate_t *sens, const validate_t *cats, int allow_unset)
+static int validate_mls_level(const mls_level_t *level, const validate_t *sens, const validate_t *cats)
 {
-	if (allow_unset && level->sens == 0)
-		return 0;
 	if (validate_value(level->sens, sens))
 		goto bad;
 	if (validate_ebitmap(&level->cat, cats))
@@ -709,10 +678,7 @@ static int validate_level_datum(sepol_handle_t *handle, const level_datum_t *lev
 	if (level->notdefined != 0)
 		goto bad;
 
-	if (level->level->sens == 0)
-		goto bad;
-
-	if (validate_mls_level(level->level, &flavors[SYM_LEVELS], &flavors[SYM_CATS], 0))
+	if (validate_mls_level(level->level, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
 		goto bad;
 
 	if (level->isalias) {
@@ -740,11 +706,11 @@ static int validate_level_datum_wrapper(__attribute__ ((unused)) hashtab_key_t k
 	return validate_level_datum(margs->handle, d, margs->flavors, margs->policy);
 }
 
-static int validate_mls_range(const mls_range_t *range, const validate_t *sens, const validate_t *cats, int allow_unset)
+static int validate_mls_range(const mls_range_t *range, const validate_t *sens, const validate_t *cats)
 {
-	if (validate_mls_level(&range->level[0], sens, cats, allow_unset))
+	if (validate_mls_level(&range->level[0], sens, cats))
 		goto bad;
-	if (validate_mls_level(&range->level[1], sens, cats, allow_unset))
+	if (validate_mls_level(&range->level[1], sens, cats))
 		goto bad;
 
 	return 0;
@@ -759,19 +725,14 @@ static int validate_user_datum(sepol_handle_t *handle, const user_datum_t *user,
 		goto bad;
 	if (validate_role_set(&user->roles, &flavors[SYM_ROLES]))
 		goto bad;
-	if (p->mls) {
-		int allow_unset = (p->policy_type != POLICY_MOD);
-		if (validate_mls_semantic_range(&user->range, &flavors[SYM_LEVELS], &flavors[SYM_CATS], allow_unset))
-			goto bad;
-		if (validate_mls_semantic_level(&user->dfltlevel, &flavors[SYM_LEVELS], &flavors[SYM_CATS], allow_unset))
-			goto bad;
-
-		allow_unset = (p->policy_type != POLICY_KERN);
-		if (validate_mls_range(&user->exp_range, &flavors[SYM_LEVELS], &flavors[SYM_CATS], allow_unset))
-			goto bad;
-		if (validate_mls_level(&user->exp_dfltlevel, &flavors[SYM_LEVELS], &flavors[SYM_CATS], allow_unset))
-			goto bad;
-	}
+	if (validate_mls_semantic_range(&user->range, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
+		goto bad;
+	if (validate_mls_semantic_level(&user->dfltlevel, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
+		goto bad;
+	if (p->mls && p->policy_type != POLICY_MOD && validate_mls_range(&user->exp_range, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
+		goto bad;
+	if (p->mls && p->policy_type != POLICY_MOD && validate_mls_level(&user->exp_dfltlevel, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
+		goto bad;
 	if (user->bounds && validate_value(user->bounds, &flavors[SYM_USERS]))
 		goto bad;
 
@@ -876,7 +837,7 @@ static int validate_datum(__attribute__ ((unused))hashtab_key_t k, hashtab_datum
 
 static int validate_datum_array_entries(sepol_handle_t *handle, const policydb_t *p, validate_t flavors[])
 {
-	map_arg_t margs = { flavors, handle, p, 0 };
+	map_arg_t margs = { flavors, handle, p };
 
 	if (hashtab_map(p->p_commons.table, validate_common_datum_wrapper, &margs))
 		goto bad;
@@ -942,7 +903,7 @@ static int validate_avtab_key(const avtab_key_t *key, int conditional, const pol
 	case AVTAB_XPERMS_DONTAUDIT:
 		if (p->target_platform != SEPOL_TARGET_SELINUX)
 			goto bad;
-		if (conditional && !policydb_has_cond_xperms_feature(p))
+		if (conditional)
 			goto bad;
 		break;
 	default:
@@ -995,7 +956,7 @@ static int validate_avtab_key_and_datum(avtab_key_t *k, avtab_datum_t *d, void *
 {
 	map_arg_t *margs = args;
 
-	if (validate_avtab_key(k, margs->conditional, margs->policy, margs->flavors))
+	if (validate_avtab_key(k, 0, margs->policy, margs->flavors))
 		return -1;
 
 	if (k->specified & AVTAB_AV) {
@@ -1011,23 +972,15 @@ static int validate_avtab_key_and_datum(avtab_key_t *k, avtab_datum_t *d, void *
 	if ((k->specified & AVTAB_TYPE) && validate_simpletype(d->data, margs->policy, margs->flavors))
 		return -1;
 
-	if (k->specified & AVTAB_XPERMS) {
-		uint32_t data = d->data;
-
-		/* checkpolicy does not touch data for xperms, CIL sets it. */
-		if (data != 0 && validate_access_vector(margs->handle, margs->policy, k->target_class, data))
-			return -1;
-
-		if (validate_xperms(d->xperms))
-			return -1;
-	}
+	if ((k->specified & AVTAB_XPERMS) && validate_xperms(d->xperms))
+		return -1;
 
 	return 0;
 }
 
 static int validate_avtab(sepol_handle_t *handle, const avtab_t *avtab, const policydb_t *p, validate_t flavors[])
 {
-	map_arg_t margs = { flavors, handle, p, 0 };
+	map_arg_t margs = { flavors, handle, p };
 
 	if (avtab_map(avtab, validate_avtab_key_and_datum, &margs)) {
 		ERR(handle, "Invalid avtab");
@@ -1039,13 +992,28 @@ static int validate_avtab(sepol_handle_t *handle, const avtab_t *avtab, const po
 
 static int validate_cond_av_list(sepol_handle_t *handle, const cond_av_list_t *cond_av, const policydb_t *p, validate_t flavors[])
 {
-	struct avtab_node *avtab_ptr;
-	map_arg_t margs = { flavors, handle, p, 1 };
+	const struct avtab_node *avtab_ptr;
 
-	for (; cond_av; cond_av = cond_av->next)
-		for (avtab_ptr = cond_av->node; avtab_ptr; avtab_ptr = avtab_ptr->next)
-			if (validate_avtab_key_and_datum(&avtab_ptr->key, &avtab_ptr->datum, &margs))
+	for (; cond_av; cond_av = cond_av->next) {
+		for (avtab_ptr = cond_av->node; avtab_ptr; avtab_ptr = avtab_ptr->next) {
+			const avtab_key_t *key = &avtab_ptr->key;
+			const avtab_datum_t *datum = &avtab_ptr->datum;
+
+			if (validate_avtab_key(key, 1, p, flavors))
 				goto bad;
+			if (key->specified & AVTAB_AV) {
+				uint32_t data = datum->data;
+
+				if ((0xFFF & key->specified) == AVTAB_AUDITDENY)
+					data = ~data;
+
+				if (validate_access_vector(handle, p, key->target_class, data))
+					goto bad;
+			}
+			if ((key->specified & AVTAB_TYPE) && validate_simpletype(datum->data, p, flavors))
+				goto bad;
+		}
+	}
 
 	return 0;
 
@@ -1078,7 +1046,7 @@ static int validate_avrules(sepol_handle_t *handle, const avrule_t *avrule, int 
 		case AVRULE_XPERMS_AUDITALLOW:
 		case AVRULE_XPERMS_DONTAUDIT:
 		case AVRULE_XPERMS_NEVERALLOW:
-			if (conditional && !policydb_has_cond_xperms_feature(p))
+			if (conditional)
 				goto bad;
 			break;
 		default:
@@ -1310,7 +1278,7 @@ bad:
 
 static int validate_filename_trans_hashtab(sepol_handle_t *handle, const policydb_t *p, validate_t flavors[])
 {
-	map_arg_t margs = { flavors, handle, p, 0 };
+	map_arg_t margs = { flavors, handle, p };
 
 	if (hashtab_map(p->filename_trans, validate_filename_trans, &margs)) {
 		ERR(handle, "Invalid filename trans");
@@ -1328,7 +1296,7 @@ static int validate_context(const context_struct_t *con, validate_t flavors[], i
 		return -1;
 	if (validate_value(con->type, &flavors[SYM_TYPES]))
 		return -1;
-	if (mls && validate_mls_range(&con->range, &flavors[SYM_LEVELS], &flavors[SYM_CATS], 0))
+	if (mls && validate_mls_range(&con->range, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
 		return -1;
 
 	return 0;
@@ -1489,7 +1457,7 @@ static int validate_range_trans_rules(sepol_handle_t *handle, const range_trans_
 			goto bad;
 		if (validate_ebitmap(&range_trans->tclasses, &flavors[SYM_CLASSES]))
 			goto bad;
-		if (validate_mls_semantic_range(&range_trans->trange, &flavors[SYM_LEVELS], &flavors[SYM_CATS], 0))
+		if (validate_mls_semantic_range(&range_trans->trange, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
 			goto bad;
 	}
 
@@ -1638,23 +1606,6 @@ bad:
 	return -1;
 }
 
-static int validate_neveraudit(sepol_handle_t *handle, const policydb_t *p, validate_t flavors[])
-{
-	ebitmap_node_t *node;
-	uint32_t i;
-
-	ebitmap_for_each_positive_bit(&p->neveraudit_map, node, i) {
-		if (validate_simpletype(i, p, flavors))
-			goto bad;
-	}
-
-	return 0;
-
-bad:
-	ERR(handle, "Invalid neveraudit type");
-	return -1;
-}
-
 static int validate_range_transition(hashtab_key_t key, hashtab_datum_t data, void *args)
 {
 	const range_trans_t *rt = (const range_trans_t *)key;
@@ -1668,7 +1619,8 @@ static int validate_range_transition(hashtab_key_t key, hashtab_datum_t data, vo
 		goto bad;
 	if (validate_value(rt->target_class, &flavors[SYM_CLASSES]))
 		goto bad;
-	if (validate_mls_range(r, &flavors[SYM_LEVELS], &flavors[SYM_CATS], 0))
+
+	if (validate_mls_range(r, &flavors[SYM_LEVELS], &flavors[SYM_CATS]))
 		goto bad;
 
 	return 0;
@@ -1679,7 +1631,7 @@ bad:
 
 static int validate_range_transitions(sepol_handle_t *handle, const policydb_t *p, validate_t flavors[])
 {
-	map_arg_t margs = { flavors, handle, p, 0 };
+	map_arg_t margs = { flavors, handle, p };
 
 	if (hashtab_map(p->range_tr, validate_range_transition, &margs)) {
 		ERR(handle, "Invalid range transition");
@@ -1857,9 +1809,6 @@ int policydb_validate(sepol_handle_t *handle, const policydb_t *p)
 		goto bad;
 
 	if (validate_permissives(handle, p, flavors))
-		goto bad;
-
-	if (validate_neveraudit(handle, p, flavors))
 		goto bad;
 
 	if (validate_range_transitions(handle, p, flavors))

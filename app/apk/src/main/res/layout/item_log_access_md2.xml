@@ -49,11 +49,10 @@
 
             <TextView
                 android:id="@+id/log_app_name"
+                style="@style/WidgetFoundation.Metro.TitleText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@{item.log.appName}"
-                android:textAppearance="@style/AppearanceFoundation.Body"
-                android:textStyle="bold"
                 app:layout_constraintBottom_toTopOf="@+id/log_info"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -62,10 +61,10 @@
 
             <TextView
                 android:id="@+id/log_info"
+                style="@style/WidgetFoundation.Metro.BodyText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@{item.info}"
-                android:textAppearance="@style/AppearanceFoundation.Caption.Variant"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/log_app_name"
                 app:layout_constraintEnd_toEndOf="parent"

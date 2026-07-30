@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Track tint: accent when checked, transparent otherwise -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="#FFBDBDBD" />
+    <item android:state_checked="true" android:color="?attr/colorPrimary" />
+    <item android:color="@android:color/transparent" />
+</selector>

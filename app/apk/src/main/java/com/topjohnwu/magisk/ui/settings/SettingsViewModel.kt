@@ -27,6 +27,7 @@ import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.events.AddHomeIconEvent
 import com.topjohnwu.magisk.events.AuthEvent
 import com.topjohnwu.magisk.events.SnackbarEvent
+import com.topjohnwu.magisk.events.RecreateEvent
 import kotlinx.coroutines.launch
 
 class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
@@ -43,7 +44,8 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         // Customization
         val list = mutableListOf(
             Customization,
-            Theme, if (LocaleSetting.useLocaleManager) LanguageSystem else Language
+            Theme, DarkMode,
+            if (LocaleSetting.useLocaleManager) LanguageSystem else Language
         )
         if (isRunningAsStub && ShortcutManagerCompat.isRequestPinShortcutSupported(context))
             list.add(AddShortcut)
@@ -51,7 +53,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         // Manager
         list.addAll(listOf(
             AppSettings,
-            UpdateChannel, UpdateChannelUrl, DoHToggle, UpdateChecker, DownloadPath, RandNameToggle
+            UpdateChannel, DoHToggle, UpdateChecker, DownloadPath, RandNameToggle
         ))
         if (Info.env.isActive && Const.USER_ID == 0) {
             if (hidden) list.add(Restore) else list.add(Hide)
@@ -104,22 +106,18 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
     override fun onItemAction(view: View, item: BaseSettingsItem) {
         when (item) {
             Theme -> SettingsFragmentDirections.actionSettingsFragmentToThemeFragment().navigate()
+            DarkMode -> {
+                androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(Config.darkTheme)
+                RecreateEvent().publish()
+            }
             LanguageSystem -> view.activity.startActivity(LocaleSetting.localeSettingsIntent)
             AddShortcut -> AddHomeIconEvent().publish()
             SystemlessHosts -> createHosts()
             DenyListConfig -> SettingsFragmentDirections.actionSettingsFragmentToDenyFragment().navigate()
-            UpdateChannel -> openUrlIfNecessary(view)
             is Hide -> viewModelScope.launch { AppMigration.hide(view.activity, item.value) }
             Restore -> viewModelScope.launch { AppMigration.restore(view.activity) }
             Zygisk -> if (Zygisk.mismatch) SnackbarEvent(R.string.reboot_apply_change).publish()
             else -> Unit
-        }
-    }
-
-    private fun openUrlIfNecessary(view: View) {
-        UpdateChannelUrl.refresh()
-        if (UpdateChannelUrl.isEnabled && UpdateChannelUrl.value.isBlank()) {
-            UpdateChannelUrl.onPressed(view, this)
         }
     }
 

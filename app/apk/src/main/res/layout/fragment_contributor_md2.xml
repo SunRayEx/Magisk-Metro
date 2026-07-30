@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <data>
+        <variable
+            name="viewModel"
+            type="com.topjohnwu.magisk.ui.home.ContributorViewModel" />
+    </data>
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/contributor_metro_compose"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingTop="@dimen/internal_action_bar_size"
+        app:fitsSystemWindowsInsets="top|bottom" />
+</layout>

@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk.ui.theme
 
+import android.os.Build
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Config
 
@@ -39,12 +40,33 @@ enum class Theme(
     Fraxure(
         themeName = "Fraxure (Legacy)",
         themeRes = R.style.ThemeFoundationMD2_Fraxure
+    ),
+    Default(
+        themeName = "Default",
+        themeRes = R.style.ThemeFoundationMD2_Default
+    ),
+    Dynamic(
+        themeName = "Wallpaper colors",
+        themeRes = R.style.ThemeFoundationMD2_Default
     );
 
-    val isSelected get() = Config.themeOrdinal == ordinal
+    val isDynamic get() = this == Dynamic
+    val isSelected get() = selected == this
 
     companion object {
-        val selected get() = values().getOrNull(Config.themeOrdinal) ?: Piplup
+        val selected
+            get() = if (Config.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Dynamic
+            } else {
+                values().getOrNull(Config.themeOrdinal)?.takeUnless { it == Dynamic } ?: Default
+            }
+
+        val displayValues
+            get() = buildList {
+                add(Default)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Dynamic)
+                addAll(values().filterNot { it == Default || it == Dynamic })
+            }
     }
 
 }

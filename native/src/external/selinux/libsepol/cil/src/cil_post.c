@@ -316,40 +316,10 @@ int cil_post_genfscon_compare(const void *a, const void *b)
 
 int cil_post_netifcon_compare(const void *a, const void *b)
 {
-	/* keep in sync with kernel_to_common.c:netif_data_cmp() */
-	const struct cil_netifcon *anetifcon = *(struct cil_netifcon**)a;
-	const struct cil_netifcon *bnetifcon = *(struct cil_netifcon**)b;
-	const char *a_name = anetifcon->interface_str;
-	const char *b_name = bnetifcon->interface_str;
-	size_t a_stem = strcspn(a_name, "*?");
-	size_t b_stem = strcspn(b_name, "*?");
-	size_t a_len = strlen(a_name);
-	size_t b_len = strlen(b_name);
-	int a_iswildcard = a_stem != a_len;
-	int b_iswildcard = b_stem != b_len;
-	int rc;
+	struct cil_netifcon *anetifcon = *(struct cil_netifcon**)a;
+	struct cil_netifcon *bnetifcon = *(struct cil_netifcon**)b;
 
-	/* order non-wildcards first */
-	rc = spaceship_cmp(a_iswildcard, b_iswildcard);
-	if (rc)
-		return rc;
-
-	/* order non-wildcards alphabetically */
-	if (!a_iswildcard)
-		return strcmp(a_name, b_name);
-
-	/* order by decreasing stem length */
-	rc = spaceship_cmp(a_stem, b_stem);
-	if (rc)
-		return -rc;
-
-	/* order '?' (0x3f) before '*' (0x2A) */
-	rc = spaceship_cmp(a_name[a_stem], b_name[b_stem]);
-	if (rc)
-		return -rc;
-
-	/* order alphabetically */
-	return strcmp(a_name, b_name);
+	return  strcmp(anetifcon->interface_str, bnetifcon->interface_str);
 }
 
 int cil_post_ibendportcon_compare(const void *a, const void *b)
@@ -2260,14 +2230,6 @@ static int __cil_post_db_classperms_helper(struct cil_tree_node *node, uint32_t 
 	case CIL_AVRULE: {
 		struct cil_avrule *avrule = node->data;
 		rc = __evaluate_classperms_list(avrule->perms.classperms, db);
-		if (rc != SEPOL_OK) {
-			goto exit;
-		}
-		break;
-	}
-	case CIL_DENY_RULE: {
-		struct cil_deny_rule *deny = node->data;
-		rc = __evaluate_classperms_list(deny->classperms, db);
 		if (rc != SEPOL_OK) {
 			goto exit;
 		}

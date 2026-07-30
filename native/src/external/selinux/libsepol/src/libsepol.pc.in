@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: libsepol
 Description: SELinux policy library
 Version: @VERSION@
-URL: https://github.com/selinuxproject/selinux/wiki/Releases
+URL: http://userspace.selinuxproject.org/
 Libs: -L${libdir} -lsepol
 Cflags: -I${includedir}

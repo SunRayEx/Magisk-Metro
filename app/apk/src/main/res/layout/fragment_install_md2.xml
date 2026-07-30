@@ -2,251 +2,106 @@
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
-
     <data>
-
         <import type="com.topjohnwu.magisk.core.Info" />
-
         <import type="com.topjohnwu.magisk.core.Config" />
-
-        <variable
-            name="viewModel"
-            type="com.topjohnwu.magisk.ui.install.InstallViewModel" />
-
+        <variable name="viewModel" type="com.topjohnwu.magisk.ui.install.InstallViewModel" />
     </data>
-
     <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:fillViewport="true"
-        android:paddingTop="@dimen/internal_action_bar_size"
-        android:paddingBottom="@dimen/l2"
-        app:fitsSystemWindowsInsets="top|bottom"
-        tools:paddingTop="24dp">
+        style="@style/WidgetFoundation.Metro.Page"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:background="?colorSurface" android:clipToPadding="false"
+        android:fillViewport="true" android:paddingTop="@dimen/internal_action_bar_size"
+        android:paddingBottom="16dp" app:fitsSystemWindowsInsets="top|bottom">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingStart="8dp" android:paddingEnd="8dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:clipToPadding="false"
-            android:orientation="vertical"
-            android:paddingTop="@dimen/l_50">
+            <!-- Options -->
+            <TextView gone="@{viewModel.skipOptions}" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:paddingStart="4dp"
+                android:paddingTop="8dp" android:paddingEnd="4dp" android:paddingBottom="8dp"
+                android:text="@string/install_options_title" android:textColor="?colorOnSurface"
+                android:textSize="24sp" android:textStyle="bold" />
+            <LinearLayout gone="@{viewModel.skipOptions}" android:tag="metroAccentBg"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="16dp">
+                <CheckBox style="@style/WidgetFoundation.Checkbox.Metro" gone="@{Info.isSAR}"
+                    android:tag="metroOnAccentFg" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:minHeight="44dp"
+                    android:checked="@={Config.keepVerity}"
+                    android:text="@string/keep_dm_verity" android:textStyle="bold" />
+                <CheckBox style="@style/WidgetFoundation.Checkbox.Metro" goneUnless="@{Info.isFDE}"
+                    android:tag="metroOnAccentFg" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:minHeight="44dp"
+                    android:checked="@={Config.keepEnc}"
+                    android:text="@string/keep_force_encryption" android:textStyle="bold" />
+                <CheckBox style="@style/WidgetFoundation.Checkbox.Metro" gone="@{Info.ramdisk}"
+                    android:tag="metroOnAccentFg" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:minHeight="44dp"
+                    android:checked="@={Config.recovery}"
+                    android:text="@string/recovery_mode" android:textStyle="bold" />
+                <Button style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:tag="metroInverseButton" android:layout_width="match_parent"
+                    android:layout_height="52dp" android:layout_marginTop="12dp"
+                    android:onClick="@{() -> viewModel.setStep(1)}" android:text="@string/install_next"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
-            <com.google.android.material.card.MaterialCardView
-                style="@style/WidgetFoundation.Card"
-                gone="@{viewModel.skipOptions}"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/l1"
-                android:layout_marginEnd="@dimen/l1"
-                android:focusable="false">
+            <!-- Method -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:paddingStart="4dp" android:paddingTop="8dp"
+                android:paddingEnd="4dp" android:paddingBottom="8dp"
+                android:text="@string/install_method_title" android:textColor="?colorOnSurface"
+                android:textSize="24sp" android:textStyle="bold" />
+            <LinearLayout android:tag="metroAccentBg" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical"
+                android:padding="16dp">
+                <RadioGroup gone="@{viewModel.step != 1}" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:checkedButton="@={viewModel.method}">
+                    <RadioButton android:id="@+id/method_patch" style="@style/WidgetFoundation.RadioButton.Metro"
+                        android:tag="metroOnAccentFg" android:layout_width="match_parent"
+                        android:layout_height="52dp" android:text="@string/select_patch_file"
+                        android:textSize="17sp" android:textStyle="bold" />
+                    <RadioButton android:id="@+id/method_direct" style="@style/WidgetFoundation.RadioButton.Metro"
+                        gone="@{!viewModel.rooted}" android:tag="metroOnAccentFg"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/direct_install"
+                        android:textSize="17sp" android:textStyle="bold" />
+                    <RadioButton android:id="@+id/method_inactive_slot" style="@style/WidgetFoundation.RadioButton.Metro"
+                        gone="@{viewModel.noSecondSlot}" android:tag="metroOnAccentFg"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/install_inactive_slot"
+                        android:textSize="17sp" android:textStyle="bold" />
+                </RadioGroup>
+                <Button style="@style/WidgetFoundation.Button.Text.Metro" gone="@{viewModel.step != 1}"
+                    isEnabled="@{viewModel.method == @id/method_patch ? viewModel.data != null : viewModel.method != -1}"
+                    android:tag="metroInverseButton"
+                    android:layout_width="match_parent" android:layout_height="52dp"
+                    android:layout_marginTop="12dp"
+                    android:onClick="@{() -> viewModel.install()}" android:text="@string/install_start"
+                    android:textStyle="bold" />
+                <TextView gone="@{viewModel.step != 0}" android:tag="metroOnAccentFg"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:padding="12dp" android:alpha=".7"
+                    android:text="@string/install_next"
+                    android:textSize="15sp" android:textStyle="bold" />
+            </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            style="@style/WidgetFoundation.Icon"
-                            isSelected="@{viewModel.step > 0}"
-                            android:layout_marginStart="@dimen/l_25"
-                            app:srcCompat="@drawable/ic_check_circle_md2" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginStart="@dimen/l1"
-                            android:layout_weight="1"
-                            android:gravity="center_vertical"
-                            android:text="@string/install_options_title"
-                            android:textAppearance="@style/AppearanceFoundation.Body"
-                            android:textStyle="bold" />
-
-                        <Button
-                            style="@style/WidgetFoundation.Button.Text"
-                            gone="@{viewModel.step != 0}"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:onClick="@{() -> viewModel.setStep(1)}"
-                            android:text="@string/install_next" />
-
-                    </LinearLayout>
-
-                    <LinearLayout
-                        gone="@{viewModel.step != 0}"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/l1"
-                        android:layout_marginTop="@dimen/l_50"
-                        android:layout_marginEnd="@dimen/l1"
-                        android:layout_marginBottom="@dimen/l_50"
-                        android:orientation="vertical"
-                        android:paddingStart="3dp"
-                        android:paddingEnd="3dp"
-                        tools:layout_gravity="center">
-
-                        <CheckBox
-                            style="@style/WidgetFoundation.Checkbox"
-                            gone="@{Info.isSAR}"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:checked="@={Config.keepVerity}"
-                            android:text="@string/keep_dm_verity"
-                            tools:checked="true" />
-
-                        <CheckBox
-                            style="@style/WidgetFoundation.Checkbox"
-                            goneUnless="@{Info.isFDE}"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:checked="@={Config.keepEnc}"
-                            android:text="@string/keep_force_encryption"
-                            app:tint="?colorPrimary" />
-
-                        <CheckBox
-                            style="@style/WidgetFoundation.Checkbox"
-                            gone="@{Info.ramdisk}"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:checked="@={Config.recovery}"
-                            android:text="@string/recovery_mode"
-                            app:tint="?colorPrimary" />
-
-                    </LinearLayout>
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/WidgetFoundation.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/l1"
-                android:layout_marginTop="@dimen/l1"
-                android:layout_marginEnd="@dimen/l1"
-                android:focusable="false">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            style="@style/WidgetFoundation.Icon"
-                            isSelected="@{viewModel.step > 1}"
-                            android:layout_marginStart="@dimen/l_25"
-                            app:srcCompat="@drawable/ic_check_circle_md2" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginStart="@dimen/l1"
-                            android:layout_weight="1"
-                            android:gravity="center_vertical"
-                            android:text="@string/install_method_title"
-                            android:textAppearance="@style/AppearanceFoundation.Body"
-                            android:textStyle="bold" />
-
-                        <Button
-                            style="@style/WidgetFoundation.Button.Text"
-                            gone="@{viewModel.step != 1}"
-                            isEnabled="@{(viewModel.method == @id/method_patch || viewModel.method == @id/method_download) ? viewModel.data != null : viewModel.method != -1}"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:onClick="@{() -> viewModel.install()}"
-                            android:text="@string/install_start"
-                            app:icon="@drawable/ic_forth_md2"
-                            app:iconGravity="textEnd" />
-
-                    </LinearLayout>
-
-                    <RadioGroup
-                        gone="@{viewModel.step != 1}"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/l1"
-                        android:layout_marginTop="@dimen/l_50"
-                        android:layout_marginEnd="@dimen/l1"
-                        android:layout_marginBottom="@dimen/l_50"
-                        android:checkedButton="@={viewModel.method}"
-                        android:paddingStart="3dp"
-                        android:paddingEnd="3dp">
-
-                        <RadioButton
-                            android:id="@+id/method_patch"
-                            style="@style/WidgetFoundation.RadioButton"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/select_patch_file" />
-
-                        <RadioButton
-                            android:id="@+id/method_download"
-                            style="@style/WidgetFoundation.RadioButton"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/download_patch_file" />
-
-                        <RadioButton
-                            android:id="@+id/method_direct"
-                            style="@style/WidgetFoundation.RadioButton"
-                            gone="@{!viewModel.rooted}"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/direct_install" />
-
-                        <RadioButton
-                            android:id="@+id/method_inactive_slot"
-                            style="@style/WidgetFoundation.RadioButton"
-                            gone="@{viewModel.noSecondSlot}"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/install_inactive_slot" />
-
-                    </RadioGroup>
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/WidgetFoundation.Card"
-                gone="@{viewModel.notes.length == 0}"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/l1"
-                android:layout_marginTop="@dimen/l1"
-                android:layout_marginEnd="@dimen/l1"
-                android:focusable="false">
-
-                <TextView
-                    android:id="@+id/release_notes"
-                    markdownText="@{viewModel.notes}"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="15dp"
-                    android:breakStrategy="simple"
-                    android:hyphenationFrequency="none"
-                    android:textAppearance="@style/AppearanceFoundation.Caption"
-                    tools:ignore="UnusedAttribute"
-                    tools:maxLines="5"
-                    tools:text="@tools:sample/lorem/random"
-                    tools:visibility="visible" />
-
-            </com.google.android.material.card.MaterialCardView>
-
+            <!-- Release notes -->
+            <TextView gone="@{viewModel.notes.length == 0}" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:paddingStart="4dp" android:paddingTop="8dp" android:paddingEnd="4dp"
+                android:paddingBottom="8dp" android:text="@string/metro_release_notes"
+                android:textColor="?colorOnSurface" android:textSize="24sp" android:textStyle="bold" />
+            <LinearLayout gone="@{viewModel.notes.length == 0}" android:tag="metroAccentBgSoft"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="16dp">
+                <TextView android:id="@+id/release_notes" markdownText="@{viewModel.notes}"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:breakStrategy="simple" android:hyphenationFrequency="none"
+                    android:textColor="?colorOnSurface" android:textSize="14sp"
+                    tools:ignore="UnusedAttribute" />
+            </LinearLayout>
         </LinearLayout>
-
     </androidx.core.widget.NestedScrollView>
-
 </layout>

@@ -6,12 +6,8 @@ import android.content.pm.PackageManager
 import com.topjohnwu.magisk.core.BuildConfig
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.data.magiskdb.PolicyDao
-import com.topjohnwu.magisk.core.di.ServiceLocator
-import com.topjohnwu.magisk.core.ktx.getLabel
 import com.topjohnwu.magisk.core.ktx.getPackageInfo
-import com.topjohnwu.magisk.core.model.su.SuLog
 import com.topjohnwu.magisk.core.model.su.SuPolicy
-import com.topjohnwu.magisk.view.Notifications
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,7 +25,6 @@ class SuRequestHandler(
 
     private lateinit var output: File
     private lateinit var policy: SuPolicy
-    private var pid: Int = -1
     lateinit var pkgInfo: PackageInfo
         private set
 
@@ -60,7 +55,7 @@ class SuRequestHandler(
 
     private suspend fun init(intent: Intent): Boolean {
         val uid = intent.getIntExtra("uid", -1)
-        pid = intent.getIntExtra("pid", -1)
+        val pid = intent.getIntExtra("pid", -1)
         val fifo = intent.getStringExtra("fifo")
         if (uid <= 0 || pid <= 0 || fifo == null) {
             Timber.e("Unexpected extras: uid=[${uid}], pid=[${pid}], fifo=[${fifo}]")
@@ -109,32 +104,6 @@ class SuRequestHandler(
             }
             if (time >= 0) {
                 policyDB.update(policy)
-
-                val appInfo = pkgInfo.applicationInfo
-                val appName = appInfo?.getLabel(pm)
-                    ?: pkgInfo.sharedUserId ?: "[UID] ${policy.uid}"
-                val packageName = appInfo?.let { pm.getNameForUid(it.uid) }
-                    ?: pkgInfo.sharedUserId ?: "[UID] ${policy.uid}"
-
-                val log = SuLog(
-                    fromUid = policy.uid,
-                    toUid = 0,
-                    fromPid = pid,
-                    packageName = packageName,
-                    appName = appName,
-                    command = "",
-                    action = policy.policy,
-                    target = -1,
-                    context = "",
-                    gids = "",
-                )
-                ServiceLocator.logRepo.insert(log)
-
-                val granted = policy.policy >= SuPolicy.ALLOW
-                SuCallbackHandler.notify(granted, appName)
-
-                SuEvents.notifyPolicyChanged()
-                SuEvents.notifyLogUpdated()
             }
         }
     }

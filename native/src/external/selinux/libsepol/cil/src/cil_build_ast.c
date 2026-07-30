@@ -137,7 +137,6 @@ static int cil_allow_multiple_decls(struct cil_db *db, enum cil_flavor f_new, en
 	switch (f_new) {
 	case CIL_TYPE:
 	case CIL_TYPEATTRIBUTE:
-	case CIL_ROLE:
 		if (db->multiple_decls) {
 			return CIL_TRUE;
 		}
@@ -1748,12 +1747,7 @@ int cil_gen_role(struct cil_db *db, struct cil_tree_node *parse_current, struct 
 
 	rc = cil_gen_node(db, ast_node, (struct cil_symtab_datum*)role, (hashtab_key_t)key, CIL_SYM_ROLES, CIL_ROLE);
 	if (rc != SEPOL_OK) {
-		if (rc == SEPOL_EEXIST) {
-			cil_destroy_role(role);
-			role = NULL;
-		} else {
-			goto exit;
-		}
+		goto exit;
 	}
 
 	return SEPOL_OK;
@@ -3369,50 +3363,6 @@ exit:
 }
 
 void cil_destroy_typepermissive(struct cil_typepermissive *typeperm)
-{
-	if (typeperm == NULL) {
-		return;
-	}
-
-	free(typeperm);
-}
-
-int cil_gen_typeneveraudit(struct cil_db *db, struct cil_tree_node *parse_current, struct cil_tree_node *ast_node)
-{
-	enum cil_syntax syntax[] = {
-		CIL_SYN_STRING,
-		CIL_SYN_STRING,
-		CIL_SYN_END
-	};
-	size_t syntax_len = sizeof(syntax)/sizeof(*syntax);
-	struct cil_typeneveraudit *typeperm = NULL;
-	int rc = SEPOL_ERR;
-
-	if (db == NULL || parse_current == NULL || ast_node == NULL) {
-		goto exit;
-	}
-
-	rc = __cil_verify_syntax(parse_current, syntax, syntax_len);
-	if (rc != SEPOL_OK) {
-		goto exit;
-	}
-
-	cil_typeneveraudit_init(&typeperm);
-
-	typeperm->type_str = parse_current->next->data;
-
-	ast_node->data = typeperm;
-	ast_node->flavor = CIL_TYPENEVERAUDIT;
-
-	return SEPOL_OK;
-
-exit:
-	cil_tree_log(parse_current, CIL_ERR, "Bad typeneveraudit declaration");
-	cil_destroy_typeneveraudit(typeperm);
-	return rc;
-}
-
-void cil_destroy_typeneveraudit(struct cil_typeneveraudit *typeperm)
 {
 	if (typeperm == NULL) {
 		return;
@@ -6218,11 +6168,7 @@ static int check_for_illegal_statement(struct cil_tree_node *parse_current, stru
 			parse_current->data != CIL_KEY_TYPETRANSITION &&
 			parse_current->data != CIL_KEY_TYPECHANGE &&
 			parse_current->data != CIL_KEY_SRC_INFO &&
-			parse_current->data != CIL_KEY_TYPEMEMBER &&
-			((args->db->policy_version < POLICYDB_VERSION_COND_XPERMS) ||
-			  (parse_current->data != CIL_KEY_ALLOWX &&
-			   parse_current->data != CIL_KEY_DONTAUDITX &&
-			   parse_current->data != CIL_KEY_AUDITALLOWX))) {
+			parse_current->data != CIL_KEY_TYPEMEMBER) {
 			if (((struct cil_booleanif*)args->boolif->data)->preserved_tunable) {
 				cil_tree_log(parse_current, CIL_ERR, "%s is not allowed in tunableif being treated as a booleanif", (char *)parse_current->data);
 			} else {
@@ -6309,8 +6255,6 @@ static struct cil_tree_node * parse_statement(struct cil_db *db, struct cil_tree
 		rc = cil_gen_bounds(db, parse_current, new_ast_node, CIL_TYPE);
 	} else if (parse_current->data == CIL_KEY_TYPEPERMISSIVE) {
 		rc = cil_gen_typepermissive(db, parse_current, new_ast_node);
-	} else if (parse_current->data == CIL_KEY_TYPENEVERAUDIT) {
-		rc = cil_gen_typeneveraudit(db, parse_current, new_ast_node);
 	} else if (parse_current->data == CIL_KEY_RANGETRANSITION) {
 		rc = cil_gen_rangetransition(db, parse_current, new_ast_node);
 	} else if (parse_current->data == CIL_KEY_ROLE) {

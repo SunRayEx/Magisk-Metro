@@ -3,10 +3,7 @@
 #include <jni.h>
 #include <core.hpp>
 
-// Use an obfuscated loader name that doesn't reveal Zygisk/Magisk
-// libNBNqc.so looks like a normal native bridge library
-#define ZYGISKLDR       "libNBNqc.so"
-#define ZYGISKLDR_LEN   12
+#define ZYGISKLDR       "libzygisk.so"
 #define NBPROP          "ro.dalvik.vm.native.bridge"
 
 #if defined(__LP64__)

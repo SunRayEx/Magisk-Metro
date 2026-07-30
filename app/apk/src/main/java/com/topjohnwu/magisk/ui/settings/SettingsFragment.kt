@@ -6,6 +6,7 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentSettingsMd2Binding
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import rikka.recyclerview.addEdgeSpacing
 import rikka.recyclerview.addItemSpacing
 import rikka.recyclerview.fixEdgeEffect
@@ -14,6 +15,7 @@ import com.topjohnwu.magisk.core.R as CoreR
 class SettingsFragment : BaseFragment<FragmentSettingsMd2Binding>() {
 
     override val layoutRes = R.layout.fragment_settings_md2
+    override val metroAccentRole = MetroAccentRole.SETTINGS
     override val viewModel by viewModel<SettingsViewModel>()
     override val snackbarView: View get() = binding.snackbarContainer
 

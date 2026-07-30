@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
+import android.graphics.drawable.ColorDrawable
 import android.widget.Toast
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.view.forEach
@@ -34,6 +35,8 @@ import com.topjohnwu.magisk.core.tasks.AppMigration
 import com.topjohnwu.magisk.databinding.ActivityMainMd2Binding
 import com.topjohnwu.magisk.ui.home.HomeFragmentDirections
 import com.topjohnwu.magisk.ui.theme.Theme
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.magisk.view.Shortcuts
 import kotlinx.coroutines.launch
@@ -93,16 +96,32 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         navigation.addOnDestinationChangedListener { _, destination, _ ->
-            isRootFragment = when (destination.id) {
-                R.id.homeFragment,
-                R.id.modulesFragment,
-                R.id.superuserFragment,
-                R.id.logFragment -> true
-                else -> false
-            }
+            val isHome = destination.id == R.id.homeFragment
+            isRootFragment = isHome
 
             setDisplayHomeAsUpEnabled(!isRootFragment)
-            requestNavigationHidden(!isRootFragment)
+            binding.mainToolbarWrapper.isGone = isHome
+            val role = when (destination.id) {
+                R.id.modulesFragment, R.id.actionFragment, R.id.webUiFragment ->
+                    MetroAccentRole.MODULES
+                R.id.superuserFragment, R.id.denyFragment -> MetroAccentRole.APPS
+                R.id.logFragment -> MetroAccentRole.LOGS
+                R.id.settingsFragment, R.id.themeFragment -> MetroAccentRole.SETTINGS
+                R.id.contributorFragment -> MetroAccentRole.CONTRIBUTORS
+                else -> null
+            }
+            if (!isHome) {
+                // Single source of truth: MetroColors decides between role colors, dynamic
+                // color and the packaged theme's colorPrimary.
+                val accent = role?.let { MetroColors.accent(this, it) }
+                    ?: MetroColors.themePrimary(this)
+                val onAccent = role?.let { MetroColors.onAccent(this, it) }
+                    ?: MetroColors.themeOnPrimary(this)
+                binding.mainToolbarWrapper.background = ColorDrawable(accent)
+                binding.mainToolbar.setTitleTextColor(onAccent)
+                binding.mainToolbar.navigationIcon?.setTint(onAccent)
+            }
+            requestNavigationHidden(isHome || !isRootFragment, requiresAnimation = false)
 
             binding.mainNavigation.menu.forEach {
                 if (it.itemId == destination.id) {

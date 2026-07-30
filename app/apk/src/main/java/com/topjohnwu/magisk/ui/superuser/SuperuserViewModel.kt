@@ -1,7 +1,6 @@
 package com.topjohnwu.magisk.ui.superuser
 
 import android.annotation.SuppressLint
-import android.content.pm.PackageManager
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
 import android.os.Process
 import androidx.databinding.Bindable
@@ -16,7 +15,6 @@ import com.topjohnwu.magisk.core.R
 import com.topjohnwu.magisk.core.data.magiskdb.PolicyDao
 import com.topjohnwu.magisk.core.ktx.getLabel
 import com.topjohnwu.magisk.core.model.su.SuPolicy
-import com.topjohnwu.magisk.core.utils.asText
 import com.topjohnwu.magisk.databinding.MergeObservableList
 import com.topjohnwu.magisk.databinding.RvItem
 import com.topjohnwu.magisk.databinding.bindExtra
@@ -25,6 +23,7 @@ import com.topjohnwu.magisk.databinding.set
 import com.topjohnwu.magisk.dialog.SuperuserRevokeDialog
 import com.topjohnwu.magisk.events.AuthEvent
 import com.topjohnwu.magisk.events.SnackbarEvent
+import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.magisk.view.TextItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,36 +60,41 @@ class SuperuserViewModel(
         withContext(Dispatchers.IO) {
             db.deleteOutdated()
             db.delete(AppContext.applicationInfo.uid)
-            val policies = ArrayList<PolicyRvItem>()
             val pm = AppContext.packageManager
-            for (policy in db.fetchAll()) {
-                val pkgs =
-                    if (policy.uid == Process.SYSTEM_UID) arrayOf("android")
-                    else pm.getPackagesForUid(policy.uid)
-                if (pkgs == null) {
-                    db.delete(policy.uid)
-                    continue
+            val storedPolicies = db.fetchAll().associateBy { it.uid }
+            val policiesByUid = HashMap<Int, SuPolicy>()
+            val applications = pm.getInstalledApplications(MATCH_UNINSTALLED_PACKAGES)
+                .asSequence()
+                .filter { app ->
+                    app.uid >= Process.FIRST_APPLICATION_UID &&
+                        app.uid != AppContext.applicationInfo.uid &&
+                        app.flags and android.content.pm.ApplicationInfo.FLAG_INSTALLED != 0
                 }
-                val map = pkgs.mapNotNull { pkg ->
-                    try {
-                        val info = pm.getPackageInfo(pkg, MATCH_UNINSTALLED_PACKAGES)
-                        PolicyRvItem(
-                            this@SuperuserViewModel, policy,
-                            info.packageName,
-                            info.sharedUserId != null,
-                            info.applicationInfo?.loadIcon(pm) ?: pm.defaultActivityIcon,
-                            info.applicationInfo?.getLabel(pm) ?: info.packageName
-                        )
-                    } catch (e: PackageManager.NameNotFoundException) {
-                        null
-                    }
+                .toList()
+
+            val policies = applications.map { app ->
+                val policy = policiesByUid.getOrPut(app.uid) {
+                    storedPolicies[app.uid] ?: SuPolicy(
+                        uid = app.uid,
+                        policy = SuPolicy.DENY,
+                        remain = 0L,
+                    )
                 }
-                if (map.isEmpty()) {
-                    db.delete(policy.uid)
-                    continue
-                }
-                policies.addAll(map)
-            }
+                val sharedUid = (pm.getPackagesForUid(app.uid)?.size ?: 0) > 1
+                PolicyRvItem(
+                    this@SuperuserViewModel,
+                    policy,
+                    app.packageName,
+                    sharedUid,
+                    runCatching { app.loadIcon(pm) }.getOrDefault(pm.defaultActivityIcon),
+                    app.getLabel(pm),
+                )
+            }.toMutableList()
+
+            storedPolicies.keys
+                .filter { uid -> pm.getPackagesForUid(uid) == null }
+                .forEach { uid -> db.delete(uid) }
+
             policies.sortWith(compareBy(
                 { it.appName.lowercase(Locale.ROOT) },
                 { it.packageName }
@@ -109,11 +113,22 @@ class SuperuserViewModel(
     fun deletePressed(item: PolicyRvItem) {
         fun updateState() = viewModelScope.launch {
             db.delete(item.item.uid)
-            val list = ArrayList(itemsPolicies)
-            list.removeAll { it.item.uid == item.item.uid }
-            itemsPolicies.update(list)
-            if (list.isEmpty() && itemsHelpers.isEmpty()) {
-                itemsHelpers.add(itemNoData)
+            item.item.apply {
+                policy = SuPolicy.DENY
+                remain = 0L
+                logging = true
+                notification = true
+            }
+            itemsPolicies.forEach {
+                if (it.item.uid == item.item.uid) {
+                    it.isExpanded = false
+                    it.notifyPropertyChanged(BR.enabled)
+                    it.notifyPropertyChanged(BR.rootGranted)
+                    it.notifyPropertyChanged(BR.sliderValue)
+                    it.notifyPropertyChanged(BR.showSlider)
+                    it.notifyPropertyChanged(BR.shouldNotify)
+                    it.notifyPropertyChanged(BR.shouldLog)
+                }
             }
         }
 
@@ -162,10 +177,13 @@ class SuperuserViewModel(
             viewModelScope.launch {
                 val res = if (policy >= SuPolicy.ALLOW) R.string.su_snack_grant else R.string.su_snack_deny
                 item.item.policy = policy
+                item.item.remain = 0L
                 db.update(item.item)
                 items.forEach {
                     it.notifyPropertyChanged(BR.enabled)
+                    it.notifyPropertyChanged(BR.rootGranted)
                     it.notifyPropertyChanged(BR.sliderValue)
+                    it.notifyPropertyChanged(BR.showSlider)
                 }
                 SnackbarEvent(res.asText(item.appName)).publish()
             }

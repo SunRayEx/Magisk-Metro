@@ -1,6 +1,6 @@
 use crate::consts::{APP_PACKAGE_NAME, MAGISK_VER_CODE};
 use crate::daemon::{AID_APP_END, AID_APP_START, AID_USER_OFFSET, MagiskD, to_app_id};
-use crate::ffi::{DbEntryKey, get_magisk_tmp};
+use crate::ffi::{DbEntryKey, get_magisk_tmp, install_apk, uninstall_pkg};
 use base::WalkResult::{Abort, Continue, Skip};
 use base::{
     BufReadExt, Directory, FsPathBuilder, LoggedResult, ReadExt, ResultExt, Utf8CStrBuf,
@@ -179,7 +179,7 @@ enum Status {
 }
 
 pub struct ManagerInfo {
-    // stub_apk_fd removed - MagiskUbe does not use stub mechanism
+    stub_apk_fd: Option<File>,
     trusted_cert: Vec<u8>,
     repackaged_app_id: i32,
     repackaged_pkg: String,
@@ -190,6 +190,7 @@ pub struct ManagerInfo {
 impl Default for ManagerInfo {
     fn default() -> Self {
         ManagerInfo {
+            stub_apk_fd: None,
             trusted_cert: Vec::new(),
             repackaged_app_id: -1,
             repackaged_pkg: String::new(),
@@ -276,8 +277,8 @@ impl ManagerInfo {
 
         if cert.is_empty() || (pkg == self.repackaged_pkg && cert != self.repackaged_cert) {
             error!("pkg: repackaged APK signature invalid: {}", apk);
-            // For MagiskUbe custom build without check-signature, log warning but don't uninstall
-            warn!("pkg: signature check disabled, accepting APK anyway");
+            uninstall_pkg(&apk);
+            return Status::CertMismatch;
         }
 
         self.repackaged_pkg.clear();
@@ -299,8 +300,11 @@ impl ManagerInfo {
 
         if cert.is_empty() || cert != self.trusted_cert {
             error!("pkg: APK signature mismatch: {}", apk);
-            // For MagiskUbe custom build without check-signature, log warning but don't uninstall
-            warn!("pkg: signature check disabled, accepting APK anyway");
+            #[cfg(all(feature = "check-signature", not(debug_assertions)))]
+            {
+                uninstall_pkg(cstr!(APP_PACKAGE_NAME));
+                return Status::CertMismatch;
+            }
         }
 
         self.tracked_files.insert(user, TrackedFile::new(apk));
@@ -308,8 +312,25 @@ impl ManagerInfo {
     }
 
     fn install_stub(&mut self) {
-        // stub installation disabled - MagiskUbe does not use stub mechanism
-        // This prevents the "takeover" behavior where official Magisk stub replaces custom builds
+        if let Some(ref mut stub_fd) = self.stub_apk_fd {
+            // Copy the stub APK
+            let tmp_apk = cstr!("/data/stub.apk");
+            let result = || -> LoggedResult<()> {
+                {
+                    let mut tmp_apk_file = tmp_apk.create(
+                        OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_TRUNC | OFlag::O_CLOEXEC,
+                        0o600,
+                    )?;
+                    io::copy(stub_fd, &mut tmp_apk_file)?;
+                }
+                // Seek the fd back to start
+                stub_fd.seek(SeekFrom::Start(0))?;
+                Ok(())
+            }();
+            if result.is_ok() {
+                install_apk(tmp_apk);
+            }
+        }
     }
 
     fn get_manager(&mut self, daemon: &MagiskD, user: i32, mut install: bool) -> (i32, &str) {
@@ -325,7 +346,9 @@ impl ManagerInfo {
         {
             // no APK
             if &file.path == PACKAGES_XML {
-                // stub installation disabled - MagiskUbe does not auto-install
+                if install && !daemon.is_emulator {
+                    self.install_stub();
+                }
                 return (-1, "");
             }
             // dyn APK is still the same
@@ -400,7 +423,9 @@ impl ManagerInfo {
         self.tracked_files
             .insert(user, TrackedFile::new(PACKAGES_XML.into()));
 
-        // stub installation disabled - MagiskUbe does not auto-install
+        if install && !daemon.is_emulator {
+            self.install_stub();
+        }
         (-1, "")
     }
 }
@@ -417,40 +442,20 @@ impl MagiskD {
     }
 
     pub fn preserve_stub_apk(&self) {
-        // stub preservation disabled - MagiskUbe does not use stub mechanism
-        // Read trusted cert from the main APK instead
         let mut info = self.manager_info.lock();
 
-        // Try to read certificate from the installed manager APK
-        if let Ok(apk) = find_apk_path(APP_PACKAGE_NAME) {
-            warn!("pkg: found manager APK at: {}", apk);
-            if let Ok(mut fd) = apk.open(OFlag::O_RDONLY | OFlag::O_CLOEXEC) {
-                info.trusted_cert = read_certificate(&mut fd, MAGISK_VER_CODE);
-                if info.trusted_cert.is_empty() {
-                    warn!("pkg: failed to read certificate from manager APK");
-                } else {
-                    warn!("pkg: successfully read certificate ({} bytes)", info.trusted_cert.len());
-                }
-            } else {
-                warn!("pkg: failed to open manager APK");
-            }
-        } else {
-            warn!("pkg: manager APK not found at expected path");
-        }
-
-        // Also try to get manager UID and store it
-        let uid = self.get_package_uid(0, APP_PACKAGE_NAME);
-        if uid > 0 {
-            warn!("pkg: manager UID = {}", uid);
-        } else {
-            warn!("pkg: failed to get manager UID");
-        }
-
-        // Remove any stub.apk if present
-        let stub_apk = cstr::buf::default()
+        let apk = cstr::buf::default()
             .join_path(get_magisk_tmp())
             .join_path("stub.apk");
-        stub_apk.remove().log_ok();
+
+        if let Ok(mut fd) = apk.open(OFlag::O_RDONLY | OFlag::O_CLOEXEC) {
+            info.trusted_cert = read_certificate(&mut fd, MAGISK_VER_CODE);
+            // Seek the fd back to start
+            fd.seek(SeekFrom::Start(0)).log_ok();
+            info.stub_apk_fd = Some(fd);
+        }
+
+        apk.remove().log_ok();
     }
 
     pub fn get_manager_uid(&self, user: i32) -> i32 {

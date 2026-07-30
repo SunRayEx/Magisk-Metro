@@ -31,7 +31,7 @@ endif
 
 # check for reallocarray(3) availability
 H := \#
-ifeq (yes,$(shell printf '${H}include <stdlib.h>\nint main(void){return reallocarray(NULL,0,0)==NULL;}' | $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Werror=implicit-function-declaration -x c -o /dev/null - >/dev/null 2>&1 && echo yes))
+ifeq (yes,$(shell printf '${H}include <stdlib.h>\nint main(void){return reallocarray(NULL,0,0)==NULL;}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c -o /dev/null - >/dev/null 2>&1 && echo yes))
 override CFLAGS += -DHAVE_REALLOCARRAY
 endif
 
@@ -40,17 +40,12 @@ LD_SONAME_FLAGS=-soname,$(LIBSO),--version-script=$(LIBMAP),-z,defs
 LN=ln
 OS := $(shell uname)
 ifeq ($(OS), Darwin)
-TARGET=libsepol.dylib
-LIBSO=libsepol.$(LIBVERSION).dylib
 LD_SONAME_FLAGS=-install_name,$(LIBSO)
 LDFLAGS += -undefined dynamic_lookup
 LN=gln
 endif
 
-all: $(LIBA) $(LIBPC)
-ifneq ($(DISABLE_SHARED),y)
-all: $(LIBSO)
-endif
+all: $(LIBA) $(LIBSO) $(LIBPC)
 
 
 $(LIBA):  $(OBJS)
@@ -92,16 +87,18 @@ endif
 install: all
 	test -d $(DESTDIR)$(LIBDIR) || install -m 755 -d $(DESTDIR)$(LIBDIR)
 	install -m 644 $(LIBA) $(DESTDIR)$(LIBDIR)
-	test -d $(DESTDIR)$(LIBDIR)/pkgconfig || install -m 755 -d $(DESTDIR)$(LIBDIR)/pkgconfig
-	install -m 644 $(LIBPC) $(DESTDIR)$(LIBDIR)/pkgconfig
-ifneq ($(DISABLE_SHARED),y)
 	test -d $(DESTDIR)$(SHLIBDIR) || install -m 755 -d $(DESTDIR)$(SHLIBDIR)
 	install -m 755 $(LIBSO) $(DESTDIR)$(SHLIBDIR)
+	test -d $(DESTDIR)$(LIBDIR)/pkgconfig || install -m 755 -d $(DESTDIR)$(LIBDIR)/pkgconfig
+	install -m 644 $(LIBPC) $(DESTDIR)$(LIBDIR)/pkgconfig
 	$(LN) -sf --relative $(DESTDIR)$(SHLIBDIR)/$(LIBSO) $(DESTDIR)$(LIBDIR)/$(TARGET)
-endif
 
 relabel:
 	/sbin/restorecon $(DESTDIR)$(SHLIBDIR)/$(LIBSO)
 
 clean: 
 	-rm -f $(LIBPC) $(LIBMAP) $(OBJS) $(LOBJS) $(LIBA) $(LIBSO) $(TARGET) $(CIL_GENERATED)
+
+indent:
+	../../scripts/Lindent $(wildcard *.[ch])
+

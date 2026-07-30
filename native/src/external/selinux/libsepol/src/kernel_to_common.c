@@ -382,54 +382,6 @@ int strs_stack_empty(const struct strs *stack)
 	return strs_num_items(stack) == 0;
 }
 
-struct strs *isids_to_strs(const char *const *sid_to_str, unsigned num_sids, struct ocontext *isids)
-{
-	struct ocontext *isid;
-	struct strs *strs;
-	char *sid;
-	char unknown[18];
-	unsigned i, max;
-	int rc;
-
-	rc = strs_init(&strs, num_sids+1);
-	if (rc != 0) {
-		goto exit;
-	}
-
-	max = 0;
-	for (isid = isids; isid != NULL; isid = isid->next) {
-		i = isid->sid[0];
-		if (i > max) {
-			max = i;
-		}
-	}
-
-	for (i=1; i <= max; i++) {
-		if (i < num_sids && sid_to_str[i]) {
-			sid = strdup(sid_to_str[i]);
-		} else {
-			snprintf(unknown, 18, "%s%u", "UNKNOWN", i);
-			sid = strdup(unknown);
-		}
-		if (!sid) {
-			ERR(NULL, "Out of memory");
-			goto exit;
-		}
-		rc = strs_add_at_index(strs, sid, i);
-		if (rc != 0) {
-			free(sid);
-			goto exit;
-		}
-	}
-
-	return strs;
-
-exit:
-	strs_free_all(strs);
-	strs_destroy(&strs);
-	return NULL;
-}
-
 static int compare_ranges(uint64_t l1, uint64_t h1, uint64_t l2, uint64_t h2)
 {
 	uint64_t d1, d2;
@@ -489,40 +441,10 @@ static int portcon_data_cmp(const void *a, const void *b)
 
 static int netif_data_cmp(const void *a, const void *b)
 {
-	/* keep in sync with cil_post.c:cil_post_netifcon_compare() */
-	const struct ocontext *const *aa = a;
-	const struct ocontext *const *bb = b;
-	const char *a_name = (*aa)->u.name;
-	const char *b_name = (*bb)->u.name;
-	size_t a_stem = strcspn(a_name, "*?");
-	size_t b_stem = strcspn(b_name, "*?");
-	size_t a_len = strlen(a_name);
-	size_t b_len = strlen(b_name);
-	int a_iswildcard = a_stem != a_len;
-	int b_iswildcard = b_stem != b_len;
-	int rc;
+	struct ocontext *const *aa = a;
+	struct ocontext *const *bb = b;
 
-	/* order non-wildcards first */
-	rc = spaceship_cmp(a_iswildcard, b_iswildcard);
-	if (rc)
-		return rc;
-
-	/* order non-wildcards alphabetically */
-	if (!a_iswildcard)
-		return strcmp(a_name, b_name);
-
-	/* order by decreasing stem length */
-	rc = spaceship_cmp(a_stem, b_stem);
-	if (rc)
-		return -rc;
-
-	/* order '?' (0x3f) before '*' (0x2A) */
-	rc = spaceship_cmp(a_name[a_stem], b_name[b_stem]);
-	if (rc)
-		return -rc;
-
-	/* order alphabetically */
-	return strcmp(a_name, b_name);
+	return strcmp((*aa)->u.name, (*bb)->u.name);
 }
 
 static int node_data_cmp(const void *a, const void *b)

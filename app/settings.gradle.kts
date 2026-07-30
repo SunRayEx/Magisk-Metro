@@ -8,4 +8,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Magisk"
-include(":apk", ":core", ":shared", ":test")
+include(":apk", ":core", ":shared", ":stub", ":test")

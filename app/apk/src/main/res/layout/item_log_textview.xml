@@ -11,10 +11,9 @@
 
 
     <com.google.android.material.textview.MaterialTextView
-        android:layout_width="match_parent"
+        style="@style/WidgetFoundation.Metro.MonospaceText"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:textAppearance="@style/AppearanceFoundation.Caption"
         android:text="@{item.item}" />
 
 </layout>

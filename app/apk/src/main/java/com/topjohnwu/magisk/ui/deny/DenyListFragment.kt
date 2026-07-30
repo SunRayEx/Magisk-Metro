@@ -13,6 +13,7 @@ import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.core.ktx.hideKeyboard
 import com.topjohnwu.magisk.databinding.FragmentDenyMd2Binding
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import rikka.recyclerview.addEdgeSpacing
 import rikka.recyclerview.addItemSpacing
 import rikka.recyclerview.fixEdgeEffect
@@ -21,13 +22,14 @@ import com.topjohnwu.magisk.core.R as CoreR
 class DenyListFragment : BaseFragment<FragmentDenyMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_deny_md2
+    override val metroAccentRole = MetroAccentRole.APPS
     override val viewModel by viewModel<DenyListViewModel>()
 
     private lateinit var searchView: SearchView
 
     override fun onStart() {
         super.onStart()
-        activity?.setTitle(CoreR.string.denylist)
+        activity?.setTitle(R.string.metro_sulist)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

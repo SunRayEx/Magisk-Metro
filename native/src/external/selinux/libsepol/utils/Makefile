@@ -18,4 +18,8 @@ install: all
 clean:
 	-rm -f $(TARGETS) *.o 
 
+indent:
+	../../scripts/Lindent $(wildcard *.[ch])
+
 relabel:
+

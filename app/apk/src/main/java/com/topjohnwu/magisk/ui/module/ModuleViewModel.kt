@@ -102,6 +102,10 @@ class ModuleViewModel : AsyncLoadViewModel() {
         MainDirections.actionActionFragment(id, name).navigate()
     }
 
+    fun openWebUi(id: String, name: String) {
+        MainDirections.actionWebUiFragment(id, name).navigate()
+    }
+
     companion object {
         private val uri = MutableLiveData<Uri?>()
     }

@@ -1,11 +1,13 @@
 package com.topjohnwu.magisk.ui.theme
 
 import android.os.Bundle
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
+import com.google.android.material.color.DynamicColors
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseFragment
@@ -17,19 +19,8 @@ import com.topjohnwu.magisk.core.R as CoreR
 class ThemeFragment : BaseFragment<FragmentThemeMd2Binding>() {
 
     override val layoutRes = R.layout.fragment_theme_md2
+    override val metroAccentRole = MetroAccentRole.SETTINGS
     override val viewModel by viewModel<ThemeViewModel>()
-
-    private fun <T> Array<T>.paired(): List<Pair<T, T?>> {
-        val iterator = iterator()
-        if (!iterator.hasNext()) return emptyList()
-        val result = mutableListOf<Pair<T, T?>>()
-        while (iterator.hasNext()) {
-            val a = iterator.next()
-            val b = if (iterator.hasNext()) iterator.next() else null
-            result.add(a to b)
-        }
-        return result
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -38,22 +29,30 @@ class ThemeFragment : BaseFragment<FragmentThemeMd2Binding>() {
     ): View {
         super.onCreateView(inflater, container, savedInstanceState)
 
-        for ((a, b) in Theme.values().paired()) {
-            val c = inflater.inflate(R.layout.item_theme_container, null, false)
-            val left = c.findViewById<FrameLayout>(R.id.left)
-            val right = c.findViewById<FrameLayout>(R.id.right)
-
-            for ((theme, view) in listOf(a to left, b to right)) {
-                theme ?: continue
-                val themed = ContextThemeWrapper(activity, theme.themeRes)
-                ItemThemeBindingImpl.inflate(LayoutInflater.from(themed), view, true).also {
-                    it.setVariable(BR.viewModel, viewModel)
-                    it.setVariable(BR.theme, theme)
-                    it.lifecycleOwner = viewLifecycleOwner
+        for (theme in Theme.displayValues) {
+            val themed = if (theme == Theme.Dynamic) {
+                DynamicColors.wrapContextIfAvailable(requireContext())
+            } else {
+                ContextThemeWrapper(activity, theme.themeRes)
+            }
+            ItemThemeBindingImpl.inflate(
+                LayoutInflater.from(themed), binding.themeContainer, true
+            ).also {
+                it.setVariable(BR.viewModel, viewModel)
+                it.setVariable(BR.theme, theme)
+                it.lifecycleOwner = viewLifecycleOwner
+                if (theme == Theme.Default) {
+                    it.themePreview.background = GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR,
+                        intArrayOf(
+                            Color.rgb(31, 177, 83), Color.rgb(36, 121, 201),
+                            Color.rgb(194, 28, 32), Color.rgb(255, 197, 18),
+                            Color.rgb(167, 72, 170), Color.rgb(247, 247, 247),
+                            Color.rgb(245, 111, 181),
+                        ),
+                    )
                 }
             }
-
-            binding.themeContainer.addView(c)
         }
 
         return binding.root

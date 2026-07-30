@@ -13,6 +13,9 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavDirections
 import com.topjohnwu.magisk.BR
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
+
 
 abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHolder {
 
@@ -23,6 +26,13 @@ abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHo
     private val navigation get() = activity?.navigation
     open val snackbarView: View? get() = null
     open val snackbarAnchorView: View? get() = null
+
+    /**
+     * Which Metro tile this screen was opened from. Fragments overriding this get their whole
+     * layout tinted (see [MetroColors.applyMetroAccent]) instead of hardcoding colors in XML.
+     */
+    open val metroAccentRole: MetroAccentRole? get() = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,6 +86,7 @@ abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHo
                 return true
             }
         })
+        metroAccentRole?.let { MetroColors.applyMetroAccent(view, it) }
     }
 
     override fun onResume() {
@@ -88,6 +99,8 @@ abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHo
 
     protected open fun onPreBind(binding: Binding) {
         (binding.root as? ViewGroup)?.startAnimations()
+        // DataBinding may reset colors while re-binding, so paint again on every pass.
+        metroAccentRole?.let { MetroColors.applyMetroAccent(binding.root, it) }
     }
 
     fun NavDirections.navigate() {

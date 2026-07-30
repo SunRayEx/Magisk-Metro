@@ -516,14 +516,11 @@ static int is_id_in_scope(struct policydb *pdb, struct stack *decl_stack, char *
 	return is_id_in_scope_with_start(pdb, decl_stack, start, symbol_type, type);
 }
 
-static int semantic_level_to_cil(struct policydb *pdb, struct mls_semantic_level *level)
+static int semantic_level_to_cil(struct policydb *pdb, int sens_offset, struct mls_semantic_level *level)
 {
 	struct mls_semantic_cat *cat;
 
-	if (level->sens == 0)
-		return -1;
-
-	cil_printf("(%s ", pdb->p_sens_val_to_name[level->sens - 1]);
+	cil_printf("(%s ", pdb->p_sens_val_to_name[level->sens - sens_offset]);
 
 	if (level->cat != NULL) {
 		cil_printf("(");
@@ -712,7 +709,7 @@ static int avrulex_to_cil(int indent, struct policydb *pdb, uint32_t type, const
 	} else if (xperms->specified == AVTAB_XPERMS_NLMSG) {
 		xperm = "nlmsg";
 	} else {
-		ERR(NULL, "Unknown avrule xperms->specified: %i", xperms->specified);
+		ERR(NULL, "Unkown avrule xperms->specified: %i", xperms->specified);
 		rc = -1;
 		goto exit;
 	}
@@ -1589,14 +1586,14 @@ static int range_trans_to_cil(int indent, struct policydb *pdb, struct range_tra
 
 					cil_printf("(");
 
-					rc = semantic_level_to_cil(pdb, &rule->trange.level[0]);
+					rc = semantic_level_to_cil(pdb, 1, &rule->trange.level[0]);
 					if (rc != 0) {
 						goto exit;
 					}
 
 					cil_printf(" ");
 
-					rc = semantic_level_to_cil(pdb, &rule->trange.level[1]);
+					rc = semantic_level_to_cil(pdb, 1, &rule->trange.level[1]);
 					if (rc != 0) {
 						goto exit;
 					}
@@ -2175,7 +2172,39 @@ static int role_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 	switch (role->flavor) {
 	case ROLE_ROLE:
 		if (scope == SCOPE_DECL) {
-			cil_println(indent, "(role %s)", key);
+			// Only declare certain roles if we are reading a base module.
+			// These roles are defined in the base module and sometimes in
+			// other non-base modules. If we generated the roles regardless of
+			// the policy type, it would result in duplicate declarations,
+			// which isn't allowed in CIL. Patches have been made to refpolicy
+			// to remove these duplicate role declarations, but we need to be
+			// backwards compatible and support older policies. Since we know
+			// these roles are always declared in base, only print them when we
+			// see them in the base module. If the declarations appear in a
+			// non-base module, ignore their declarations.
+			//
+			// Note that this is a hack, and if a policy author does not define
+			// one of these roles in base, the declaration will not appear in
+			// the resulting policy, likely resulting in a compilation error in
+			// CIL.
+			//
+			// To make things more complicated, the auditadm_r and secadm_r
+			// roles could actually be in either the base module or a non-base
+			// module, or both. So we can't rely on this same behavior. So for
+			// these roles, don't declare them here, even if they are in a base
+			// or non-base module. Instead we will just declare them in the
+			// base module elsewhere.
+			int is_base_role = (!strcmp(key, "user_r") ||
+			                    !strcmp(key, "staff_r") ||
+			                    !strcmp(key, "sysadm_r") ||
+			                    !strcmp(key, "system_r") ||
+			                    !strcmp(key, "unconfined_r"));
+			int is_builtin_role = (!strcmp(key, "auditadm_r") ||
+			                       !strcmp(key, "secadm_r"));
+			if ((is_base_role && pdb->policy_type == SEPOL_POLICY_BASE) ||
+			    (!is_base_role && !is_builtin_role)) {
+				cil_println(indent, "(role %s)", key);
+			}
 		}
 
 		if (ebitmap_cardinality(&role->dominates) > 1) {
@@ -2278,10 +2307,6 @@ static int type_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 			cil_println(indent, "(typepermissive %s)", key);
 		}
 
-		if (type->flags & TYPE_FLAGS_NEVERAUDIT) {
-			cil_println(indent, "(typeneveraudit %s)", key);
-		}
-
 		if (type->bounds > 0) {
 			cil_println(indent, "(typebounds %s %s)", pdb->p_type_val_to_name[type->bounds - 1], key);
 		}
@@ -2323,7 +2348,7 @@ exit:
 	return rc;
 }
 
-static int user_to_cil(int indent, struct policydb *pdb, struct avrule_block *UNUSED(block), struct stack *UNUSED(decl_stack), char *key, void *datum,  int scope)
+static int user_to_cil(int indent, struct policydb *pdb, struct avrule_block *block, struct stack *UNUSED(decl_stack), char *key, void *datum,  int scope)
 {
 	struct user_datum *user = datum;
 	struct ebitmap roles = user->roles.roles;
@@ -2331,30 +2356,29 @@ static int user_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 	struct mls_semantic_range range = user->range;
 	struct ebitmap_node *node;
 	uint32_t i;
+	int sens_offset = 1;
 
-	if (scope == SCOPE_REQ) {
-		// if a user is in the REQ scope, then it could cause an
-		// optional block to fail, even if it is never used. However in CIL,
-		// symbols must be used in order to cause an optional block to fail. So
-		// for symbols in the REQ scope, add them to a userattribute as a way
-		// to 'use' them in the optional without affecting the resulting policy.
-		cil_println(indent, "(userattributeset " GEN_REQUIRE_ATTR " %s)", key);
-		return 0;
+	if (scope == SCOPE_DECL) {
+		cil_println(indent, "(user %s)", key);
+		// object_r is implicit in checkmodule, but not with CIL, create it
+		// as part of base
+		cil_println(indent, "(userrole %s " DEFAULT_OBJECT ")", key);
 	}
-
-	cil_println(indent, "(user %s)", key);
-	// object_r is implicit in checkmodule, but not with CIL, create it
-	// as part of base
-	cil_println(indent, "(userrole %s " DEFAULT_OBJECT ")", key);
 
 	ebitmap_for_each_positive_bit(&roles, node, i) {
 		cil_println(indent, "(userrole %s %s)", key, pdb->p_role_val_to_name[i]);
 	}
 
+	if (block->flags & AVRULE_OPTIONAL) {
+		// sensitivities in user statements in optionals do not have the
+		// standard -1 offset
+		sens_offset = 0;
+	}
+
 	cil_indent(indent);
 	cil_printf("(userlevel %s ", key);
 	if (pdb->mls) {
-		semantic_level_to_cil(pdb, &level);
+		semantic_level_to_cil(pdb, sens_offset, &level);
 	} else {
 		cil_printf(DEFAULT_LEVEL);
 	}
@@ -2363,9 +2387,9 @@ static int user_to_cil(int indent, struct policydb *pdb, struct avrule_block *UN
 	cil_indent(indent);
 	cil_printf("(userrange %s (", key);
 	if (pdb->mls) {
-		semantic_level_to_cil(pdb, &range.level[0]);
+		semantic_level_to_cil(pdb, sens_offset, &range.level[0]);
 		cil_printf(" ");
-		semantic_level_to_cil(pdb, &range.level[1]);
+		semantic_level_to_cil(pdb, sens_offset, &range.level[1]);
 	} else {
 		cil_printf(DEFAULT_LEVEL " " DEFAULT_LEVEL);
 	}
@@ -2510,9 +2534,6 @@ static int level_to_cil(struct policydb *pdb, struct mls_level *level)
 {
 	struct ebitmap *map = &level->cat;
 
-	if (level->sens == 0)
-		return -1;
-
 	cil_printf("(%s", pdb->p_sens_val_to_name[level->sens - 1]);
 
 	if (!ebitmap_is_empty(map)) {
@@ -2551,71 +2572,71 @@ static int context_to_cil(struct policydb *pdb, struct context_struct *con)
 static int ocontext_isid_to_cil(struct policydb *pdb, const char *const *sid_to_string,
 				unsigned num_sids, struct ocontext *isids)
 {
+	int rc = -1;
+
 	struct ocontext *isid;
-	struct ocontext **isid_array;
-	struct strs *strs;
+
+	struct sid_item {
+		char *sid_key;
+		struct sid_item *next;
+	};
+
+	struct sid_item *head = NULL;
+	struct sid_item *item = NULL;
 	char *sid;
-	char *prev;
+	char unknown[18];
 	unsigned i;
 
-	strs = isids_to_strs(sid_to_string, num_sids, isids);
-	if (!strs) {
-		ERR(NULL, "Error writing sid rules to CIL");
-		return -1;
-	}
-
-	if (strs_num_items(strs) == 0) {
-		strs_destroy(&strs);
-		return 0;
-	}
-
-	for (i=1; i < strs_num_items(strs); i++) {
-		sid = strs_read_at_index(strs, i);
-		cil_printf("(sid %s)\n", sid);
-	}
-
-	cil_printf("(sidorder (");
-	prev = NULL;
-	for (i=1; i < strs_num_items(strs); i++) {
-		sid = strs_read_at_index(strs, i);
-		if (prev) {
-			cil_printf("%s ", prev);
-		}
-		prev = sid;
-	}
-	if (prev) {
-		cil_printf("%s", prev);
-	}
-	cil_printf("))\n");
-
-	isid_array = calloc(strs_num_items(strs), sizeof(struct ocontext *));
-	if (!isid_array) {
-		ERR(NULL, "Out of memory");
-		strs_free_all(strs);
-		strs_destroy(&strs);
-		return -1;
-	}
 	for (isid = isids; isid != NULL; isid = isid->next) {
 		i = isid->sid[0];
-		if (i < strs_num_items(strs)) {
-			isid_array[i] = isid;
+		if (i < num_sids && sid_to_string[i]) {
+			sid = (char*)sid_to_string[i];
+		} else {
+			snprintf(unknown, 18, "%s%u", "UNKNOWN", i);
+			sid = unknown;
 		}
-	}
-	for (i=1; i < strs_num_items(strs); i++) {
-		if (isid_array[i]) {
-			sid = strs_read_at_index(strs, i);
-			cil_printf("(sidcontext %s ", sid);
-			isid = isid_array[i];
-			context_to_cil(pdb, &isid->context[0]);
-			cil_printf(")\n");
+		cil_println(0, "(sid %s)", sid);
+		cil_printf("(sidcontext %s ", sid);
+		context_to_cil(pdb, &isid->context[0]);
+		cil_printf(")\n");
+
+		// get the sid names in the correct order (reverse from the isids
+		// ocontext) for sidorder statement
+		item = malloc(sizeof(*item));
+		if (item == NULL) {
+			ERR(NULL, "Out of memory");
+			rc = -1;
+			goto exit;
 		}
+		item->sid_key = strdup(sid);
+		if (!item->sid_key) {
+			ERR(NULL, "Out of memory");
+			free(item);
+			rc = -1;
+			goto exit;
+		}
+		item->next = head;
+		head = item;
 	}
-	free(isid_array);
 
-	strs_free_all(strs);
-	strs_destroy(&strs);
+	if (head != NULL) {
+		cil_printf("(sidorder (");
+		for (item = head; item != NULL; item = item->next) {
+			cil_printf("%s ", item->sid_key);
+		}
+		cil_printf("))\n");
+	}
 
-	return 0;
+	rc = 0;
+
+exit:
+	while(head) {
+		item = head;
+		head = item->next;
+		free(item->sid_key);
+		free(item);
+	}
+	return rc;
 }
 
 static int ocontext_selinux_isid_to_cil(struct policydb *pdb, struct ocontext *isids)
@@ -3982,6 +4003,17 @@ static int generate_default_object(void)
 	return 0;
 }
 
+static int generate_builtin_roles(void)
+{
+	// due to inconsistentencies between policies and CIL not allowing
+	// duplicate roles, some roles are always created, regardless of if they
+	// are declared in modules or not
+	cil_println(0, "(role auditadm_r)");
+	cil_println(0, "(role secadm_r)");
+
+	return 0;
+}
+
 static int generate_gen_require_attribute(void)
 {
 	cil_println(0, "(typeattribute " GEN_REQUIRE_ATTR ")");
@@ -4062,6 +4094,11 @@ int sepol_module_policydb_to_cil(FILE *fp, struct policydb *pdb, int linked)
 		// object_r is implicit in checkmodule, but not with CIL, create it
 		// as part of base
 		rc = generate_default_object();
+		if (rc != 0) {
+			goto exit;
+		}
+
+		rc = generate_builtin_roles();
 		if (rc != 0) {
 			goto exit;
 		}

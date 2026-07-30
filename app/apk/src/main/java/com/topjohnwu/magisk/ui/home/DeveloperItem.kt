@@ -29,7 +29,17 @@ private interface CanyieImpl : Dev {
     override val name get() = "canyie"
 }
 
+private interface SunRayImpl : Dev {
+    override val name get() = "SunRayEx"
+}
+
 sealed class DeveloperItem : Dev {
+    object SunRay : DeveloperItem(), SunRayImpl {
+        override val items = listOf<IconLink>(
+            object : IconLink.Github.User(), SunRayImpl {},
+        )
+    }
+
 
     abstract val items: List<IconLink>
     val handle get() = "@${name}"

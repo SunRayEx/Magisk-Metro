@@ -16,7 +16,10 @@ class ThemeViewModel : BaseViewModel(), TappableHeadlineItem.Listener {
 
     fun saveTheme(theme: Theme) {
         if (!theme.isSelected) {
-            Config.themeOrdinal = theme.ordinal
+            Config.dynamicColor = theme.isDynamic
+            if (!theme.isDynamic) {
+                Config.themeOrdinal = theme.ordinal
+            }
             RecreateEvent().publish()
         }
     }

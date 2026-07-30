@@ -55,7 +55,7 @@ class AppProcessInfo(
     fun isApp() = ProcessCompat.isApplicationUid(info.uid)
 
     private fun createProcess(name: String, pkg: String = info.packageName) =
-        ProcessInfo(name, pkg, denyList.any { it.process == name && it.packageName == pkg })
+        ProcessInfo(name, pkg, denyList.none { it.process == name && it.packageName == pkg })
 
     private fun ComponentInfo.getProcName(): String = processName
         ?: applicationInfo.processName

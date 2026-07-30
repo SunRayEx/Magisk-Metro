@@ -1,2 +1,0 @@
-buildscript.run = true
-cargo_env = ["CARGO_PKG_VERSION_PATCH"]

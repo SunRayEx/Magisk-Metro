@@ -82,7 +82,7 @@ class DenyListViewModel : AsyncLoadViewModel() {
                 return inName() || inPackage() || inProcesses()
             }
 
-            (it.isChecked || (filterSystem() && filterOS())) && filterQuery()
+            (filterSystem() && filterOS()) && filterQuery()
         }
         loading = false
     }

@@ -33,6 +33,57 @@
         <item name="cardElevation">@dimen/l_125</item>
     </style>
 
+    <style name="WidgetFoundation.Card.Metro" parent="WidgetFoundation.Card">
+        <item name="cardBackgroundColor">?colorSurfaceVariant</item>
+        <item name="cardCornerRadius">0dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="cardUseCompatPadding">false</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro" parent="">
+        <item name="android:background">?colorSurface</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.Page">
+        <item name="android:background">?colorSurface</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.List">
+        <item name="android:background">?colorSurface</item>
+        <item name="android:clipToPadding">false</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.SectionText" parent="AppearanceFoundation.Large.Secondary">
+        <item name="android:textColor">?colorPrimary</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.TitleText" parent="AppearanceFoundation.Body">
+        <item name="android:textColor">?colorOnSurface</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.BodyText" parent="AppearanceFoundation.Caption.Variant">
+        <item name="android:textColor">?colorOnSurfaceVariant</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="WidgetFoundation.Metro.MonospaceText" parent="AppearanceFoundation.Caption">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">?colorOnSurface</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+        <item name="android:paddingTop">1dp</item>
+        <item name="android:paddingBottom">1dp</item>
+    </style>
+
 
     <style name="WidgetFoundation.Button" parent="Widget.MaterialComponents.Button">
         <item name="android:textStyle">bold</item>
@@ -65,6 +116,43 @@
         <item name="rippleColor">?colorOnPrimary</item>
         <item name="android:textColor">?colorOnPrimary</item>
         <item name="iconTint">?colorOnPrimary</item>
+    </style>
+
+    <style name="WidgetFoundation.Button.Metro" parent="WidgetFoundation.Button">
+        <item name="cornerRadius">0dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Button.Outlined.Metro" parent="WidgetFoundation.Button.Outlined">
+        <item name="cornerRadius">0dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Button.Text.Metro" parent="WidgetFoundation.Button.Text">
+        <item name="cornerRadius">0dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Switch.Metro" parent="Widget.MaterialComponents.CompoundButton.Switch">
+        <item name="android:thumb">@drawable/metro_switch_thumb</item>
+        <item name="track">@drawable/metro_switch_track</item>
+        <item name="trackTint">@color/metro_switch_track_tint</item>
+        <item name="useMaterialThemeColors">false</item>
+        <item name="android:switchMinWidth">44dp</item>
+        <item name="android:minHeight">24dp</item>
+    </style>
+
+    <style name="WidgetFoundation.Checkbox.Metro" parent="WidgetFoundation.Checkbox">
+        <item name="buttonTint">?colorPrimary</item>
+    </style>
+
+    <style name="WidgetFoundation.RadioButton.Metro" parent="WidgetFoundation.RadioButton">
+        <item name="buttonTint">?colorPrimary</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.Metro.Square" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">cut</item>
+        <item name="cornerSize">0dp</item>
     </style>
 
 

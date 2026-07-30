@@ -170,22 +170,38 @@ int cil_copy_blockinherit(__attribute__((unused)) struct cil_db *db, void *data,
 	return SEPOL_OK;
 }
 
-static int cil_copy_policycap(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+static int cil_copy_policycap(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_policycap *new;
+	struct cil_policycap *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_policycap_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_policycap *new;
+		cil_policycap_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
 
-int cil_copy_perm(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_perm(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_perm *new;
+	struct cil_perm *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_perm_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_perm *new;
+		cil_perm_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -244,11 +260,23 @@ int cil_copy_classmapping(__attribute__((unused)) struct cil_db *db, void *data,
 	return SEPOL_OK;
 }
 
-int cil_copy_class(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_class(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_class *new;
+	struct cil_class *orig = data;
+	struct cil_class *new = NULL;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
+
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum != NULL) {
+		cil_log(CIL_INFO, "cil_copy_class: class cannot be redefined\n");
+		return SEPOL_ERR;
+	}
 
 	cil_class_init(&new);
+
+	new->common = NULL;
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -257,20 +285,22 @@ int cil_copy_class(__attribute__((unused)) struct cil_db *db, __attribute__((unu
 int cil_copy_classpermission(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_classpermission *orig = data;
-	struct cil_classpermission *new;
+	struct cil_classpermission *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	if (key != NULL) {
 		cil_symtab_get_datum(symtab, key, &datum);
 		if (datum != NULL) {
-			cil_log(CIL_ERR, "Named classpermission cannot be redefined\n");
+			cil_log(CIL_INFO, "classpermission cannot be redefined\n");
 			return SEPOL_ERR;
 		}
 	}
 
 	cil_classpermission_init(&new);
+
 	cil_copy_classperms_list(orig->classperms, &new->classperms);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -310,12 +340,20 @@ int cil_copy_classcommon(__attribute__((unused)) struct cil_db *db, void *data, 
 	return SEPOL_OK;
 }
 
-int cil_copy_sid(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_sid(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_sid *new;
+	struct cil_sid *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_sid_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_sid *new;
+		cil_sid_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -339,22 +377,38 @@ int cil_copy_sidcontext(struct cil_db *db, void *data, void **copy, __attribute_
 	return SEPOL_OK;
 }
 
-int cil_copy_user(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_user(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_user *new;
+	struct cil_user *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_user_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_user *new;
+		cil_user_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
 
-int cil_copy_userattribute(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_userattribute(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_userattribute *new;
+	struct cil_userattribute *orig = data;
+	struct cil_userattribute *new = NULL;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_userattribute_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		cil_userattribute_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -447,12 +501,20 @@ int cil_copy_userprefix(__attribute__((unused)) struct cil_db *db, void *data, v
 	return SEPOL_OK;
 }
 
-int cil_copy_role(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_role(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_role *new;
+	struct cil_role *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_role_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_role *new;
+		cil_role_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -472,12 +534,20 @@ int cil_copy_roletype(__attribute__((unused)) struct cil_db *db, void *data, voi
 	return SEPOL_OK;
 }
 
-int cil_copy_roleattribute(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_roleattribute(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_roleattribute *new;
+	struct cil_roleattribute *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_roleattribute_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_roleattribute *new;
+		cil_roleattribute_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -538,20 +608,6 @@ int cil_copy_typepermissive(__attribute__((unused)) struct cil_db *db, void *dat
 	return SEPOL_OK;
 }
 
-int cil_copy_typeneveraudit(__attribute__((unused)) struct cil_db *db, void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
-{
-	struct cil_typeneveraudit *orig = data;
-	struct cil_typeneveraudit *new = NULL;
-
-	cil_typeneveraudit_init(&new);
-
-	new->type_str = orig->type_str;
-
-	*copy = new;
-
-	return SEPOL_OK;
-}
-
 int cil_copy_typeattribute(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
 {
 	struct cil_typeattribute *new;
@@ -601,11 +657,21 @@ static int cil_copy_expandtypeattribute(__attribute__((unused)) struct cil_db *d
 	return SEPOL_OK;
 }
 
-static int cil_copy_alias(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+static int cil_copy_alias(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_alias *new;
+	struct cil_alias *orig = data;
+	struct cil_alias *new = NULL;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
+
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum != NULL) {
+		cil_log(CIL_INFO, "cil_copy_alias: alias cannot be redefined\n");
+		return SEPOL_ERR;
+	}
 
 	cil_alias_init(&new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -688,10 +754,18 @@ int cil_copy_rangetransition(struct cil_db *db, void *data, void **copy, __attri
 	return SEPOL_OK;
 }
 
-int cil_copy_bool(__attribute__((unused)) struct cil_db *db, void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_bool(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_bool *orig = data;
-	struct cil_bool *new;
+	struct cil_bool *new = NULL;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
+
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum != NULL) {
+		cil_log(CIL_INFO, "cil_copy_bool: boolean cannot be redefined\n");
+		return SEPOL_ERR;
+	}
 
 	cil_bool_init(&new);
 	new->value = orig->value;
@@ -700,10 +774,18 @@ int cil_copy_bool(__attribute__((unused)) struct cil_db *db, void *data, void **
 	return SEPOL_OK;
 }
 
-static int cil_copy_tunable(__attribute__((unused)) struct cil_db *db, void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+static int cil_copy_tunable(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_tunable *orig = data;
-	struct cil_tunable *new;
+	struct cil_tunable *new = NULL;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
+
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum != NULL) {
+		cil_log(CIL_INFO, "cil_copy_tunable: tunable cannot be redefined\n");
+		return SEPOL_ERR;
+	}
 
 	cil_tunable_init(&new);
 	new->value = orig->value;
@@ -750,18 +832,20 @@ int cil_copy_avrule(struct cil_db *db, void *data, void **copy, __attribute__((u
 static int cil_copy_permissionx(struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_permissionx *orig = data;
-	struct cil_permissionx *new;
+	struct cil_permissionx *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
+
 
 	cil_symtab_get_datum(symtab, key, &datum);
 	if (datum != NULL) {
-		cil_log(CIL_ERR, "Permissionx cannot be redefined\n");
+		cil_log(CIL_INFO, "cil_copy_permissionx: permissionx cannot be redefined\n");
 		return SEPOL_ERR;
 	}
 
 	cil_permissionx_init(&new);
 	cil_copy_fill_permissionx(db, orig, new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -801,22 +885,38 @@ int cil_copy_type_rule(__attribute__((unused)) struct cil_db *db, void *data, vo
 	return SEPOL_OK;
 }
 
-int cil_copy_sens(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_sens(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_sens *new;
+	struct cil_sens *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_sens_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_sens *new;
+		cil_sens_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
 
-int cil_copy_cat(__attribute__((unused)) struct cil_db *db, __attribute__((unused)) void *data, void **copy, __attribute__((unused)) symtab_t *symtab)
+int cil_copy_cat(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
-	struct cil_cat *new;
+	struct cil_cat *orig = data;
+	char *key = orig->datum.name;
+	struct cil_symtab_datum *datum = NULL;
 
-	cil_cat_init(&new);
-	*copy = new;
+	cil_symtab_get_datum(symtab, key, &datum);
+	if (datum == NULL) {
+		struct cil_cat *new;
+		cil_cat_init(&new);
+		*copy = new;
+	} else {
+		*copy = datum;
+	}
 
 	return SEPOL_OK;
 }
@@ -831,18 +931,20 @@ static void cil_copy_cats(struct cil_db *db, struct cil_cats *orig, struct cil_c
 int cil_copy_catset(struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_catset *orig = data;
-	struct cil_catset *new;
+	struct cil_catset *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	cil_symtab_get_datum(symtab, key, &datum);
 	if (datum != NULL) {
-		cil_log(CIL_ERR, "Category set cannot be redefined\n");
+		cil_log(CIL_INFO, "cil_copy_catset: categoryset cannot be redefined\n");
 		return SEPOL_ERR;
 	}
 
 	cil_catset_init(&new);
+
 	cil_copy_cats(db, orig->cats, &new->cats);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -878,19 +980,20 @@ void cil_copy_fill_level(struct cil_db *db, struct cil_level *orig, struct cil_l
 int cil_copy_level(struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_level *orig = data;
-	struct cil_level *new;
+	struct cil_level *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	if (key != NULL) {
 		cil_symtab_get_datum(symtab, key, &datum);
 		if (datum != NULL) {
-			cil_log(CIL_ERR, "Named level cannot be redefined\n");
+			cil_log(CIL_INFO, "cil_copy_level: level cannot be redefined\n");
 			return SEPOL_ERR;
 		}
 	}
 
 	cil_copy_fill_level(db, orig, &new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -914,20 +1017,21 @@ void cil_copy_fill_levelrange(struct cil_db *db, struct cil_levelrange *data, st
 int cil_copy_levelrange(struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_levelrange *orig = data;
-	struct cil_levelrange *new;
+	struct cil_levelrange *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	if (key != NULL) {
 		cil_symtab_get_datum(symtab, key, &datum);
 		if (datum != NULL) {
-			cil_log(CIL_ERR, "Named levelrange cannot be redefined\n");
+			cil_log(CIL_INFO, "cil_copy_levelrange: levelrange cannot be redefined\n");
 			return SEPOL_ERR;
 		}
 	}
 
 	cil_levelrange_init(&new);
 	cil_copy_fill_levelrange(db, orig, new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -950,20 +1054,21 @@ void cil_copy_fill_context(struct cil_db *db, struct cil_context *data, struct c
 int cil_copy_context(struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_context *orig = data;
-	struct cil_context *new;
+	struct cil_context *new = NULL;
 	char *key = orig->datum.name;
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	if (key != NULL) {
 		cil_symtab_get_datum(symtab, key, &datum);
 		if (datum != NULL) {
-			cil_log(CIL_ERR, "Named context cannot be redefined\n");
+			cil_log(CIL_INFO, "cil_copy_context: context cannot be redefined\n");
 			return SEPOL_ERR;
 		}
 	}
 
 	cil_context_init(&new);
 	cil_copy_fill_context(db, orig, new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -1423,18 +1528,19 @@ void cil_copy_fill_ipaddr(struct cil_ipaddr *data, struct cil_ipaddr *new)
 int cil_copy_ipaddr(__attribute__((unused)) struct cil_db *db, void *data, void **copy, symtab_t *symtab)
 {
 	struct cil_ipaddr *orig = data;
-	struct cil_ipaddr *new;
+	struct cil_ipaddr *new = NULL;
 	char * key = orig->datum.name;	
-	struct cil_symtab_datum *datum;
+	struct cil_symtab_datum *datum = NULL;
 
 	cil_symtab_get_datum(symtab, key, &datum);
 	if (datum != NULL) {
-		cil_log(CIL_ERR, "Named IP address cannot be redefined\n");
+		cil_log(CIL_INFO, "cil_copy_ipaddr: ipaddress cannot be redefined\n");
 		return SEPOL_ERR;
 	}
 
 	cil_ipaddr_init(&new);
 	cil_copy_fill_ipaddr(orig, new);
+
 	*copy = new;
 
 	return SEPOL_OK;
@@ -1700,9 +1806,6 @@ static int __cil_copy_node_helper(struct cil_tree_node *orig, uint32_t *finished
 		break;
 	case CIL_TYPEPERMISSIVE:
 		copy_func = cil_copy_typepermissive;
-		break;
-	case CIL_TYPENEVERAUDIT:
-		copy_func = cil_copy_typeneveraudit;
 		break;
 	case CIL_TYPEATTRIBUTE:
 		copy_func = &cil_copy_typeattribute;

@@ -3,6 +3,8 @@
 
     <!--1st party themes-->
 
+    <style name="ThemeFoundationMD2.Default" parent="ThemeFoundationMD2.Piplup" />
+
     <style name="ThemeFoundationMD2.Piplup">
         <item name="colorPrimary">#4EAFF5</item>
         <item name="colorPrimaryVariant">#804EAFF5</item>

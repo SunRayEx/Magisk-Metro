@@ -13,6 +13,7 @@ import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentLogMd2Binding
 import com.topjohnwu.magisk.ui.MainActivity
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.utils.AccessibilityUtils
 import com.topjohnwu.magisk.utils.MotionRevealHelper
 import rikka.recyclerview.addEdgeSpacing
@@ -23,6 +24,7 @@ import com.topjohnwu.magisk.core.R as CoreR
 class LogFragment : BaseFragment<FragmentLogMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_log_md2
+    override val metroAccentRole = MetroAccentRole.LOGS
     override val viewModel by viewModel<LogViewModel>()
     override val snackbarView: View?
         get() = if (isMagiskLogVisible) binding.logFilterSuperuser.snackbarContainer
@@ -37,8 +39,8 @@ class LogFragment : BaseFragment<FragmentLogMd2Binding>(), MenuProvider {
             actionSave?.isVisible = !value
             with(activity as MainActivity) {
                 invalidateToolbar()
-                requestNavigationHidden(value)
-                setDisplayHomeAsUpEnabled(value)
+                requestNavigationHidden()
+                setDisplayHomeAsUpEnabled(true)
             }
         }
 

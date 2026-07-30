@@ -12,17 +12,19 @@
     </data>
 
     <FrameLayout
+        style="@style/WidgetFoundation.Metro.Page"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="?colorSurface">
 
         <androidx.recyclerview.widget.RecyclerView
+            style="@style/WidgetFoundation.Metro.List"
             android:id="@+id/module_list"
             gone="@{viewModel.loading}"
             app:items="@{viewModel.items}"
             app:extraBindings="@{viewModel.extraBindings}"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
             android:orientation="vertical"
             android:paddingTop="@dimen/internal_action_bar_size"
             android:paddingBottom="@dimen/internal_action_bar_size"

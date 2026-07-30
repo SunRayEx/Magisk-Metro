@@ -14,13 +14,14 @@
     </data>
 
     <FrameLayout
+        metroRole="apps"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center">
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/policy"
-            style="@style/WidgetFoundation.Card"
+            style="@style/WidgetFoundation.Card.Metro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:alpha="@{item.enabled ? 1f : .5f}"
@@ -39,19 +40,23 @@
 
                     <ImageView
                         android:id="@+id/policy_app_icon"
-                        style="@style/WidgetFoundation.Image"
                         srcCompat="@{item.icon}"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
                         android:layout_marginStart="@dimen/l1"
                         android:layout_marginTop="@dimen/l1"
                         android:layout_marginBottom="@dimen/l1"
+                        android:tag="metroAccentBgSoft"
+                        android:padding="6dp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
                         app:layout_constraintVertical_bias="0"
-                        tools:srcCompat="@drawable/ic_logo" />
+                        tools:srcCompat="@drawable/ic_magisk_outline" />
 
                     <TextView
                         android:id="@+id/policy_app_name"
+                        style="@style/WidgetFoundation.Metro.TitleText"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="@dimen/margin_generic"
@@ -60,9 +65,7 @@
                         android:gravity="start"
                         android:maxLines="2"
                         android:text="@{item.title}"
-                        android:textAppearance="@style/AppearanceFoundation.Body"
                         android:textIsSelectable="false"
-                        android:textStyle="bold"
                         app:layout_constraintEnd_toStartOf="@+id/policy_indicator"
                         app:layout_constraintStart_toEndOf="@+id/policy_app_icon"
                         app:layout_constraintTop_toTopOf="@+id/policy_app_icon"
@@ -70,6 +73,7 @@
 
                     <TextView
                         android:id="@+id/policy_package_name"
+                        style="@style/WidgetFoundation.Metro.BodyText"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="@dimen/l1"
@@ -77,8 +81,6 @@
                         android:gravity="start"
                         android:maxLines="2"
                         android:text="@{item.packageName}"
-                        android:textAppearance="@style/AppearanceFoundation.Caption.Variant"
-                        android:textColor="@android:color/tertiary_text_dark"
                         android:textIsSelectable="false"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="@id/policy_app_name"
@@ -89,7 +91,7 @@
 
                     <FrameLayout
                         android:id="@+id/policy_indicator"
-                        android:layout_width="wrap_content"
+                        android:layout_width="154dp"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="@dimen/l1"
                         android:nextFocusLeft="@id/policy"
@@ -98,10 +100,33 @@
                         app:layout_constraintTop_toTopOf="parent">
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
+                            style="@style/WidgetFoundation.Switch.Metro"
                             gone="@{item.showSlider}"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical|end"
                             android:checked="@={item.enabled}" />
+
+                        <FrameLayout
+                            gone="@{item.showSlider || !item.rootGranted}"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginEnd="64dp"
+                            android:tag="metroAccentBgSoft">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingStart="8dp"
+                                android:paddingTop="4dp"
+                                android:paddingEnd="8dp"
+                                android:paddingBottom="4dp"
+                                android:tag="metroAccentFg"
+                                android:text="@string/metro_root_granted"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </FrameLayout>
 
                         <com.google.android.material.slider.Slider
                             goneUnless="@{item.showSlider}"
@@ -127,7 +152,7 @@
 
                     <Button
                         android:id="@+id/policy_notify"
-                        style="@style/WidgetFoundation.Button.Text"
+                        style="@style/WidgetFoundation.Button.Text.Metro"
                         isSelected="@{item.shouldNotify}"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -151,7 +176,7 @@
 
                     <Button
                         android:id="@+id/policy_log"
-                        style="@style/WidgetFoundation.Button.Text"
+                        style="@style/WidgetFoundation.Button.Text.Metro"
                         isSelected="@{item.shouldLog}"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -175,7 +200,7 @@
 
                     <Button
                         android:id="@+id/policy_delete"
-                        style="@style/WidgetFoundation.Button.Text"
+                        style="@style/WidgetFoundation.Button.Text.Metro"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
