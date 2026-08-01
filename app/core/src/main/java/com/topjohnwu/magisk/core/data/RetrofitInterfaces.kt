@@ -45,4 +45,12 @@ interface GithubApiServices {
         @Path("owner") owner: String = "SunRayEx",
         @Path("repo") repo: String = "Magisk-Metro",
     ): Release
+
+    @GET("/repos/{owner}/{repo}/releases/tags/{tag}")
+    @Headers("Accept: application/vnd.github+json")
+    suspend fun fetchReleaseByTag(
+        @Path("tag") tag: String,
+        @Path("owner") owner: String = "SunRayEx",
+        @Path("repo") repo: String = "Magisk-Metro",
+    ): Release
 }

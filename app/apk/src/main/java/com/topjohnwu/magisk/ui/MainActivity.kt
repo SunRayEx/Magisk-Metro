@@ -6,14 +6,10 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
-import android.graphics.drawable.ColorDrawable
 import android.widget.Toast
 import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.view.forEach
-import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDirections
@@ -21,7 +17,6 @@ import com.topjohnwu.magisk.MainDirections
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.arch.NavigationActivity
-import com.topjohnwu.magisk.arch.startAnimations
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Const
@@ -30,13 +25,9 @@ import com.topjohnwu.magisk.core.base.SplashController
 import com.topjohnwu.magisk.core.base.SplashScreenHost
 import com.topjohnwu.magisk.core.isRunningAsStub
 import com.topjohnwu.magisk.core.ktx.toast
-import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.tasks.AppMigration
 import com.topjohnwu.magisk.databinding.ActivityMainMd2Binding
-import com.topjohnwu.magisk.ui.home.HomeFragmentDirections
 import com.topjohnwu.magisk.ui.theme.Theme
-import com.topjohnwu.magisk.ui.theme.MetroAccentRole
-import com.topjohnwu.magisk.ui.theme.MetroColors
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.magisk.view.Shortcuts
 import kotlinx.coroutines.launch
@@ -57,16 +48,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
             return fragmentOverride ?: super.snackbarView
         }
     override val snackbarAnchorView: View?
-        get() {
-            val fragmentAnchor = currentFragment?.snackbarAnchorView
-            return when {
-                fragmentAnchor?.isVisible == true -> fragmentAnchor
-                binding.mainNavigation.isVisible -> return binding.mainNavigation
-                else -> null
-            }
-        }
-
-    private var isRootFragment = true
+        get() = currentFragment?.snackbarAnchorView?.takeIf { it.isVisible }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Theme.selected.themeRes)
@@ -95,54 +77,9 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
 
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
-        navigation.addOnDestinationChangedListener { _, destination, _ ->
-            val isHome = destination.id == R.id.homeFragment
-            isRootFragment = isHome
-
-            setDisplayHomeAsUpEnabled(!isRootFragment)
-            binding.mainToolbarWrapper.isGone = isHome
-            val role = when (destination.id) {
-                R.id.modulesFragment, R.id.actionFragment, R.id.webUiFragment ->
-                    MetroAccentRole.MODULES
-                R.id.superuserFragment, R.id.denyFragment -> MetroAccentRole.APPS
-                R.id.logFragment -> MetroAccentRole.LOGS
-                R.id.settingsFragment, R.id.themeFragment -> MetroAccentRole.SETTINGS
-                R.id.contributorFragment -> MetroAccentRole.CONTRIBUTORS
-                else -> null
-            }
-            if (!isHome) {
-                // Single source of truth: MetroColors decides between role colors, dynamic
-                // color and the packaged theme's colorPrimary.
-                val accent = role?.let { MetroColors.accent(this, it) }
-                    ?: MetroColors.themePrimary(this)
-                val onAccent = role?.let { MetroColors.onAccent(this, it) }
-                    ?: MetroColors.themeOnPrimary(this)
-                binding.mainToolbarWrapper.background = ColorDrawable(accent)
-                binding.mainToolbar.setTitleTextColor(onAccent)
-                binding.mainToolbar.navigationIcon?.setTint(onAccent)
-            }
-            requestNavigationHidden(isHome || !isRootFragment, requiresAnimation = false)
-
-            binding.mainNavigation.menu.forEach {
-                if (it.itemId == destination.id) {
-                    it.isChecked = true
-                }
-            }
-        }
-
-        setSupportActionBar(binding.mainToolbar)
-
-        binding.mainNavigation.setOnItemSelectedListener {
-            getScreen(it.itemId)?.navigate()
-            true
-        }
-        binding.mainNavigation.setOnItemReselectedListener {
-            // https://issuetracker.google.com/issues/124538620
-        }
-        binding.mainNavigation.menu.apply {
-            findItem(R.id.superuserFragment)?.isEnabled = Info.showSuperUser
-            findItem(R.id.modulesFragment)?.isEnabled = Info.env.isActive && LocalModule.loaded()
-        }
+        // Top toolbar + bottom navigation were removed for the Metro redesign. The home screen is
+        // an edge-to-edge Compose tile grid and the four sections live in a Compose pivot that
+        // manages its own status-bar tint, so there is no Activity-level chrome left to wire up.
 
         val section =
             if (intent.action == Intent.ACTION_APPLICATION_PREFERENCES)
@@ -151,58 +88,13 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
                 intent.getStringExtra(Const.Key.OPEN_SECTION)
 
         getScreen(section)?.navigate()
-
-        if (!isRootFragment) {
-            requestNavigationHidden(requiresAnimation = savedInstanceState == null)
-        }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            android.R.id.home -> onBackPressed()
-            else -> return super.onOptionsItemSelected(item)
-        }
-        return true
-    }
-
-    fun setDisplayHomeAsUpEnabled(isEnabled: Boolean) {
-        binding.mainToolbar.startAnimations()
-        when {
-            isEnabled -> binding.mainToolbar.setNavigationIcon(R.drawable.ic_back_md2)
-            else -> binding.mainToolbar.navigationIcon = null
-        }
-    }
-
-    internal fun requestNavigationHidden(hide: Boolean = true, requiresAnimation: Boolean = true) {
-        val bottomView = binding.mainNavigation
-        if (requiresAnimation) {
-            bottomView.isVisible = true
-            bottomView.isHidden = hide
-        } else {
-            bottomView.isGone = hide
-        }
-    }
-
-    fun invalidateToolbar() {
-        //binding.mainToolbar.startAnimations()
-        binding.mainToolbar.invalidate()
     }
 
     private fun getScreen(name: String?): NavDirections? {
         return when (name) {
-            Const.Nav.SUPERUSER -> MainDirections.actionSuperuserFragment()
-            Const.Nav.MODULES -> MainDirections.actionModuleFragment()
-            Const.Nav.SETTINGS -> HomeFragmentDirections.actionHomeFragmentToSettingsFragment()
-            else -> null
-        }
-    }
-
-    private fun getScreen(id: Int): NavDirections? {
-        return when (id) {
-            R.id.homeFragment -> MainDirections.actionHomeFragment()
-            R.id.modulesFragment -> MainDirections.actionModuleFragment()
-            R.id.superuserFragment -> MainDirections.actionSuperuserFragment()
-            R.id.logFragment -> MainDirections.actionLogFragment()
+            Const.Nav.SUPERUSER -> MainDirections.actionSectionPivotFragment("APPS")
+            Const.Nav.MODULES -> MainDirections.actionSectionPivotFragment("MODULES")
+            Const.Nav.SETTINGS -> MainDirections.actionSectionPivotFragment("SETTINGS")
             else -> null
         }
     }

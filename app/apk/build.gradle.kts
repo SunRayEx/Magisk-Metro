@@ -24,6 +24,13 @@ android {
         compose = true
     }
 
+    // Disable compose mapping tasks (ASM 9.7 incompatible with Java 25 class files)
+    tasks.configureEach {
+        if (name.contains("ComposeMapping", ignoreCase = true)) {
+            enabled = false
+        }
+    }
+
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true

@@ -21,11 +21,13 @@ import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.cmp
 import com.topjohnwu.magisk.databinding.FragmentFlashMd2Binding
 import com.topjohnwu.magisk.ui.MainActivity
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.core.R as CoreR
 
 class FlashFragment : BaseFragment<FragmentFlashMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_flash_md2
+    override val metroAccentRole = MetroAccentRole.MAGISK
     override val viewModel by viewModel<FlashViewModel>()
     override val snackbarView: View get() = binding.snackbarContainer
     override val snackbarAnchorView: View?
@@ -52,7 +54,7 @@ class FlashFragment : BaseFragment<FragmentFlashMd2Binding>(), MenuProvider {
             )
             if (it == FlashViewModel.State.SUCCESS && viewModel.showReboot) {
                 binding.restartBtn.apply {
-                    if (!this.isVisible) this.show()
+                    if (!this.isVisible) this.isVisible = true
                     if (!this.isFocused) this.requestFocus()
                 }
             }

@@ -4,11 +4,13 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentInstallMd2Binding
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.core.R as CoreR
 
 class InstallFragment : BaseFragment<FragmentInstallMd2Binding>() {
 
     override val layoutRes = R.layout.fragment_install_md2
+    override val metroAccentRole = MetroAccentRole.MAGISK
     override val viewModel by viewModel<InstallViewModel>()
 
     override fun onStart() {

@@ -166,6 +166,19 @@
         android:label="ThemeFragment"
         tools:layout="@layout/fragment_theme_md2" />
 
+    <fragment
+        android:id="@+id/sectionPivotFragment"
+        android:name="com.topjohnwu.magisk.ui.pivot.SectionPivotFragment"
+        android:label="SectionPivotFragment"
+        tools:layout="@layout/fragment_section_pivot">
+
+        <argument
+            android:name="initialSection"
+            app:argType="string"
+            android:defaultValue="APPS" />
+
+    </fragment>
+
     <action
         android:id="@+id/action_homeFragment"
         app:destination="@id/homeFragment"
@@ -222,6 +235,37 @@
     <action
         android:id="@+id/action_webUiFragment"
         app:destination="@id/webUiFragment"
+        app:enterAnim="@anim/fragment_enter"
+        app:exitAnim="@anim/fragment_exit"
+        app:popEnterAnim="@anim/fragment_enter_pop"
+        app:popExitAnim="@anim/fragment_exit_pop" />
+
+    <!-- Global action into the Metro pivot. No fragment transition: the Compose flip
+         animation inside MetroPivotScreen is the sole entrance motion. -->
+    <action
+        android:id="@+id/action_sectionPivotFragment"
+        app:destination="@id/sectionPivotFragment"
+        app:popUpTo="@id/homeFragment" />
+
+    <action
+        android:id="@+id/action_installFragment"
+        app:destination="@id/installFragment"
+        app:enterAnim="@anim/fragment_enter"
+        app:exitAnim="@anim/fragment_exit"
+        app:popEnterAnim="@anim/fragment_enter_pop"
+        app:popExitAnim="@anim/fragment_exit_pop" />
+
+    <action
+        android:id="@+id/action_themeFragment"
+        app:destination="@id/themeFragment"
+        app:enterAnim="@anim/fragment_enter"
+        app:exitAnim="@anim/fragment_exit"
+        app:popEnterAnim="@anim/fragment_enter_pop"
+        app:popExitAnim="@anim/fragment_exit_pop" />
+
+    <action
+        android:id="@+id/action_denyFragment"
+        app:destination="@id/denyFragment"
         app:enterAnim="@anim/fragment_enter"
         app:exitAnim="@anim/fragment_exit"
         app:popEnterAnim="@anim/fragment_enter_pop"

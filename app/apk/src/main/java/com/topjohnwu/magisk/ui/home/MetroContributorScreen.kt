@@ -29,6 +29,16 @@ import com.topjohnwu.magisk.core.R as CoreR
 
 private const val CONTRIBUTOR_HOME_URL = "https://github.com/SunRayEx/Magisk-Metro"
 
+private data class MetroContributor(val name: String, val profile: String)
+
+private val MetroContributors = listOf(
+    MetroContributor("SunRayEx", "https://github.com/SunRayEx"),
+    MetroContributor("topjohnwu", "https://github.com/topjohnwu"),
+    MetroContributor("RikkaW", "https://github.com/RikkaW"),
+    MetroContributor("yujincheng08", "https://github.com/yujincheng08"),
+    MetroContributor("vvb2060", "https://github.com/vvb2060"),
+)
+
 @Composable
 fun MetroContributorScreen(onLinkClick: (String) -> Unit) {
     val accent = LocalMetroPalette.current.contributors
@@ -73,6 +83,47 @@ fun MetroContributorScreen(onLinkClick: (String) -> Unit) {
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    painter = painterResource(com.topjohnwu.magisk.R.drawable.ic_forth_md2),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+        items(MetroContributors.size, key = { MetroContributors[it].name }) { index ->
+            val contributor = MetroContributors[index]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp)
+                    .clickable { onLinkClick(contributor.profile) }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(CoreR.drawable.ic_github),
+                    contentDescription = null,
+                    tint = accent.color,
+                    modifier = Modifier.size(30.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 16.dp),
+                ) {
+                    Text(
+                        text = contributor.name,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = contributor.profile.removePrefix("https://github.com/"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
                     )
                 }
                 Icon(

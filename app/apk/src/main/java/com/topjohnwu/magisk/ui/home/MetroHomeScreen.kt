@@ -3,8 +3,14 @@ package com.topjohnwu.magisk.ui.home
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
 import android.os.Process
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,9 +21,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,15 +35,24 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
@@ -48,18 +65,33 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.BuildConfig
+import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import kotlin.math.roundToInt
 
 private const val SUPPORT_URL = "https://afdian.com/a/SunRayEx"
 private val ImportantLogPattern = Regex("^\\S+\\s+\\S+\\s+\\d+\\s+\\d+\\s+([EW])\\s*:\\s*(.*)$")
+private const val MetroTileCount = 10
+
+private class MetroTileNavigator(
+    val leaving: Boolean,
+    val entering: Boolean,
+    val navigate: (Int, () -> Unit) -> Unit,
+)
+
+private val LocalMetroTileNavigator = androidx.compose.runtime.staticCompositionLocalOf<MetroTileNavigator?> { null }
 
 private fun importantLogLabel(line: String): String? {
     val match = ImportantLogPattern.find(line) ?: return null
@@ -76,9 +108,39 @@ fun MetroHomeScreen(
     onLogsClick: () -> Unit,
     onContributorsClick: () -> Unit,
 ) {
+    var leaving by remember { mutableStateOf(false) }
+    var entering by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                leaving = false
+                entering = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(entering) {
+        if (entering) {
+            delay(10)
+            entering = false
+        }
+    }
+    val tileNavigator = MetroTileNavigator(leaving, entering) { index, action ->
+        if (!leaving && !entering) {
+            leaving = true
+            scope.launch {
+                // The bottom-right tile starts first; each predecessor follows toward the top-left.
+                delay((MetroTileCount - 1 - index).coerceAtLeast(0) * 45L + 290L)
+                action()
+            }
+        }
+    }
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
-    val numCols = if (isTablet) 5 else 3
+    val numCols = if (isTablet) 5 else MetroTileLayout.grid().first
 
     val modules by produceState<List<LocalModule>>(initialValue = emptyList()) {
         value = if (LocalModule.loaded()) {
@@ -128,19 +190,21 @@ fun MetroHomeScreen(
         }
     }
 
-    MetroGrid(
-        viewModel = viewModel,
-        isTablet = isTablet,
-        numCols = numCols,
-        modules = modules,
-        rootApps = rootApps,
-        importantLogs = importantLogs,
-        onSettingsClick = onSettingsClick,
-        onModulesClick = onModulesClick,
-        onAppsClick = onAppsClick,
-        onLogsClick = onLogsClick,
-        onContributorsClick = onContributorsClick,
-    )
+    CompositionLocalProvider(LocalMetroTileNavigator provides tileNavigator) {
+        MetroGrid(
+            viewModel = viewModel,
+            isTablet = isTablet,
+            numCols = numCols,
+            modules = modules,
+            rootApps = rootApps,
+            importantLogs = importantLogs,
+            onSettingsClick = onSettingsClick,
+            onModulesClick = onModulesClick,
+            onAppsClick = onAppsClick,
+            onLogsClick = onLogsClick,
+            onContributorsClick = onContributorsClick,
+        )
+    }
 }
 
 @Composable
@@ -162,6 +226,8 @@ private fun MetroGrid(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState()),
     ) {
         val tileSize = (maxWidth - gap * (numCols + 1)) / numCols
@@ -201,73 +267,215 @@ private fun MetroBoard(
     onLogsClick: () -> Unit,
     onContributorsClick: () -> Unit,
 ) {
-    fun place(column: Int, row: Int, width: Int = 1, height: Int = 1): Modifier =
-        Modifier
-            .offset(x = (tileSize + gap) * column, y = (tileSize + gap) * row)
-            .size(
-                width = tileSize * width + gap * (width - 1),
-                height = tileSize * height + gap * (height - 1),
-            )
+    val (phoneColumns, phoneRows) = MetroTileLayout.grid()
+    val columns = if (isTablet) 5 else phoneColumns
+    val boardRows = if (isTablet) rows else phoneRows
+    var placements by remember(columns, boardRows, isTablet, Config.metroTileCustomization) {
+        mutableStateOf(MetroTileLayout.load(columns, boardRows))
+    }
+    val customizing = !isTablet && Config.metroTileCustomization
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var dragX by remember { mutableStateOf(0f) }
+    var dragY by remember { mutableStateOf(0f) }
+    var resizingId by remember { mutableStateOf<String?>(null) }
+    var resizePreview by remember { mutableStateOf<MetroTilePlacement?>(null) }
+    val boardScope = rememberCoroutineScope()
+    var hoverJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
+    fun persist(next: List<MetroTilePlacement>) {
+        placements = MetroTileLayout.save(next, columns, boardRows)
+    }
+    @Composable
+    fun place(item: MetroTilePlacement): Modifier {
+        val rendered = resizePreview?.takeIf { it.id == item.id } ?: item
+        val cell = tileSize + gap
+        val targetX = cell * rendered.column
+        val targetY = cell * rendered.row
+        val targetWidth = tileSize * rendered.width + gap * (rendered.width - 1)
+        val targetHeight = tileSize * rendered.height + gap * (rendered.height - 1)
+        val animation = if (resizingId == item.id) tween<Dp>(durationMillis = 0)
+        else tween(durationMillis = 260, easing = MetroEaseOut)
+        val x by animateDpAsState(targetX, animation, label = "tileX")
+        val y by animateDpAsState(targetY, animation, label = "tileY")
+        val width by animateDpAsState(targetWidth, animation, label = "tileWidth")
+        val height by animateDpAsState(targetHeight, animation, label = "tileHeight")
+        return Modifier
+            .offset(x = x, y = y)
+            .size(width = width, height = height)
+            .then(if (dragging == item.id) Modifier.graphicsLayer {
+                translationX = dragX
+                translationY = dragY
+                alpha = 0.86f
+                scaleX = 1.03f
+                scaleY = 1.03f
+            } else Modifier)
+            .then(if (customizing) Modifier.pointerInput(item.id, placements) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        dragging = item.id
+                        dragX = 0f
+                        dragY = 0f
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragX += amount.x
+                        dragY += amount.y
+                        val targetColumn = (item.column + dragX / cell.toPx()).roundToInt().coerceIn(0, columns - item.width)
+                        val targetRow = (item.row + dragY / cell.toPx()).roundToInt().coerceIn(0, boardRows - item.height)
+                        val target = placements.firstOrNull { it.id != item.id &&
+                            targetColumn in it.column until it.column + it.width &&
+                            targetRow in it.row until it.row + it.height }
+                        hoverJob?.cancel()
+                        if (target != null) {
+                            hoverJob = boardScope.launch {
+                                // A deliberate two-second dwell over another tile packs it into
+                                // the next vacant slot before the drag is released.
+                                delay(2000)
+                                if (dragging == item.id) {
+                                    persist(MetroTileLayout.move(placements, target.id, target.column, target.row, columns, boardRows))
+                                }
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        hoverJob?.cancel()
+                        val targetColumn = (item.column + dragX / cell.toPx()).roundToInt().coerceIn(0, columns - item.width)
+                        val targetRow = (item.row + dragY / cell.toPx()).roundToInt().coerceIn(0, boardRows - item.height)
+                        persist(MetroTileLayout.move(placements, item.id, targetColumn, targetRow, columns, boardRows))
+                        dragging = null
+                    },
+                    onDragCancel = { hoverJob?.cancel(); dragging = null },
+                )
+            } else Modifier)
+    }
+    fun resizeHandle(item: MetroTilePlacement, horizontal: Int, vertical: Int): Modifier =
+        if (!customizing) Modifier else Modifier
+            .offset(
+                x = (tileSize + gap) * item.column +
+                    if (horizontal > 0) tileSize * item.width + gap * (item.width - 1) - 18.dp else 0.dp,
+                y = (tileSize + gap) * item.row +
+                    if (vertical > 0) tileSize * item.height + gap * (item.height - 1) - 18.dp else 0.dp,
+            )
+            .size(18.dp)
+            .drawBehind { drawRect(Color.White.copy(alpha = 0.92f)) }
+            .pointerInput(item.id, placements) {
+                var totalX = 0f
+                var totalY = 0f
+                detectDragGestures(
+                    onDragStart = {
+                        totalX = 0f
+                        totalY = 0f
+                        resizingId = item.id
+                        resizePreview = item
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        totalX += amount.x
+                        totalY += amount.y
+                        val deltaX = (totalX / (tileSize + gap).toPx()).roundToInt()
+                        val deltaY = (totalY / (tileSize + gap).toPx()).roundToInt()
+                        val right = item.column + item.width
+                        val bottom = item.row + item.height
+                        val width = (if (horizontal > 0) item.width + deltaX else item.width - deltaX)
+                            .coerceIn(1, if (horizontal > 0) columns - item.column else right)
+                        val height = (if (vertical > 0) item.height + deltaY else item.height - deltaY)
+                            .coerceIn(1, if (vertical > 0) boardRows - item.row else bottom)
+                        val column = if (horizontal > 0) item.column else right - width
+                        val row = if (vertical > 0) item.row else bottom - height
+                        val candidate = item.copy(column = column, row = row, width = width, height = height)
+                        if (MetroTileLayout.canPlace(placements, candidate, columns, boardRows)) {
+                            resizePreview = candidate
+                        }
+                    },
+                    onDragEnd = {
+                        resizePreview?.let { preview ->
+                            persist(MetroTileLayout.resizeRect(
+                                placements, preview.id, preview.column, preview.row,
+                                preview.width, preview.height, columns, boardRows,
+                            ))
+                        }
+                        resizePreview = null
+                        resizingId = null
+                    },
+                    onDragCancel = {
+                        resizePreview = null
+                        resizingId = null
+                    },
+                )
+            }
+    /* The layout engine owns every rectangle, making a custom phone grid impossible to overlap. */
+    fun placement(id: String) = resizePreview?.takeIf { it.id == id } ?: placements.first { it.id == id }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(tileSize * rows + gap * (rows - 1)),
+            .height(tileSize * boardRows + gap * (boardRows - 1)),
     ) {
-        val sideColumn = if (isTablet) 4 else 2
-        val wideColumn = if (isTablet) 2 else 0
-
-        // Magisk 2x2 top-left
         MagiskTile(
-            modifier = place(0, 0, 2, 2),
+            modifier = place(placement(MetroTileLayout.Magisk)),
+            navigationIndex = 0,
             onClick = viewModel::onMagiskPressed,
         )
         // Modules 1x1 and Apps 1x1 to the right of Magisk
         ModuleTile(
-            modifier = place(sideColumn, 0),
+            modifier = place(placement(MetroTileLayout.Modules)),
+            navigationIndex = 2,
             modules = modules,
             onClick = onModulesClick,
         )
         AppTile(
-            modifier = place(sideColumn, 1),
+            modifier = place(placement(MetroTileLayout.Apps)),
+            navigationIndex = 3,
             apps = rootApps,
             onClick = onAppsClick,
         )
         // Settings 2x1
         SettingsTile(
-            modifier = place(wideColumn, 2, 2),
+            modifier = place(placement(MetroTileLayout.Settings)),
+            navigationIndex = 4,
             onClick = onSettingsClick,
         )
         // Logs 1x2 (tall, right column)
         LogTile(
-            modifier = place(sideColumn, 2, 1, 2),
+            modifier = place(placement(MetroTileLayout.Logs)),
+            navigationIndex = 5,
             logs = importantLogs,
             onClick = onLogsClick,
         )
         // Contributor 2x1
         ContributorTile(
-            modifier = place(wideColumn, 3, 2),
+            modifier = place(placement(MetroTileLayout.Contributors)),
+            navigationIndex = 6,
             onClick = onContributorsClick,
         )
-        // Sponsor row: three 1x1 tiles
-        val sponsorStart = if (isTablet) 1 else 0
         SponsorTile(
-            modifier = place(sponsorStart, 4),
+            modifier = place(placement(MetroTileLayout.Sponsor)),
+            navigationIndex = 7,
             label = stringResource(R.string.metro_sponsor),
         ) {
             viewModel.onLinkPressed(SUPPORT_URL)
         }
         SponsorTile(
-            modifier = place(sponsorStart + 1, 4),
+            modifier = place(placement(MetroTileLayout.Support)),
+            navigationIndex = 8,
             label = stringResource(R.string.metro_support),
         ) {
             viewModel.onLinkPressed(SUPPORT_URL)
         }
         SponsorTile(
-            modifier = place(sponsorStart + 2, 4),
+            modifier = place(placement(MetroTileLayout.Donate)),
+            navigationIndex = 9,
             label = stringResource(R.string.metro_donate),
         ) {
             viewModel.onLinkPressed(SUPPORT_URL)
+        }
+        // Four visible corner handles give each tile direct, spatial resize affordances.
+        val displayPlacements = resizePreview?.let { preview ->
+            placements.map { if (it.id == preview.id) preview else it }
+        } ?: placements
+        displayPlacements.forEach { item ->
+            for (horizontal in listOf(-1, 1)) for (vertical in listOf(-1, 1)) {
+                Box(modifier = resizeHandle(item, horizontal, vertical))
+            }
         }
     }
 }
@@ -276,13 +484,51 @@ private fun MetroBoard(
 private fun MetroTile(
     modifier: Modifier = Modifier,
     color: Color,
+    navigationIndex: Int = 0,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val navigator = LocalMetroTileNavigator.current
+    val flyProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (navigator?.leaving == true) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 280,
+            delayMillis = (MetroTileCount - 1 - navigationIndex).coerceAtLeast(0) * 45,
+        ),
+        label = "metroTileFly",
+    )
+    // The transform must wrap background/clip too; otherwise only tile content flies while the
+    // colored block remains stationary.
+    val enterProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (navigator?.entering == true) 1f else 0f,
+        animationSpec = tween(280, navigationIndex.coerceAtLeast(0) * 45),
+        label = "metroTileEnter",
+    )
     val tileModifier = modifier
+        .graphicsLayer {
+            val scale = if (pressed && onClick != null) 0.96f else 1f
+            scaleX = scale
+            scaleY = scale
+            alpha = (if (pressed && onClick != null) 0.88f else 1f) *
+                (1f - flyProgress) * (1f - enterProgress)
+            translationX = -size.width * (flyProgress + enterProgress)
+            translationY = -size.height * (flyProgress + enterProgress)
+            rotationZ = -8f * flyProgress
+        }
         .clip(RectangleShape)
         .background(color)
-        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .then(
+            if (onClick != null) Modifier.clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    if (navigator != null) navigator.navigate(navigationIndex, onClick)
+                    else onClick()
+                },
+            ) else Modifier
+        )
         .padding(8.dp)
 
     Box(modifier = tileModifier, content = content)
@@ -291,12 +537,14 @@ private fun MetroTile(
 @Composable
 private fun MagiskTile(
     modifier: Modifier,
+    navigationIndex: Int,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.magisk
     MetroTile(
         modifier = modifier,
         color = accent.color,
+        navigationIndex = navigationIndex,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -364,11 +612,12 @@ private fun StatusRow(label: Int, enabled: Boolean, textColor: Color) {
 @Composable
 private fun ModuleTile(
     modifier: Modifier,
+    navigationIndex: Int,
     modules: List<LocalModule>,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.modules
-    MetroTile(modifier = modifier, color = accent.color, onClick = onClick) {
+    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_modules),
@@ -402,11 +651,12 @@ private fun ModuleTile(
 @Composable
 private fun AppTile(
     modifier: Modifier,
+    navigationIndex: Int,
     apps: List<String>,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.apps
-    MetroTile(modifier = modifier, color = accent.color, onClick = onClick) {
+    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_apps),
@@ -438,9 +688,9 @@ private fun AppTile(
 }
 
 @Composable
-private fun SettingsTile(modifier: Modifier, onClick: () -> Unit) {
+private fun SettingsTile(modifier: Modifier, navigationIndex: Int, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.settings
-    MetroTile(modifier = modifier, color = accent.color, onClick = onClick) {
+    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
         Text(
             text = stringResource(R.string.metro_settings),
             color = accent.onColor,
@@ -452,11 +702,12 @@ private fun SettingsTile(modifier: Modifier, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ContributorTile(modifier: Modifier, onClick: () -> Unit) {
+private fun ContributorTile(modifier: Modifier, navigationIndex: Int, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.contributors
     MetroTile(
         modifier = modifier,
         color = accent.color,
+        navigationIndex = navigationIndex,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -478,9 +729,9 @@ private fun ContributorTile(modifier: Modifier, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LogTile(modifier: Modifier, logs: List<String>, onClick: () -> Unit) {
+private fun LogTile(modifier: Modifier, navigationIndex: Int, logs: List<String>, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.logs
-    MetroTile(modifier = modifier, color = accent.color, onClick = onClick) {
+    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_logs),
@@ -523,7 +774,7 @@ private fun AutoRollingList(
             var index = items.size
             listState.scrollToItem(index)
             while (true) {
-                delay(2200L)
+                delay(2600L)
                 index += 1
                 listState.animateScrollToItem(index)
                 if (index >= items.size * 2) {
@@ -548,30 +799,38 @@ private fun AutoRollingList(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            val rowHeight = (maxHeight / visibleItems) * 0.82f
+            val rowHeight = maxHeight / visibleItems
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
                 userScrollEnabled = false,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 1.dp),
             ) {
-                itemsIndexed(rollingItems) { _, value ->
+                itemsIndexed(rollingItems) { index, value ->
+                    val offset = kotlin.math.abs(index - listState.firstVisibleItemIndex)
+                    val itemAlpha = when (offset) {
+                        0 -> 1f
+                        1 -> 0.82f
+                        else -> 0.58f
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(rowHeight),
+                            .height(rowHeight)
+                            .padding(horizontal = 2.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                    Text(
-                        text = value,
-                        color = textColor.copy(alpha = 0.9f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = textAlign,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                        Text(
+                            text = value,
+                            color = textColor.copy(alpha = itemAlpha),
+                            fontSize = 11.sp,
+                            fontWeight = if (offset == 0) FontWeight.Medium else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = textAlign,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
@@ -579,11 +838,12 @@ private fun AutoRollingList(
 }
 
 @Composable
-private fun SponsorTile(modifier: Modifier, label: String, onClick: () -> Unit) {
+private fun SponsorTile(modifier: Modifier, navigationIndex: Int, label: String, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.sponsor
     MetroTile(
         modifier = modifier,
         color = accent.color,
+        navigationIndex = navigationIndex,
         onClick = onClick,
     ) {
         Text(

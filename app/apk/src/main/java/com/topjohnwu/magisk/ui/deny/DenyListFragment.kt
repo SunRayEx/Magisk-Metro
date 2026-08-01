@@ -29,7 +29,7 @@ class DenyListFragment : BaseFragment<FragmentDenyMd2Binding>(), MenuProvider {
 
     override fun onStart() {
         super.onStart()
-        activity?.setTitle(R.string.metro_sulist)
+        activity?.setTitle(R.string.metro_whitelist)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

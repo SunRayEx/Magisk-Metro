@@ -26,11 +26,12 @@
     <string name="metro_donate">Sponsor</string>
     <string name="metro_community">MagisKube community</string>
     <string name="metro_open">Open</string>
-    <string name="metro_sulist">SUList</string>
-    <string name="metro_sulist_enable">Enforce SUList</string>
-    <string name="metro_sulist_enable_summary">Only processes selected in SUList retain the Magisk environment</string>
-    <string name="metro_sulist_config">Configure SUList</string>
-    <string name="metro_sulist_config_summary">Select processes allowed to retain the Magisk environment</string>
+    <string name="metro_whitelist">whitelist</string>
+    <string name="metro_actions">actions</string>
+    <string name="metro_status">status</string>
+    <string name="metro_whitelist_enable">Enable whitelist</string>
+    <string name="metro_whitelist_enable_summary">Only whitelisted processes retain the Magisk environment</string>
+    <string name="metro_no_whitelist_apps">no whitelist apps</string>
     <string name="metro_magisk_manager">Magisk Manager</string>
     <string name="metro_install_magisk">Install Magisk</string>
     <string name="metro_install_magisk_summary">Install, upgrade, or patch Magisk</string>
@@ -47,6 +48,42 @@
     <string name="metro_root_granted">ROOT</string>
     <string name="metro_module_webui">WebUI</string>
     <string name="metro_module_webui_missing">This module does not provide a WebUI</string>
+    <string name="metro_install">install</string>
+
+    <!-- Metro pivot sections -->
+    <string name="metro_loading">loading\u2026</string>
+    <string name="metro_revoke">revoke</string>
+    <string name="metro_notifications">notifications</string>
+    <string name="metro_logging">logging</string>
+    <string name="metro_log_su">superuser</string>
+    <string name="metro_log_magisk">magisk</string>
+    <string name="metro_granted">granted</string>
+    <string name="metro_blocked">blocked</string>
+    <string name="metro_installed">installed</string>
+    <string name="metro_updates">updates</string>
+    <string name="metro_save">save</string>
+    <string name="metro_clear">clear</string>
+    <string name="metro_install_module">install from storage</string>
+    <string name="metro_module_remove">remove</string>
+    <string name="metro_module_restore">restore</string>
+    <string name="metro_module_update">update</string>
+    <string name="metro_module_action">action</string>
+    <string name="metro_no_logs">no logs</string>
+    <string name="metro_no_su_logs">no superuser logs</string>
+    <string name="metro_no_settings">no settings</string>
+    <string name="metro_no_granted_apps">no granted apps</string>
+    <string name="metro_no_blocked_apps">no blocked apps</string>
+    <string name="metro_no_updates">no updates</string>
+    <string name="metro_back">back</string>
+    <string name="metro_tile_customize">Customize Start tiles</string>
+    <string name="metro_tile_customize_summary">Resize and rearrange tiles on the phone Start screen</string>
+    <string name="metro_tile_grid">Start screen grid</string>
+    <string name="metro_tile_grid_summary">Choose the phone tile base layout</string>
+    <string-array name="metro_tile_grid_entries">
+        <item>3 × 6</item>
+        <item>4 × 6</item>
+        <item>4 × 8</item>
+    </string-array>
 
     <string-array name="metro_dark_mode_entries">
         <item>Follow system</item>

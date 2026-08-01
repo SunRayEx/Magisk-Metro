@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.core.net.toUri
 import androidx.databinding.Bindable
 import com.topjohnwu.magisk.BR
+import com.topjohnwu.magisk.MainDirections
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.ActivityExecutor
 import com.topjohnwu.magisk.arch.AsyncLoadViewModel
@@ -144,7 +145,11 @@ class HomeViewModel(
     }
 
     fun onMagiskPressed() = withExternalRW {
-        HomeFragmentDirections.actionHomeFragmentToMagiskManagerFragment().navigate()
+        MainDirections.actionSectionPivotFragment("MAGISK").navigate()
+    }
+
+    fun onInstallPressed() = withExternalRW {
+        MainDirections.actionInstallFragment().navigate()
     }
 
     fun hideNotice() {

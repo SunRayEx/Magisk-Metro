@@ -1,10 +1,10 @@
 use super::connect::SuAppContext;
 use super::db::RootSettings;
-use crate::daemon::{AID_ROOT, AID_SHELL, MagiskD, to_app_id, to_user_id};
+use crate::daemon::{to_app_id, to_user_id, MagiskD, AID_ROOT, AID_SHELL};
 use crate::db::{DbSettings, MultiuserMode, RootAccess};
-use crate::ffi::{SuPolicy, SuRequest, exec_root_shell};
+use crate::ffi::{exec_root_shell, SuPolicy, SuRequest};
 use crate::socket::IpcRead;
-use base::{LoggedResult, ResultExt, WriteExt, debug, error, exit_on_error, libc, warn};
+use base::{debug, error, exit_on_error, libc, warn, LoggedResult, ResultExt, WriteExt};
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::{UCred, UnixStream};
 use std::sync::Arc;
@@ -288,6 +288,8 @@ impl MagiskD {
 
     #[cfg(not(feature = "su-check-db"))]
     fn build_su_info(&self, uid: i32) -> Arc<SuInfo> {
-        Arc::new(SuInfo::allow(uid))
+        // A debug build without policy-database support must never turn into an implicit
+        // global whitelist. Fail closed when policies cannot be checked.
+        Arc::new(SuInfo::deny(uid))
     }
 }

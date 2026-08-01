@@ -12,7 +12,7 @@
     </data>
 
     <com.google.android.material.card.MaterialCardView
-        style="@style/WidgetFoundation.Card.Elevated"
+        style="@style/WidgetFoundation.Card.Metro"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center">
@@ -21,17 +21,18 @@
             android:id="@+id/su_popup"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="350dp"
+            android:minWidth="320dp"
+            android:paddingTop="8dp"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/request_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
+                android:layout_gravity="start"
                 android:layout_marginTop="@dimen/l1"
                 android:layout_marginBottom="@dimen/l_50"
-                android:gravity="center_horizontal"
+                android:gravity="start"
                 android:text="@string/su_request_title"
                 android:textAppearance="@style/AppearanceFoundation.Title" />
 
@@ -127,7 +128,7 @@
 
                 <Button
                     android:id="@+id/deny_btn"
-                    style="@style/WidgetFoundation.Button.Text"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -138,7 +139,7 @@
 
                 <Button
                     android:id="@+id/grant_btn"
-                    style="@style/WidgetFoundation.Button.Text"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
                     onTouch="@{viewModel.grantTouchListener}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"

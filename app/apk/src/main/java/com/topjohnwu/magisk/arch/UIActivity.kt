@@ -1,6 +1,7 @@
 package com.topjohnwu.magisk.arch
 
 import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Color
 import android.os.Build
@@ -27,8 +28,12 @@ import com.topjohnwu.magisk.core.base.IActivityExtension
 import com.topjohnwu.magisk.core.isRunningAsStub
 import com.topjohnwu.magisk.core.ktx.reflectField
 import com.topjohnwu.magisk.core.wrap
+import com.topjohnwu.magisk.ui.theme.Theme
 import rikka.insets.WindowInsetsHelper
 import rikka.layoutinflater.view.LayoutInflaterFactory
+
+/** Global Metro display-density scale applied to every activity (see [UIActivity.attachBaseContext]). */
+const val METRO_DENSITY_SCALE = 0.75f
 
 abstract class UIActivity<Binding : ViewDataBinding>
     : AppCompatActivity(), ViewModelHolder, IActivityExtension {
@@ -47,7 +52,13 @@ abstract class UIActivity<Binding : ViewDataBinding>
     }
 
     override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(base.wrap())
+        // Windows Phone Metro look: globally scale down the display density so every
+        // screen (View and Compose alike) renders at 0.75x, matching the desired Metro
+        // visual scale without requiring a system-wide DPI change.
+        val wrapped = base.wrap()
+        val config = Configuration(wrapped.resources.configuration)
+        config.densityDpi = (config.densityDpi * METRO_DENSITY_SCALE).toInt()
+        super.attachBaseContext(wrapped.createConfigurationContext(config))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,7 +152,6 @@ fun ViewGroup.startAnimations() {
     val transition = AutoTransition()
         .setInterpolator(FastOutSlowInInterpolator())
         .setDuration(400)
-        .excludeTarget(R.id.main_toolbar, true)
     TransitionManager.beginDelayedTransition(
         this,
         transition

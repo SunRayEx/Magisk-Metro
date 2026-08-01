@@ -35,7 +35,7 @@
             style="@style/WidgetFoundation.Image.Big"
             gone="@{data.icon == null}"
             android:layout_gravity="center"
-            android:layout_marginTop="@dimen/l1"
+            android:layout_marginTop="20dp"
             android:src="@{data.icon}"
             app:layout_constraintBottom_toTopOf="@+id/dialog_base_title"
             app:layout_constraintEnd_toEndOf="parent"
@@ -49,7 +49,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/l1"
-            android:gravity="center"
+            android:gravity="start"
             android:text="@{data.title}"
             android:textAppearance="@style/AppearanceFoundation.Title"
             app:layout_constraintEnd_toEndOf="@+id/dialog_base_end"
@@ -61,7 +61,7 @@
         <androidx.core.widget.NestedScrollView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/l_50"
+            android:layout_marginTop="12dp"
             android:overScrollMode="ifContentScrolls"
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toTopOf="@+id/dialog_base_space"
@@ -108,17 +108,17 @@
             android:gravity="bottom|center_horizontal"
             android:layoutDirection="locale"
             android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="4dp"
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
             <Button
                 android:id="@+id/dialog_base_button_2"
-                style="@style/WidgetFoundation.Button.Text"
+                style="@style/WidgetFoundation.Button.Dialog.Metro"
                 gone="@{data.buttonNeutral.gone}"
                 isEnabled="@{data.buttonNeutral.isEnabled}"
                 android:layout_width="wrap_content"
@@ -142,7 +142,7 @@
 
             <Button
                 android:id="@+id/dialog_base_button_3"
-                style="@style/WidgetFoundation.Button.Text"
+                style="@style/WidgetFoundation.Button.Dialog.Metro"
                 gone="@{data.buttonNegative.gone}"
                 isEnabled="@{data.buttonNegative.isEnabled}"
                 android:layout_width="wrap_content"
@@ -158,7 +158,7 @@
 
             <Button
                 android:id="@+id/dialog_base_button_1"
-                style="@style/WidgetFoundation.Button.Text"
+                style="@style/WidgetFoundation.Button.Dialog.Metro"
                 gone="@{data.buttonPositive.gone}"
                 isEnabled="@{data.buttonPositive.isEnabled}"
                 android:layout_width="wrap_content"

@@ -44,7 +44,7 @@ class ActionFragment : BaseFragment<FragmentActionMd2Binding>(), MenuProvider {
         viewModel.state.observe(this) {
             if (it != ActionViewModel.State.RUNNING) {
                 binding.closeBtn.apply {
-                    if (!this.isVisible) this.show()
+                    if (!this.isVisible) this.isVisible = true
                     if (!this.isFocused) this.requestFocus()
                 }
             }

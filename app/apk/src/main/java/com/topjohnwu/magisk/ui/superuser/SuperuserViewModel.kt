@@ -50,6 +50,10 @@ class SuperuserViewModel(
     var loading = true
         private set(value) = set(value, field, { field = it }, BR.loading)
 
+    @get:Bindable
+    var policyRevision = 0
+        private set(value) = set(value, field, { field = it }, BR.policyRevision)
+
     @SuppressLint("InlinedApi")
     override suspend fun doLoadWork() {
         if (!Info.showSuperUser) {
@@ -74,11 +78,7 @@ class SuperuserViewModel(
 
             val policies = applications.map { app ->
                 val policy = policiesByUid.getOrPut(app.uid) {
-                    storedPolicies[app.uid] ?: SuPolicy(
-                        uid = app.uid,
-                        policy = SuPolicy.DENY,
-                        remain = 0L,
-                    )
+                    storedPolicies[app.uid] ?: SuPolicy(uid = app.uid)
                 }
                 val sharedUid = (pm.getPackagesForUid(app.uid)?.size ?: 0) > 1
                 PolicyRvItem(
@@ -114,22 +114,17 @@ class SuperuserViewModel(
         fun updateState() = viewModelScope.launch {
             db.delete(item.item.uid)
             item.item.apply {
-                policy = SuPolicy.DENY
-                remain = 0L
+                policy = SuPolicy.QUERY
+                remain = -1L
                 logging = true
                 notification = true
             }
             itemsPolicies.forEach {
                 if (it.item.uid == item.item.uid) {
-                    it.isExpanded = false
-                    it.notifyPropertyChanged(BR.enabled)
-                    it.notifyPropertyChanged(BR.rootGranted)
-                    it.notifyPropertyChanged(BR.sliderValue)
-                    it.notifyPropertyChanged(BR.showSlider)
-                    it.notifyPropertyChanged(BR.shouldNotify)
-                    it.notifyPropertyChanged(BR.shouldLog)
+                    it.resetToQuery()
                 }
             }
+            policyRevision++
         }
 
         if (Config.suAuth) {
@@ -185,6 +180,7 @@ class SuperuserViewModel(
                     it.notifyPropertyChanged(BR.sliderValue)
                     it.notifyPropertyChanged(BR.showSlider)
                 }
+                policyRevision++
                 SnackbarEvent(res.asText(item.appName)).publish()
             }
         }

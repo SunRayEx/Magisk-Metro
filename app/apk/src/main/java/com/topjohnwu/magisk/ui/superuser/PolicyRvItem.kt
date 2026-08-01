@@ -4,7 +4,6 @@ import android.graphics.drawable.Drawable
 import androidx.databinding.Bindable
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.databinding.DiffItem
 import com.topjohnwu.magisk.databinding.ItemWrapper
@@ -36,7 +35,7 @@ class PolicyRvItem(
         set(value) = set(value, field, { field = it }, BR.expanded)
 
     @get:Bindable
-    val showSlider get() = Config.suRestrict || item.policy == SuPolicy.RESTRICT
+    val showSlider get() = true
 
     @get:Bindable
     val rootGranted get() = item.policy >= SuPolicy.ALLOW
@@ -97,6 +96,16 @@ class PolicyRvItem(
 
     fun revoke() {
         viewModel.deletePressed(this)
+    }
+
+    fun resetToQuery() {
+        isExpanded = false
+        notifyPropertyChanged(BR.enabled)
+        notifyPropertyChanged(BR.rootGranted)
+        notifyPropertyChanged(BR.sliderValue)
+        notifyPropertyChanged(BR.showSlider)
+        notifyPropertyChanged(BR.shouldNotify)
+        notifyPropertyChanged(BR.shouldLog)
     }
 
     override fun itemSameAs(other: PolicyRvItem) = packageName == other.packageName

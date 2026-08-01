@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.BR
+import com.topjohnwu.magisk.MainDirections
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.BuildConfig
@@ -44,7 +45,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         // Customization
         val list = mutableListOf(
             Customization,
-            Theme, DarkMode,
+            Theme, DarkMode, MetroTileCustomization, MetroTileGrid,
             if (LocaleSetting.useLocaleManager) LanguageSystem else Language
         )
         if (isRunningAsStub && ShortcutManagerCompat.isRequestPinShortcutSupported(context))
@@ -66,7 +67,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
                 SystemlessHosts
             ))
             if (Const.Version.atLeast_24_0()) {
-                list.addAll(listOf(Zygisk, DenyList, DenyListConfig))
+                list.addAll(listOf(Zygisk, DenyList))
             }
         }
 
@@ -105,7 +106,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
 
     override fun onItemAction(view: View, item: BaseSettingsItem) {
         when (item) {
-            Theme -> SettingsFragmentDirections.actionSettingsFragmentToThemeFragment().navigate()
+            Theme -> MainDirections.actionThemeFragment().navigate()
             DarkMode -> {
                 androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(Config.darkTheme)
                 RecreateEvent().publish()
@@ -113,7 +114,6 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
             LanguageSystem -> view.activity.startActivity(LocaleSetting.localeSettingsIntent)
             AddShortcut -> AddHomeIconEvent().publish()
             SystemlessHosts -> createHosts()
-            DenyListConfig -> SettingsFragmentDirections.actionSettingsFragmentToDenyFragment().navigate()
             is Hide -> viewModelScope.launch { AppMigration.hide(view.activity, item.value) }
             Restore -> viewModelScope.launch { AppMigration.restore(view.activity) }
             Zygisk -> if (Zygisk.mismatch) SnackbarEvent(R.string.reboot_apply_change).publish()

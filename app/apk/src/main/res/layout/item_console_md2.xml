@@ -11,7 +11,7 @@
     </data>
 
     <TextView
-        style="@style/WidgetFoundation.Metro.MonospaceText"
+        style="@style/WidgetFoundation.Metro.Console"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@{item.item}"

@@ -12,33 +12,71 @@
     </data>
 
     <androidx.coordinatorlayout.widget.CoordinatorLayout
+        style="@style/WidgetFoundation.Metro.Page"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <HorizontalScrollView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_marginTop="@dimen/internal_action_bar_size"
+            android:orientation="vertical"
             app:layout_fitsSystemWindowsInsets="top"
             tools:layout_marginTop="@dimen/internal_action_bar_size">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/flash_content"
-                scrollToLast="@{true}"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:gravity="center_vertical"
                 android:orientation="vertical"
-                app:fitsSystemWindowsInsets="start|end|bottom"
-                app:items="@{viewModel.items}"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                app:layout_behavior="@string/appbar_scrolling_view_behavior"
-                tools:listitem="@layout/item_console_md2" />
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:tag="metroAccentBg">
 
-        </HorizontalScrollView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:tag="metroOnAccentFg"
+                    android:text="@string/flash_screen_title"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.82"
+                    android:tag="metroOnAccentFg"
+                    android:text="@string/flashing"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/flash_content"
+                    scrollToLast="@{true}"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:background="?colorSurfaceVariant"
+                    android:clipToPadding="false"
+                    android:orientation="vertical"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="88dp"
+                    app:fitsSystemWindowsInsets="start|end|bottom"
+                    app:items="@{viewModel.items}"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+                    tools:listitem="@layout/item_console_md2" />
+
+            </HorizontalScrollView>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/restart_btn"
+            style="@style/WidgetFoundation.Button.Metro"
             android:visibility="gone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -50,7 +88,6 @@
             android:focusable="true"
             android:onClick="@{() -> viewModel.restartPressed()}"
             android:text="@string/reboot"
-            android:textAllCaps="false"
             android:textColor="?colorOnPrimary"
             android:textStyle="bold"
             app:backgroundTint="?colorPrimary"

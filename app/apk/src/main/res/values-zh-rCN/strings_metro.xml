@@ -26,11 +26,12 @@
     <string name="metro_donate">赞助</string>
     <string name="metro_community">MagisKube 社区</string>
     <string name="metro_open">打开</string>
-    <string name="metro_sulist">SUList 白名单</string>
-    <string name="metro_sulist_enable">启用 SUList 白名单</string>
-    <string name="metro_sulist_enable_summary">仅白名单中选中的进程保留 Magisk 环境</string>
-    <string name="metro_sulist_config">配置 SUList 白名单</string>
-    <string name="metro_sulist_config_summary">选择允许保留 Magisk 环境的进程</string>
+    <string name="metro_whitelist">白名单</string>
+    <string name="metro_actions">操作</string>
+    <string name="metro_status">状态</string>
+    <string name="metro_whitelist_enable">启用白名单</string>
+    <string name="metro_whitelist_enable_summary">只有白名单中的进程保留 Magisk 环境</string>
+    <string name="metro_no_whitelist_apps">没有白名单应用</string>
     <string name="metro_magisk_manager">Magisk 管理器</string>
     <string name="metro_install_magisk">安装 Magisk</string>
     <string name="metro_install_magisk_summary">安装、升级或修补 Magisk</string>
@@ -47,6 +48,42 @@
     <string name="metro_root_granted">ROOT</string>
     <string name="metro_module_webui">网页界面</string>
     <string name="metro_module_webui_missing">该模块未提供网页界面</string>
+    <string name="metro_install">安装</string>
+
+    <!-- Metro pivot sections -->
+    <string name="metro_loading">正在加载…</string>
+    <string name="metro_revoke">撤销</string>
+    <string name="metro_notifications">通知</string>
+    <string name="metro_logging">日志记录</string>
+    <string name="metro_log_su">超级用户</string>
+    <string name="metro_log_magisk">Magisk</string>
+    <string name="metro_granted">已授权</string>
+    <string name="metro_blocked">已拒绝</string>
+    <string name="metro_installed">已安装</string>
+    <string name="metro_updates">更新</string>
+    <string name="metro_save">保存</string>
+    <string name="metro_clear">清除</string>
+    <string name="metro_install_module">从存储空间安装</string>
+    <string name="metro_module_remove">移除</string>
+    <string name="metro_module_restore">恢复</string>
+    <string name="metro_module_update">更新</string>
+    <string name="metro_module_action">操作</string>
+    <string name="metro_no_logs">没有日志</string>
+    <string name="metro_no_su_logs">没有超级用户日志</string>
+    <string name="metro_no_settings">没有设置项</string>
+    <string name="metro_no_granted_apps">没有已授权应用</string>
+    <string name="metro_no_blocked_apps">没有已拒绝应用</string>
+    <string name="metro_no_updates">没有更新</string>
+    <string name="metro_back">返回</string>
+    <string name="metro_tile_customize">自定义开始屏幕磁贴</string>
+    <string name="metro_tile_customize_summary">在手机开始屏幕上调整磁贴大小和位置</string>
+    <string name="metro_tile_grid">开始屏幕网格</string>
+    <string name="metro_tile_grid_summary">选择手机磁贴基底布局</string>
+    <string-array name="metro_tile_grid_entries">
+        <item>3 × 6</item>
+        <item>4 × 6</item>
+        <item>4 × 8</item>
+    </string-array>
 
     <string-array name="metro_dark_mode_entries">
         <item>跟随系统</item>

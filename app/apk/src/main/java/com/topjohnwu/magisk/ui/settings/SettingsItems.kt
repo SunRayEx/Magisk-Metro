@@ -83,6 +83,23 @@ object DarkMode : BaseSettingsItem.Selector() {
         }
 }
 
+object MetroTileCustomization : BaseSettingsItem.Toggle() {
+    override val title = R.string.metro_tile_customize.asText()
+    override val description = R.string.metro_tile_customize_summary.asText()
+    override var value by Config::metroTileCustomization
+}
+
+object MetroTileGrid : BaseSettingsItem.Selector() {
+    override val title = R.string.metro_tile_grid.asText()
+    override val description = R.string.metro_tile_grid_summary.asText()
+    override val entryRes = R.array.metro_tile_grid_entries
+    override var value by Config::metroTileGrid
+
+    override fun refresh() {
+        isEnabled = Config.metroTileCustomization
+    }
+}
+
 // --- App
 
 object AppSettings : BaseSettingsItem.Section() {
@@ -244,8 +261,8 @@ object Zygisk : BaseSettingsItem.Toggle() {
 
 object DenyList : BaseSettingsItem.Toggle() {
     override val icon = CoreR.drawable.ic_magisk_outline
-    override val title = R.string.metro_sulist_enable.asText()
-    override val description get() = R.string.metro_sulist_enable_summary.asText()
+    override val title = R.string.metro_whitelist_enable.asText()
+    override val description get() = R.string.metro_whitelist_enable_summary.asText()
 
     override var value = Config.denyList
         set(value) {
@@ -260,12 +277,6 @@ object DenyList : BaseSettingsItem.Toggle() {
                 }
             }
         }
-}
-
-object DenyListConfig : BaseSettingsItem.Blank() {
-    override val icon = R.drawable.ic_forth_md2
-    override val title = R.string.metro_sulist_config.asText()
-    override val description = R.string.metro_sulist_config_summary.asText()
 }
 
 // --- Superuser

@@ -38,11 +38,10 @@ object MetroColors {
     private const val SOFT_ALPHA = 0x33
 
     /**
-     * View-based secondary screens always use the fixed Metro palette so that their
-     * background / text / accent never follow wallpaper-derived colors (requirement: the
-     * Magisk tile secondary screen is excluded from dynamic theming).
+     * Keep the dedicated Metro palette for the default theme, while allowing wallpaper and
+     * packaged themes to provide their own primary color to every View-based secondary screen.
      */
-    private fun usesRoleColors() = true
+    private fun usesRoleColors() = Theme.selected == Theme.Default
 
     @ColorInt
     private fun Context.themeAttrColor(name: String, @ColorInt fallback: Int): Int {

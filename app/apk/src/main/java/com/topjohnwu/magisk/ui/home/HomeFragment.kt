@@ -7,9 +7,6 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.core.view.MenuProvider
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.MainDirections
@@ -41,63 +38,44 @@ class HomeFragment : BaseFragment<FragmentHomeMd2Binding>(), MenuProvider {
     ): View {
         super.onCreateView(inflater, container, savedInstanceState)
         binding.metroHomeCompose.setContent {
-            // Reduce display density so the Metro tile grid matches the visual scale of
-            // other (View-based) screens without requiring a system DPI change.
-            val systemDensity = LocalDensity.current
-            val scaledDensity = Density(
-                density = systemDensity.density * 0.85f,
-                fontScale = systemDensity.fontScale,
-            )
-            CompositionLocalProvider(LocalDensity provides scaledDensity) {
-                MagisKubeTheme {
-                    MetroHomeScreen(
-                        viewModel = viewModel,
-                        onSettingsClick = ::navigateToSettings,
-                        onModulesClick = ::navigateToModules,
-                        onAppsClick = ::navigateToSuperuser,
-                        onLogsClick = ::navigateToLogs,
-                        onContributorsClick = ::navigateToContributors,
-                    )
-                }
+            // Global 0.75 Metro density is applied at the activity level
+            // (UIActivity.attachBaseContext), so no extra Compose density override here.
+            MagisKubeTheme {
+                MetroHomeScreen(
+                    viewModel = viewModel,
+                    onSettingsClick = ::navigateToSettings,
+                    onModulesClick = ::navigateToModules,
+                    onAppsClick = ::navigateToSuperuser,
+                    onLogsClick = ::navigateToLogs,
+                    onContributorsClick = ::navigateToContributors,
+                )
             }
         }
         return binding.root
     }
 
     private fun navigateToSettings() {
-        activity?.let {
-            NavigationActivity.navigate(
-                HomeFragmentDirections.actionHomeFragmentToSettingsFragment(),
-                it.findNavController(R.id.main_nav_host),
-                it.contentResolver,
-            )
-        }
+        navigateToPivot("SETTINGS")
     }
 
     private fun navigateToModules() {
-        activity?.let {
-            NavigationActivity.navigate(
-                MainDirections.actionModuleFragment(),
-                it.findNavController(R.id.main_nav_host),
-                it.contentResolver,
-            )
-        }
+        navigateToPivot("MODULES")
     }
 
     private fun navigateToSuperuser() {
-        activity?.let {
-            NavigationActivity.navigate(
-                MainDirections.actionSuperuserFragment(),
-                it.findNavController(R.id.main_nav_host),
-                it.contentResolver,
-            )
-        }
+        navigateToPivot("APPS")
     }
 
     private fun navigateToLogs() {
+        navigateToPivot("LOGS")
+    }
+
+    // All four top-level sections now live inside the single Metro pivot; open it at the tapped
+    // section. Swiping the pivot header switches between them (replaces the old bottom nav).
+    private fun navigateToPivot(section: String) {
         activity?.let {
             NavigationActivity.navigate(
-                MainDirections.actionLogFragment(),
+                MainDirections.actionSectionPivotFragment(section),
                 it.findNavController(R.id.main_nav_host),
                 it.contentResolver,
             )
