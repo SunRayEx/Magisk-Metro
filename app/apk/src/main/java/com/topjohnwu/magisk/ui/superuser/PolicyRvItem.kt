@@ -17,7 +17,9 @@ class PolicyRvItem(
     val packageName: String,
     private val isSharedUid: Boolean,
     val icon: Drawable,
-    val appName: String
+    val appName: String,
+    val isSystemApp: Boolean,
+    val installTime: Long,
 ) : ObservableRvItem(), DiffItem<PolicyRvItem>, ItemWrapper<SuPolicy> {
 
     override val layoutRes = R.layout.item_policy_md2

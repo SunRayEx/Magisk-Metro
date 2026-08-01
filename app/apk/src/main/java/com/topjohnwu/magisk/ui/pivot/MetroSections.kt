@@ -26,13 +26,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +52,8 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
+import com.topjohnwu.magisk.ui.deny.DenyListRvItem
+import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
 import com.topjohnwu.magisk.ui.module.InstallModule
 import com.topjohnwu.magisk.ui.module.LocalModuleRvItem
@@ -90,18 +95,22 @@ private fun MetroTextButton(
     text: String,
     accent: MetroAccent,
     enabled: Boolean = true,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .background(if (enabled) accent.color else accent.color.copy(alpha = 0.28f))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(
+                horizontal = if (compact) 8.dp else 14.dp,
+                vertical = if (compact) 5.dp else 8.dp,
+            ),
     ) {
         Text(
             text = text,
             color = accent.onColor.copy(alpha = if (enabled) 1f else 0.5f),
-            fontSize = 13.sp,
+            fontSize = if (compact) 11.sp else 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -115,9 +124,12 @@ private fun MetroTextButton(
 @Composable
 private fun MetroSubPivot(
     titles: List<String>,
+    initialPage: Int = 0,
     content: @Composable (page: Int, visible: Boolean) -> Unit,
 ) {
-    val pagerState = rememberPagerState { titles.size }
+    val pagerState = rememberPagerState(
+        initialPage = initialPage.coerceIn(0, titles.lastIndex),
+    ) { titles.size }
     val scope = rememberCoroutineScope()
     val headerState = rememberLazyListState()
 
@@ -273,7 +285,11 @@ private fun MetroStatusRow(label: String, enabled: Boolean, accent: MetroAccent)
 }
 
 @Composable
-fun AppsSection(vm: SuperuserViewModel) {
+fun AppsSection(
+    vm: SuperuserViewModel,
+    denyListVM: DenyListViewModel,
+    showDenyListInitially: Boolean,
+) {
     val accent = LocalMetroPalette.current.apps
     val tick = vm.observeAsTick()
     val loading = remember(tick) { vm.loading }
@@ -285,41 +301,200 @@ fun AppsSection(vm: SuperuserViewModel) {
         return
     }
     val policies = remember(items, policyRevision) { items.filterIsInstance<PolicyRvItem>() }
-    val granted = policies.filter { it.isEnabled }
-    val denied = policies.filter { it.item.policy == SuPolicy.DENY }
-    val pending = policies.filter { it.item.policy == SuPolicy.QUERY }
+    val denyTick = denyListVM.observeAsTick()
+    val denyLoading = remember(denyTick) { denyListVM.loading }
+    val denyItems by denyListVM.items.asComposeState()
+    val authorizedQuery = remember { mutableStateOf("") }
+    val authorizedAppFilter = remember { mutableStateOf(DenyListViewModel.AppFilter.USER) }
+    val authorizedSortOrder = remember { mutableStateOf(DenyListViewModel.SortOrder.INSTALL_TIME) }
+    // Keep unconfigured applications here so root can be granted without a separate prompt page.
+    // ALLOW is sorted above QUERY, so newly authorized apps move immediately after the write.
+    val authorized = remember(
+        policies,
+        policyRevision,
+        denyTick,
+        authorizedQuery.value,
+        authorizedAppFilter.value,
+        authorizedSortOrder.value,
+    ) {
+        policies.asSequence()
+            .filter { it.item.policy != SuPolicy.DENY && !denyListVM.isDenied(it.packageName) }
+            .filter { item ->
+                val matchesType = when (authorizedAppFilter.value) {
+                    DenyListViewModel.AppFilter.USER -> !item.isSystemApp
+                    DenyListViewModel.AppFilter.SYSTEM -> item.isSystemApp
+                }
+                val query = authorizedQuery.value
+                matchesType && (query.isBlank() ||
+                    item.appName.contains(query, true) || item.packageName.contains(query, true))
+            }
+            .sortedWith(
+                compareBy<PolicyRvItem> { it.item.policy < SuPolicy.ALLOW }
+                    .thenByDescending {
+                        if (authorizedSortOrder.value == DenyListViewModel.SortOrder.INSTALL_TIME) {
+                            it.installTime
+                        } else 0L
+                    }
+                    .thenBy {
+                        if (authorizedSortOrder.value == DenyListViewModel.SortOrder.ALPHABETICAL) {
+                            it.appName.lowercase()
+                        } else ""
+                    }
+                    .thenBy { it.appName.lowercase() },
+            )
+            .toList()
+    }
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_granted),
             stringResource(R.string.metro_blocked),
-            stringResource(CoreR.string.prompt),
         ),
+        initialPage = if (showDenyListInitially) 1 else 0,
     ) { page, visible ->
-        val pagePolicies = when (page) {
-            0 -> granted
-            1 -> denied
-            else -> pending
-        }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            if (pagePolicies.isEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(
-                            when (page) {
-                                0 -> R.string.metro_no_granted_apps
-                                1 -> R.string.metro_no_blocked_apps
-                                else -> CoreR.string.superuser_policy_none
-                            }
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Light,
-                        modifier = Modifier.padding(SectionPadding),
-                    )
+        if (page == 0) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppSearchAndFilters(
+                    query = authorizedQuery.value,
+                    appFilter = authorizedAppFilter.value,
+                    sortOrder = authorizedSortOrder.value,
+                    accent = accent,
+                    onQueryChange = { authorizedQuery.value = it },
+                    onAppFilterChange = { authorizedAppFilter.value = it },
+                    onSortOrderChange = { authorizedSortOrder.value = it },
+                )
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    if (authorized.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.metro_no_granted_apps),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Light,
+                                modifier = Modifier.padding(SectionPadding),
+                            )
+                        }
+                    } else {
+                        itemsIndexed(authorized) { index, item ->
+                            MetroFlipItem(index = index, visible = visible) { PolicyRow(item, accent) }
+                        }
+                    }
                 }
-            } else {
-                itemsIndexed(pagePolicies) { index, item ->
-                    MetroFlipItem(index = index, visible = visible) { PolicyRow(item, accent) }
+            }
+        } else {
+            DenyListSection(denyListVM, denyItems, denyLoading, accent, visible)
+        }
+    }
+}
+
+@Composable
+private fun DenyListSection(
+    vm: DenyListViewModel,
+    items: List<DenyListRvItem>,
+    loading: Boolean,
+    accent: MetroAccent,
+    visible: Boolean,
+) {
+    var query by remember { mutableStateOf(vm.query) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        AppSearchAndFilters(
+            query = query,
+            appFilter = vm.appFilter,
+            sortOrder = vm.sortOrder,
+            accent = accent,
+            onQueryChange = { query = it; vm.query = it },
+            onAppFilterChange = { vm.appFilter = it },
+            onSortOrderChange = { vm.sortOrder = it },
+        )
+        if (loading) {
+            MetroCentered(stringResource(R.string.metro_loading))
+        } else if (items.isEmpty()) {
+            MetroCentered(stringResource(R.string.metro_no_blocked_apps))
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(items) { index, item ->
+                    MetroFlipItem(index = index, visible = visible) { DenyListRow(item, accent) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppSearchAndFilters(
+    query: String,
+    appFilter: DenyListViewModel.AppFilter,
+    sortOrder: DenyListViewModel.SortOrder,
+    accent: MetroAccent,
+    onQueryChange: (String) -> Unit,
+    onAppFilterChange: (DenyListViewModel.AppFilter) -> Unit,
+    onSortOrderChange: (DenyListViewModel.SortOrder) -> Unit,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        label = { Text(stringResource(CoreR.string.hide_filter_hint)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+    )
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        item {
+            MetroTextButton(
+                text = stringResource(R.string.show_user_app),
+                accent = accent,
+                enabled = appFilter == DenyListViewModel.AppFilter.USER,
+                compact = true,
+            ) { onAppFilterChange(DenyListViewModel.AppFilter.USER) }
+        }
+        item {
+            MetroTextButton(
+                text = stringResource(CoreR.string.show_system_app),
+                accent = accent,
+                enabled = appFilter == DenyListViewModel.AppFilter.SYSTEM,
+                compact = true,
+            ) { onAppFilterChange(DenyListViewModel.AppFilter.SYSTEM) }
+        }
+        item {
+            MetroTextButton(
+                text = stringResource(R.string.sort_by_install_time),
+                accent = accent,
+                enabled = sortOrder == DenyListViewModel.SortOrder.INSTALL_TIME,
+                compact = true,
+            ) { onSortOrderChange(DenyListViewModel.SortOrder.INSTALL_TIME) }
+        }
+        item {
+            MetroTextButton(
+                text = stringResource(R.string.sort_by_alphabetical),
+                accent = accent,
+                enabled = sortOrder == DenyListViewModel.SortOrder.ALPHABETICAL,
+                compact = true,
+            ) { onSortOrderChange(DenyListViewModel.SortOrder.ALPHABETICAL) }
+        }
+    }
+}
+
+@Composable
+private fun DenyListRow(item: DenyListRvItem, accent: MetroAccent) {
+    val tick = item.observeAsTick()
+    key(tick) {
+        Column(
+            modifier = Modifier.fillMaxWidth().clickable { item.isExpanded = !item.isExpanded }.padding(SectionPadding),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(item.info.label, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.info.packageName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Switch(checked = item.state == true, onCheckedChange = { item.state = it }, colors = metroSwitchColors(accent))
+            }
+            if (item.isExpanded) {
+                item.processes.forEach { process ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(process.displayName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Switch(checked = process.isEnabled, onCheckedChange = { process.isEnabled = it }, colors = metroSwitchColors(accent))
+                    }
                 }
             }
         }
@@ -519,11 +694,11 @@ fun ModulesSection(vm: ModuleViewModel) {
     }
     val installModule = items.filterIsInstance<InstallModule>().firstOrNull()
     val modules = items.filterIsInstance<LocalModuleRvItem>()
-    val updates = modules.filter { it.showUpdate || it.showNotice }
+    val updates = modules.filter { it.item.updateInfo != null && it.item.outdated }
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_installed),
-            stringResource(R.string.metro_updates),
+            stringResource(R.string.metro_updatable),
         ),
     ) { page, visible ->
         val pageModules = if (page == 0) modules else updates

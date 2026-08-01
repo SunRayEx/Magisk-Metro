@@ -102,8 +102,8 @@ object MetroTileGrid : BaseSettingsItem.Selector() {
 
 // --- App
 
-object AppSettings : BaseSettingsItem.Section() {
-    override val title = CoreR.string.home_app_title.asText()
+object Misc : BaseSettingsItem.Section() {
+    override val title = R.string.metro_misc.asText()
 }
 
 object Hide : BaseSettingsItem.Input() {
@@ -241,7 +241,7 @@ object RandNameToggle : BaseSettingsItem.Toggle() {
 // --- Magisk
 
 object Magisk : BaseSettingsItem.Section() {
-    override val title = CoreR.string.magisk.asText()
+    override val title = R.string.metro_hide.asText()
 }
 
 object Zygisk : BaseSettingsItem.Toggle() {
@@ -261,8 +261,8 @@ object Zygisk : BaseSettingsItem.Toggle() {
 
 object DenyList : BaseSettingsItem.Toggle() {
     override val icon = CoreR.drawable.ic_magisk_outline
-    override val title = R.string.metro_whitelist_enable.asText()
-    override val description get() = R.string.metro_whitelist_enable_summary.asText()
+    override val title = CoreR.string.settings_denylist_title.asText()
+    override val description get() = CoreR.string.settings_denylist_summary.asText()
 
     override var value = Config.denyList
         set(value) {
@@ -277,6 +277,11 @@ object DenyList : BaseSettingsItem.Toggle() {
                 }
             }
         }
+}
+
+object DenyListConfig : BaseSettingsItem.Blank() {
+    override val title = CoreR.string.settings_denylist_config_title.asText()
+    override val description = CoreR.string.settings_denylist_config_summary.asText()
 }
 
 // --- Superuser

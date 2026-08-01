@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
@@ -58,6 +59,8 @@ fun MetroPivotScreen(
     moduleVM: ModuleViewModel,
     settingsVM: SettingsViewModel,
     homeVM: HomeViewModel,
+    denyListVM: DenyListViewModel,
+    showDenyListInitially: Boolean,
     initialSection: PivotSection,
 ) {
     val palette = LocalMetroPalette.current
@@ -134,7 +137,7 @@ fun MetroPivotScreen(
                 item(key = section.name) {
                     Text(
                         text = when (section) {
-                            PivotSection.MAGISK -> stringResource(R.string.metro_magisk_manager)
+                            PivotSection.MAGISK -> stringResource(R.string.metro_install)
                             PivotSection.APPS -> stringResource(R.string.metro_apps)
                             PivotSection.LOGS -> stringResource(R.string.metro_logs)
                             PivotSection.MODULES -> stringResource(R.string.metro_modules)
@@ -157,7 +160,7 @@ fun MetroPivotScreen(
         ) { page ->
             when (sections[page]) {
                 PivotSection.MAGISK -> MagiskSection(homeVM)
-                PivotSection.APPS -> AppsSection(superuserVM)
+                PivotSection.APPS -> AppsSection(superuserVM, denyListVM, showDenyListInitially)
                 PivotSection.LOGS -> LogsSection(logVM)
                 PivotSection.MODULES -> ModulesSection(moduleVM)
                 PivotSection.SETTINGS -> SettingsSection(settingsVM)

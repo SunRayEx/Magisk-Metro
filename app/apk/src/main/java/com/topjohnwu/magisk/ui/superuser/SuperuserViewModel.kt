@@ -88,6 +88,10 @@ class SuperuserViewModel(
                     sharedUid,
                     runCatching { app.loadIcon(pm) }.getOrDefault(pm.defaultActivityIcon),
                     app.getLabel(pm),
+                    app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0,
+                    runCatching {
+                        pm.getPackageInfo(app.packageName, MATCH_UNINSTALLED_PACKAGES).firstInstallTime
+                    }.getOrDefault(0L),
                 )
             }.toMutableList()
 

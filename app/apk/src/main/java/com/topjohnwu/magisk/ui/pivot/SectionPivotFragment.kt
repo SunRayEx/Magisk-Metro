@@ -12,6 +12,7 @@ import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentSectionPivotBinding
 import com.topjohnwu.magisk.ui.anim.MetroPageExit
+import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
@@ -34,6 +35,7 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
     private val moduleVM by viewModel<ModuleViewModel>()
     private val settingsVM by viewModel<SettingsViewModel>()
     private val homeVM by viewModel<HomeViewModel>()
+    private val denyListVM by viewModel<DenyListViewModel>()
 
     private val args by navArgs<SectionPivotFragmentArgs>()
 
@@ -45,6 +47,7 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
         moduleVM.viewEvents.observe(this, this::onEventDispatched)
         settingsVM.viewEvents.observe(this, this::onEventDispatched)
         homeVM.viewEvents.observe(this, this::onEventDispatched)
+        denyListVM.viewEvents.observe(this, this::onEventDispatched)
     }
 
     override fun onCreateView(
@@ -61,6 +64,8 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
                     moduleVM = moduleVM,
                     settingsVM = settingsVM,
                     homeVM = homeVM,
+                    denyListVM = denyListVM,
+                    showDenyListInitially = args.initialSection == "DENYLIST",
                     initialSection = PivotSection.fromName(args.initialSection),
                 )
             }
@@ -74,6 +79,7 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
         (logVM as? AsyncLoadViewModel)?.startLoading()
         (moduleVM as? AsyncLoadViewModel)?.startLoading()
         homeVM.startLoading()
+        denyListVM.startLoading()
         settingsVM.items.forEach { it.refresh() }
     }
 

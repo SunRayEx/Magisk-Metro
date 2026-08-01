@@ -51,15 +51,6 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         if (isRunningAsStub && ShortcutManagerCompat.isRequestPinShortcutSupported(context))
             list.add(AddShortcut)
 
-        // Manager
-        list.addAll(listOf(
-            AppSettings,
-            UpdateChannel, DoHToggle, UpdateChecker, DownloadPath, RandNameToggle
-        ))
-        if (Info.env.isActive && Const.USER_ID == 0) {
-            if (hidden) list.add(Restore) else list.add(Hide)
-        }
-
         // Magisk
         if (Info.env.isActive) {
             list.addAll(listOf(
@@ -67,7 +58,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
                 SystemlessHosts
             ))
             if (Const.Version.atLeast_24_0()) {
-                list.addAll(listOf(Zygisk, DenyList))
+                list.addAll(listOf(Zygisk, DenyList, DenyListConfig))
             }
         }
 
@@ -91,6 +82,15 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
             }
         }
 
+        // Misc stays last so app-management preferences do not split the security settings.
+        list.addAll(listOf(
+            Misc,
+            UpdateChannel, DoHToggle, UpdateChecker, DownloadPath, RandNameToggle
+        ))
+        if (Info.env.isActive && Const.USER_ID == 0) {
+            if (hidden) list.add(Restore) else list.add(Hide)
+        }
+
         return list
     }
 
@@ -107,6 +107,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
     override fun onItemAction(view: View, item: BaseSettingsItem) {
         when (item) {
             Theme -> MainDirections.actionThemeFragment().navigate()
+            DenyListConfig -> MainDirections.actionSectionPivotFragment("DENYLIST").navigate()
             DarkMode -> {
                 androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(Config.darkTheme)
                 RecreateEvent().publish()

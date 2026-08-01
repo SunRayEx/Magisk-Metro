@@ -46,6 +46,9 @@ class AppProcessInfo(
     val label = info.getLabel(pm)
     val iconImage: Drawable = runCatching { info.loadIcon(pm) }.getOrDefault(pm.defaultActivityIcon)
     val packageName: String get() = info.packageName
+    val installTime = runCatching {
+        pm.getPackageInfo(info.packageName, MATCH_UNINSTALLED_PACKAGES).firstInstallTime
+    }.getOrDefault(0L)
     val processes = fetchProcesses(pm)
 
     override fun compareTo(other: AppProcessInfo) = comparator.compare(this, other)
@@ -55,7 +58,7 @@ class AppProcessInfo(
     fun isApp() = ProcessCompat.isApplicationUid(info.uid)
 
     private fun createProcess(name: String, pkg: String = info.packageName) =
-        ProcessInfo(name, pkg, denyList.none { it.process == name && it.packageName == pkg })
+        ProcessInfo(name, pkg, denyList.any { it.process == name && it.packageName == pkg })
 
     private fun ComponentInfo.getProcName(): String = processName
         ?: applicationInfo.processName

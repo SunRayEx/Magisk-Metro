@@ -29,7 +29,7 @@ class DenyListFragment : BaseFragment<FragmentDenyMd2Binding>(), MenuProvider {
 
     override fun onStart() {
         super.onStart()
-        activity?.setTitle(R.string.metro_whitelist)
+        activity?.setTitle(CoreR.string.settings_denylist_config_title)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -78,15 +78,23 @@ class DenyListFragment : BaseFragment<FragmentDenyMd2Binding>(), MenuProvider {
     override fun onMenuItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_show_system -> {
-                val check = !item.isChecked
-                viewModel.isShowSystem = check
-                item.isChecked = check
+                viewModel.appFilter = DenyListViewModel.AppFilter.SYSTEM
+                item.isChecked = true
                 return true
             }
-            R.id.action_show_OS -> {
-                val check = !item.isChecked
-                viewModel.isShowOS = check
-                item.isChecked = check
+            R.id.action_show_user -> {
+                viewModel.appFilter = DenyListViewModel.AppFilter.USER
+                item.isChecked = true
+                return true
+            }
+            R.id.action_sort_install_time -> {
+                viewModel.sortOrder = DenyListViewModel.SortOrder.INSTALL_TIME
+                item.isChecked = true
+                return true
+            }
+            R.id.action_sort_alphabetical -> {
+                viewModel.sortOrder = DenyListViewModel.SortOrder.ALPHABETICAL
+                item.isChecked = true
                 return true
             }
         }
@@ -94,8 +102,13 @@ class DenyListFragment : BaseFragment<FragmentDenyMd2Binding>(), MenuProvider {
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        val showSystem = menu.findItem(R.id.action_show_system)
-        val showOS = menu.findItem(R.id.action_show_OS)
-        showOS.isEnabled = showSystem.isChecked
+        menu.findItem(R.id.action_show_system).isChecked =
+            viewModel.appFilter == DenyListViewModel.AppFilter.SYSTEM
+        menu.findItem(R.id.action_show_user).isChecked =
+            viewModel.appFilter == DenyListViewModel.AppFilter.USER
+        menu.findItem(R.id.action_sort_install_time).isChecked =
+            viewModel.sortOrder == DenyListViewModel.SortOrder.INSTALL_TIME
+        menu.findItem(R.id.action_sort_alphabetical).isChecked =
+            viewModel.sortOrder == DenyListViewModel.SortOrder.ALPHABETICAL
     }
 }
