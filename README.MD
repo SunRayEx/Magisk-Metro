@@ -1,7 +1,7 @@
 ![](docs/images/logo.png)
 
 ## This is a Magisk fork.
--Original project is there:
+- Original project is there:
 [Magisk]
 (https://github.com/topjohnwu/magisk)
 
