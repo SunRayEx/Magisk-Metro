@@ -1,12 +1,13 @@
 ![](docs/images/logo.png)
 
-[![Downloads](https://img.shields.io/badge/dynamic/json?color=green&label=Downloads&query=totalString&url=https%3A%2F%2Fraw.githubusercontent.com%2Ftopjohnwu%2Fmagisk-files%2Fcount%2Fcount.json&cacheSeconds=1800)](https://raw.githubusercontent.com/topjohnwu/magisk-files/count/count.json)
-
-#### This is not an officially supported Google product
+## This is a Magisk fork.
+-Original project is there:
+[Magisk]
+(https://github.com/topjohnwu/magisk)
 
 ## Introduction
 
-Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 6.0.<br>
+MagisKube is a suite of open source software for customizing Android, supporting devices higher than Android 6.0.<br>
 Some highlight features:
 
 - **MagiskSU**: Provide root access for applications
@@ -16,7 +17,7 @@ Some highlight features:
 
 ## Downloads
 
-[Github](https://github.com/topjohnwu/Magisk/releases) is the only source where you can get official Magisk information and downloads.
+[Github](https://github.com/SunRayEx/MagisKube/releases) is this fork download source.
 
 ## Useful Links
 
