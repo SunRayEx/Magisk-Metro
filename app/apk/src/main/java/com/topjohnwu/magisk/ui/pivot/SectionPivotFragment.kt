@@ -17,6 +17,7 @@ import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
+import com.topjohnwu.magisk.core.utils.MediaStoreUtils.displayName
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
@@ -54,6 +55,14 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
         settingsVM.viewEvents.observe(this, this::onEventDispatched)
         homeVM.viewEvents.observe(this, this::onEventDispatched)
         denyListVM.viewEvents.observe(this, this::onEventDispatched)
+        // The pivot also replaced ModuleFragment, so the picked-zip handoff for local module
+        // installation lives here now: file picker -> UriCallback -> install dialog.
+        moduleVM.data.observe(this) { uri ->
+            uri ?: return@observe
+            val displayName = runCatching { uri.displayName }.getOrNull() ?: return@observe
+            moduleVM.requestInstallLocalModule(uri, displayName)
+            moduleVM.data.value = null
+        }
     }
 
     override fun onCreateView(

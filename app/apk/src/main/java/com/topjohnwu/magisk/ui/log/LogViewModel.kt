@@ -13,6 +13,7 @@ import com.topjohnwu.magisk.core.ktx.toTime
 import com.topjohnwu.magisk.core.repository.LogRepository
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils.outputStream
+import com.topjohnwu.magisk.databinding.DiffList
 import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.databinding.diffList
 import com.topjohnwu.magisk.databinding.set
@@ -37,7 +38,9 @@ class LogViewModel(
 
     // --- su log
 
-    val items = diffList<SuLogRvItem>()
+    // Explicit type: kapt stubs degrade the inferred generic to java.lang.Object,
+    // which breaks data binding accessors on this property.
+    val items: DiffList<SuLogRvItem> = diffList()
     val extraBindings = bindExtra {
         it.put(BR.viewModel, this)
     }
