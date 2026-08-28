@@ -2,6 +2,7 @@ package com.topjohnwu.magisk.ui.theme
 
 import android.os.Build
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.Config
 
 enum class Theme(
@@ -48,14 +49,27 @@ enum class Theme(
     Dynamic(
         themeName = "Wallpaper colors",
         themeRes = R.style.ThemeFoundationMD2_Default
+    ),
+    Custom(
+        themeName = "Custom theme",
+        themeRes = R.style.ThemeFoundationMD2_Default
     );
 
     val isDynamic get() = this == Dynamic
+    val isCustom get() = this == Custom
     val isSelected get() = selected == this
+    val displayName: String
+        get() = when (this) {
+            Dynamic -> AppContext.getString(R.string.metro_dynamic_color_title)
+            Custom -> AppContext.getString(R.string.metro_custom_theme)
+            else -> themeName
+        }
 
     companion object {
         val selected
-            get() = if (Config.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            get() = if (Config.metroCustomTheme) {
+                Custom
+            } else if (Config.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 Dynamic
             } else {
                 values().getOrNull(Config.themeOrdinal)?.takeUnless { it == Dynamic } ?: Default
@@ -65,8 +79,10 @@ enum class Theme(
             get() = buildList {
                 add(Default)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Dynamic)
-                addAll(values().filterNot { it == Default || it == Dynamic })
+                add(Custom)
+                addAll(values().filterNot { it == Default || it == Dynamic || it == Custom })
             }
+
     }
 
 }

@@ -16,6 +16,7 @@ import com.topjohnwu.magisk.core.su.SuCallbackHandler
 import com.topjohnwu.magisk.core.su.SuCallbackHandler.REQUEST
 import com.topjohnwu.magisk.databinding.ActivityRequestBinding
 import com.topjohnwu.magisk.ui.theme.Theme
+import com.topjohnwu.magisk.ui.anim.MetroViewAnimations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +36,7 @@ open class SuRequestActivity : UIActivity<ActivityRequestBinding>(), UntrackedAc
         }
         setTheme(Theme.selected.themeRes)
         super.onCreate(savedInstanceState)
+        binding.suPopup.post { MetroViewAnimations.flipIn(binding.suPopup) }
 
         if (intent.action == Intent.ACTION_VIEW) {
             val action = intent.getStringExtra("action")

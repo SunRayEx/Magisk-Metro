@@ -147,6 +147,7 @@
                 <Button
                     android:id="@+id/module_update"
                     style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:tag="metroAccentFg"
                     goneUnless="@{item.showUpdate}"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -166,6 +167,7 @@
                 <Button
                     android:id="@+id/module_remove"
                     style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:tag="metroAccentFg"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:clickable="true"
@@ -212,6 +214,7 @@
                 <Button
                     android:id="@+id/module_config"
                     style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:tag="metroAccentFg"
                     goneUnless="@{item.showAction}"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -232,6 +235,7 @@
                 <Button
                     android:id="@+id/module_webui"
                     style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:tag="metroAccentFg"
                     goneUnless="@{item.showWebUi}"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

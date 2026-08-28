@@ -36,6 +36,22 @@ include $(BUILD_STATIC_LIBRARY)
 endif
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := metrolink-zig
+LOCAL_LIB = ../out/$(TARGET_ARCH_ABI)/libmetrolink-zig.a
+ifneq (,$(wildcard $(LOCAL_PATH)/$(LOCAL_LIB)))
+LOCAL_SRC_FILES := $(LOCAL_LIB)
+include $(PREBUILT_STATIC_LIBRARY)
+endif
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := metroconf-rs
+LOCAL_LIB = ../out/$(TARGET_ARCH_ABI)/libmetroconf.a
+ifneq (,$(wildcard $(LOCAL_PATH)/$(LOCAL_LIB)))
+LOCAL_SRC_FILES := $(LOCAL_LIB)
+include $(PREBUILT_STATIC_LIBRARY)
+endif
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := policy-rs
 LOCAL_LIB = ../out/$(TARGET_ARCH_ABI)/libmagiskpolicy-rs.a
 ifneq (,$(wildcard $(LOCAL_PATH)/$(LOCAL_LIB)))

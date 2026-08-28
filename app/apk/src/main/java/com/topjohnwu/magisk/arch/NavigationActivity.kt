@@ -17,7 +17,7 @@ abstract class NavigationActivity<Binding : ViewDataBinding> : UIActivity<Bindin
         supportFragmentManager.findFragmentById(navHostId) as NavHostFragment
     }
 
-    protected val currentFragment get() =
+    val currentFragment get() =
         navHostFragment.childFragmentManager.fragments.getOrNull(0) as? BaseFragment<*>
 
     val navigation: NavController get() = navHostFragment.navController

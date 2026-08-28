@@ -31,14 +31,66 @@ internal object MetroTileLayout {
         else -> 3 to 6
     }
 
-    fun load(columns: Int, rows: Int): List<MetroTilePlacement> {
+    fun load(
+        columns: Int,
+        rows: Int,
+        extraIds: List<String> = emptyList(),
+        extraWidths: Map<String, Int> = emptyMap(),
+    ): List<MetroTilePlacement> {
+        val hidden = Config.metroHiddenTiles.split(',').filter(String::isNotBlank).toSet()
+        val visibleBuiltIns = ids.filterNot { it in hidden }
+        val allIds = visibleBuiltIns + extraIds.filterNot { it in ids }
         val parsed = Config.metroTileLayout.split(';').mapNotNull { token ->
             val values = token.split(':')
-            if (values.size != 5 || values[0] !in ids) null else runCatching {
+            if (values.size != 5 || values[0] !in allIds) null else runCatching {
                 MetroTilePlacement(values[0], values[1].toInt(), values[2].toInt(), values[3].toInt(), values[4].toInt())
             }.getOrNull()
         }
-        return pack(if (parsed.size == ids.size) parsed else defaults(columns), columns, rows)
+        // Preserve user-dragged positions: keep any parsed placement, only fall back to
+        // defaults/extra placement for ids that are newly visible or newly added. The
+        // previous `parsed.size == allIds.size` branch discarded every custom position
+        // as soon as a single built-in was hidden/shown or a custom tile was added.
+        if (parsed.size == allIds.size) {
+            return pack(parsed, columns, rows)
+        }
+        val parsedById = parsed.associateBy { it.id }
+        val defaultsById = defaults(columns).filterNot { it.id in hidden }.associateBy { it.id }
+        val source = allIds.mapNotNull { id ->
+            parsedById[id] ?: defaultsById[id] ?: run {
+                val index = extraIds.indexOf(id)
+                if (index < 0) null else MetroTilePlacement(
+                    id,
+                    index % columns,
+                    5 + index / columns,
+                    extraWidths[id].orDefault(1).coerceIn(1, columns),
+                    1,
+                )
+            }
+        }
+        return pack(source, columns, rows)
+    }
+
+    private fun Int?.orDefault(default: Int) = this ?: default
+
+    fun isVisible(id: String) = id !in Config.metroHiddenTiles.split(',').filter(String::isNotBlank)
+
+    fun hide(id: String) {
+        Config.metroHiddenTiles = (Config.metroHiddenTiles.split(',') + id)
+            .filter(String::isNotBlank)
+            .distinct()
+            .joinToString(",")
+    }
+
+    /** Restores exactly one built-in tile; restoring one must not undo the user's other choices. */
+    fun show(id: String) {
+        Config.metroHiddenTiles = Config.metroHiddenTiles.split(',')
+            .filter(String::isNotBlank)
+            .filterNot { it == id }
+            .joinToString(",")
+    }
+
+    fun showAll() {
+        Config.metroHiddenTiles = ""
     }
 
     fun save(placements: List<MetroTilePlacement>, columns: Int, rows: Int): List<MetroTilePlacement> {
@@ -112,7 +164,8 @@ internal object MetroTileLayout {
         fun occupy(item: MetroTilePlacement) {
             for (y in item.row until item.row + item.height) for (x in item.column until item.column + item.width) occupied[y][x] = true
         }
-        return source.sortedBy { ids.indexOf(it.id) }.map { raw ->
+        val order = ids + source.map { it.id }.filterNot { it in ids }.distinct()
+        return source.sortedBy { order.indexOf(it.id) }.map { raw ->
             val normalized = raw.copy(width = raw.width.coerceIn(1, columns), height = raw.height.coerceIn(1, rows))
             val slot = sequence {
                 yield(normalized.column.coerceIn(0, columns - normalized.width) to normalized.row.coerceIn(0, rows - normalized.height))

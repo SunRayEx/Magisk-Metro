@@ -27,6 +27,7 @@ import com.topjohnwu.magisk.core.isRunningAsStub
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.tasks.AppMigration
 import com.topjohnwu.magisk.databinding.ActivityMainMd2Binding
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.ui.theme.Theme
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.magisk.view.Shortcuts
@@ -101,7 +102,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
 
     @SuppressLint("InlinedApi")
     override fun showInvalidStateMessage(): Unit = runOnUiThread {
-        MagiskDialog(this).apply {
+        MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
             setTitle(CoreR.string.unsupport_nonroot_stub_title)
             setMessage(CoreR.string.unsupport_nonroot_stub_msg)
             setButton(MagiskDialog.ButtonType.POSITIVE) {
@@ -126,7 +127,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
 
     private fun showUnsupportedMessage() {
         if (Info.env.isUnsupported) {
-            MagiskDialog(this).apply {
+            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
                 setTitle(CoreR.string.unsupport_magisk_title)
                 setMessage(CoreR.string.unsupport_magisk_msg, Const.Version.MIN_VERSION)
                 setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
@@ -138,7 +139,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
                 ?.split(':')
                 ?.filterNot { File("$it/magisk").exists() }
                 ?.any { File("$it/su").exists() } == true) {
-            MagiskDialog(this).apply {
+            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
                 setTitle(CoreR.string.unsupport_general_title)
                 setMessage(CoreR.string.unsupport_other_su_msg)
                 setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
@@ -147,7 +148,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
         }
 
         if (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
-            MagiskDialog(this).apply {
+            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
                 setTitle(CoreR.string.unsupport_general_title)
                 setMessage(CoreR.string.unsupport_system_app_msg)
                 setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
@@ -156,7 +157,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
         }
 
         if (applicationInfo.flags and ApplicationInfo.FLAG_EXTERNAL_STORAGE != 0) {
-            MagiskDialog(this).apply {
+            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
                 setTitle(CoreR.string.unsupport_general_title)
                 setMessage(CoreR.string.unsupport_external_storage_msg)
                 setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
@@ -170,7 +171,7 @@ class MainActivity : NavigationActivity<ActivityMainMd2Binding>(), SplashScreenH
             ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
             // Ask and show dialog
             Config.askedHome = true
-            MagiskDialog(this).apply {
+            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
                 setTitle(CoreR.string.add_shortcut_title)
                 setMessage(CoreR.string.add_shortcut_msg)
                 setButton(MagiskDialog.ButtonType.NEGATIVE) {

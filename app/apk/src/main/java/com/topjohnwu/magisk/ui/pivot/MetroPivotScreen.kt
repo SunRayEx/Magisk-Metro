@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.ui.anim.MetroEaseOut
+import com.topjohnwu.magisk.ui.anim.MetroPageExit
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
@@ -70,7 +72,20 @@ fun MetroPivotScreen(
     val headerState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val activeSection = sections[pagerState.currentPage]
+    // Publish the visible section so the hosting fragment (and every dialog raised through it)
+    // tints itself with the accent of the tile that opened this pivot.
+    MetroPivotState.section.value = activeSection
     val entrance = remember { Animatable(0f) }
+    val exit = remember { Animatable(0f) }
+    // Leaving the pivot plays the entrance backwards: the page slides back out to the right
+    // and fades while the Start board behind flies its tiles back in.
+    LaunchedEffect(MetroPageExit.active) {
+        if (MetroPageExit.active) {
+            exit.animateTo(1f, tween(durationMillis = 300, easing = MetroEaseOut))
+        } else {
+            exit.snapTo(0f)
+        }
+    }
     val accent = when (activeSection) {
         PivotSection.MAGISK -> palette.magisk
         PivotSection.APPS -> palette.apps
@@ -101,8 +116,8 @@ fun MetroPivotScreen(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .graphicsLayer {
-                alpha = entrance.value
-                translationX = (1f - entrance.value) * 120f * density
+                alpha = entrance.value * (1f - exit.value)
+                translationX = (1f - entrance.value) * 120f * density + exit.value * 120f * density
             },
     ) {
         LazyRow(
@@ -133,7 +148,8 @@ fun MetroPivotScreen(
                 .padding(start = 24.dp, end = 28.dp, top = 12.dp, bottom = 8.dp),
         ) {
             sections.forEachIndexed { index, section ->
-                val selected = pagerState.currentPage == index
+                val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
+                val selected = distance < 0.5f
                 item(key = section.name) {
                     Text(
                         text = when (section) {
@@ -143,8 +159,8 @@ fun MetroPivotScreen(
                             PivotSection.MODULES -> stringResource(R.string.metro_modules)
                             PivotSection.SETTINGS -> stringResource(R.string.metro_settings)
                         },
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (selected) 1f else 0.42f),
-                        fontSize = if (selected) 30.sp else 24.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 1f - distance.coerceIn(0f, 1f) * 0.58f),
+                        fontSize = (30f - distance.coerceIn(0f, 1f) * 6f).sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Light,
                         maxLines = 1,
                         modifier = Modifier

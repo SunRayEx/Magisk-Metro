@@ -18,8 +18,6 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.transition.AutoTransition
 import androidx.transition.TransitionManager
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.color.DynamicColors
-import com.google.android.material.color.DynamicColorsOptions
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Config
@@ -62,12 +60,12 @@ abstract class UIActivity<Binding : ViewDataBinding>
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        DynamicColors.applyToActivityIfAvailable(
-            this,
-            DynamicColorsOptions.Builder()
-                .setPrecondition { _, _ -> Theme.selected == Theme.Dynamic }
-                .build()
-        )
+        // Apply the Material 3 dynamic-color overlay directly: the library's own gate skips
+        // many Android 12 devices via an OEM whitelist, which left dialogs, selectors and
+        // other attr-driven views on the packaged default blue instead of wallpaper colors.
+        if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            setTheme(com.google.android.material.R.style.ThemeOverlay_Material3_DynamicColors_DayNight)
+        }
         layoutInflater.factory2 = LayoutInflaterFactory(delegate)
             .addOnViewCreatedListener(WindowInsetsHelper.LISTENER)
 

@@ -145,6 +145,11 @@
     <style name="WidgetFoundation.Button.Dialog.Metro" parent="WidgetFoundation.Button.Text.Metro">
         <item name="android:textAllCaps">false</item>
         <item name="android:textColor">?colorPrimary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">72dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
         <item name="iconTint">?colorPrimary</item>
     </style>
 

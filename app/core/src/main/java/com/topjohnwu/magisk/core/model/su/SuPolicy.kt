@@ -14,6 +14,7 @@ class SuPolicy(
         const val DENY = 1
         const val ALLOW = 2
         const val RESTRICT = 3
+        const val ZERO = 4
     }
 
     fun toMap(): MutableMap<String, Any> {

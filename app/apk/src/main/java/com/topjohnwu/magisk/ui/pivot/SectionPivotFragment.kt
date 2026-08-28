@@ -19,6 +19,7 @@ import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 
 /**
  * Compose host for the Metro pivot. Instead of four separate destinations (each with its own top
@@ -30,6 +31,11 @@ class SectionPivotFragment : BaseFragment<FragmentSectionPivotBinding>() {
 
     override val layoutRes = R.layout.fragment_section_pivot
     override val viewModel by viewModel<SuperuserViewModel>()
+
+    // The pivot hosts all five sections; follow whichever one is currently visible so dialogs
+    // raised from it use that section's tile accent instead of a fixed fallback color.
+    override val metroAccentRole: MetroAccentRole
+        get() = MetroPivotState.accentRole
 
     private val logVM by viewModel<LogViewModel>()
     private val moduleVM by viewModel<ModuleViewModel>()

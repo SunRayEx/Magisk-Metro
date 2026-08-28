@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk.ui.theme
 
+import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.dialog.DarkThemeDialog
@@ -16,11 +17,13 @@ class ThemeViewModel : BaseViewModel(), TappableHeadlineItem.Listener {
 
     fun saveTheme(theme: Theme) {
         if (!theme.isSelected) {
+            Config.metroCustomTheme = theme.isCustom
             Config.dynamicColor = theme.isDynamic
-            if (!theme.isDynamic) {
+            if (!theme.isDynamic && !theme.isCustom) {
                 Config.themeOrdinal = theme.ordinal
             }
             RecreateEvent().publish()
         }
     }
+
 }

@@ -45,6 +45,7 @@
 
         <TextView
             android:id="@+id/dialog_base_title"
+            android:tag="metroAccentFg"
             gone="@{data.title.length == 0}"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -52,6 +53,8 @@
             android:gravity="start"
             android:text="@{data.title}"
             android:textAppearance="@style/AppearanceFoundation.Title"
+            android:textSize="20sp"
+            android:textStyle="bold"
             app:layout_constraintEnd_toEndOf="@+id/dialog_base_end"
             app:layout_constraintStart_toStartOf="@+id/dialog_base_start"
             app:layout_constraintTop_toBottomOf="@+id/dialog_base_icon"
@@ -80,6 +83,7 @@
                     android:layout_height="match_parent"
                     android:text="@{data.message}"
                     android:textAppearance="@style/AppearanceFoundation.Body"
+                    android:textSize="16sp"
                     tools:lines="3"
                     tools:text="@tools:sample/lorem/random" />
 
@@ -119,6 +123,7 @@
             <Button
                 android:id="@+id/dialog_base_button_2"
                 style="@style/WidgetFoundation.Button.Dialog.Metro"
+                android:tag="metroAccentButton"
                 gone="@{data.buttonNeutral.gone}"
                 isEnabled="@{data.buttonNeutral.isEnabled}"
                 android:layout_width="wrap_content"
@@ -143,6 +148,7 @@
             <Button
                 android:id="@+id/dialog_base_button_3"
                 style="@style/WidgetFoundation.Button.Dialog.Metro"
+                android:tag="metroAccentButton"
                 gone="@{data.buttonNegative.gone}"
                 isEnabled="@{data.buttonNegative.isEnabled}"
                 android:layout_width="wrap_content"
@@ -159,6 +165,7 @@
             <Button
                 android:id="@+id/dialog_base_button_1"
                 style="@style/WidgetFoundation.Button.Dialog.Metro"
+                android:tag="metroAccentButton"
                 gone="@{data.buttonPositive.gone}"
                 isEnabled="@{data.buttonPositive.isEnabled}"
                 android:layout_width="wrap_content"

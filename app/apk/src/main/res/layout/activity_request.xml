@@ -34,7 +34,9 @@
                 android:layout_marginBottom="@dimen/l_50"
                 android:gravity="start"
                 android:text="@string/su_request_title"
-                android:textAppearance="@style/AppearanceFoundation.Title" />
+                android:textAppearance="@style/AppearanceFoundation.Title"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -76,6 +78,7 @@
                         android:minWidth="200dp"
                         android:text="@{viewModel.title}"
                         android:textAppearance="@style/AppearanceFoundation.Body"
+                        android:textSize="16sp"
                         android:textStyle="bold"
                         tools:text="Magisk" />
 
@@ -89,6 +92,7 @@
                         android:minWidth="200dp"
                         android:text="@{viewModel.packageName}"
                         android:textAppearance="@style/AppearanceFoundation.Caption.Variant"
+                        android:textSize="13sp"
                         tools:text="com.topjohnwu.magisk" />
                 </LinearLayout>
             </LinearLayout>
@@ -131,11 +135,39 @@
                     style="@style/WidgetFoundation.Button.Text.Metro"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
                     android:layout_weight="1"
                     android:onClick="@{() -> viewModel.denyPressed()}"
                     android:text="@{viewModel.denyText}"
                     android:textColor="?colorOnSurfaceVariant"
+                    android:textSize="14sp"
                     tools:text="@string/deny" />
+
+                <Button
+                    android:id="@+id/once_btn"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_weight="1"
+                    android:onClick="@{() -> viewModel.grantOncePressed()}"
+                    android:enabled="@{viewModel.grantEnabled}"
+                    android:text="@string/metro_su_once"
+                    android:textColor="?colorPrimary"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/zero_btn"
+                    style="@style/WidgetFoundation.Button.Text.Metro"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_weight="1"
+                    android:onClick="@{() -> viewModel.zeroPressed()}"
+                    android:enabled="@{viewModel.grantEnabled}"
+                    android:text="@string/metro_su_zero"
+                    android:textColor="?colorPrimary"
+                    android:textSize="14sp" />
 
                 <Button
                     android:id="@+id/grant_btn"
@@ -143,10 +175,13 @@
                     onTouch="@{viewModel.grantTouchListener}"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
                     android:layout_weight="1"
                     android:onClick="@{() -> viewModel.grantPressed()}"
                     android:enabled="@{viewModel.grantEnabled}"
-                    android:text="@string/grant" />
+                    android:text="@string/grant"
+                    android:textColor="?colorPrimary"
+                    android:textSize="14sp" />
 
                 <requestFocus />
             </LinearLayout>

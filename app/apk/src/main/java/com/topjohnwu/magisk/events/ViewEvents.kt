@@ -115,7 +115,9 @@ class DialogEvent(
     private val builder: DialogBuilder
 ) : ViewEvent(), ActivityExecutor {
     override fun invoke(activity: UIActivity<*>) {
-        MagiskDialog(activity).apply(builder::build).show()
+        val role = (activity as? com.topjohnwu.magisk.arch.NavigationActivity<*>)?.currentFragment?.metroAccentRole
+            ?: com.topjohnwu.magisk.ui.theme.MetroAccentRole.SETTINGS
+        MagiskDialog(activity, metroAccentRole = role).apply(builder::build).show()
     }
 }
 

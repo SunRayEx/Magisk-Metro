@@ -24,6 +24,7 @@ impl Default for SuRequest {
             login: false,
             keep_env: false,
             drop_cap: false,
+            zero: false,
             shell: DEFAULT_SHELL.to_string(),
             command: "".to_string(),
             context: "".to_string(),
@@ -149,6 +150,14 @@ impl MagiskD {
             access.refresh();
 
             if access.settings.policy == SuPolicy::Restrict {
+                req.drop_cap = true;
+            }
+
+            // Level 0: a deceptive grant. The shell shows uid 0 but runs inside a sandboxed
+            // user-space hiding environment where every high-risk syscall is intercepted
+            // and ghost-audited.
+            if access.settings.policy == SuPolicy::Zero {
+                req.zero = true;
                 req.drop_cap = true;
             }
 

@@ -3,6 +3,20 @@
     <string name="metro_dark_mode_title">暗色模式</string>
     <string name="metro_dynamic_color_title">壁纸取色</string>
     <string name="metro_dynamic_color_summary">在 Android 12 及以上版本使用当前壁纸的 Material You 配色</string>
+    <string name="metro_custom_theme">客制化主题</string>
+    <string name="metro_theme_summary">选择预设、壁纸取色或客制化 Metro 主题</string>
+    <string name="metro_custom_colors">客制化磁贴颜色</string>
+    <string name="metro_custom_colors_summary">为每个开始屏幕磁贴及其二级页面设置 HEX 颜色</string>
+    <string name="metro_invalid_hex">请输入有效的 HEX 颜色，例如 #4EAFF5</string>
+    <string name="metro_tile_content">更改磁贴内容</string>
+    <string name="metro_tile_content_summary">从开始屏幕添加或删除 Root 应用与磁贴组</string>
+    <string name="metro_tile_add">增加磁贴</string>
+    <string name="metro_tile_delete">删除磁贴</string>
+    <string name="metro_tile_restore">恢复内置磁贴</string>
+    <string name="metro_tile_name">磁贴名称</string>
+    <string name="metro_tile_ticker">动态滚动列表内容</string>
+    <string name="metro_invalid_tile">请选择 1、2 或 4 个应用，并输入有效颜色</string>
+    <string name="metro_no_root_apps">没有可用的 Root 应用</string>
     <string name="metro_magisk_version">MagisKube %1$s</string>
     <string name="metro_enabled">已启用</string>
     <string name="metro_disabled">未启用</string>
@@ -59,7 +73,7 @@
     <string name="metro_log_su">超级用户</string>
     <string name="metro_log_magisk">Magisk</string>
     <string name="metro_granted">授权</string>
-    <string name="metro_blocked">拒绝</string>
+    <string name="metro_blocked">排除</string>
     <string name="metro_installed">已安装</string>
     <string name="metro_updates">更新</string>
     <string name="metro_updatable">可更新</string>
@@ -92,4 +106,42 @@
         <item>浅色</item>
         <item>暗色</item>
     </string-array>
+
+    <!-- 磁贴组 -->
+    <string name="metro_tile_group">磁贴组</string>
+    <string name="metro_tile_group_members">该组包含 %1$d 个应用</string>
+    <string name="metro_tile_group_open">打开</string>
+    <string name="metro_tile_group_empty">该磁贴组暂无应用</string>
+    <string name="metro_tile_add_builtin">恢复默认磁贴</string>
+
+    <!-- 常驻模块 -->
+    <string name="metro_persistent">常驻模块</string>
+    <string name="metro_persistent_title">配置常驻模块</string>
+    <string name="metro_persistent_summary">将模块固定到可重现的声明式清单中，每次开机自动恢复</string>
+    <string name="metro_persistent_empty">尚未固定任何模块。在下方打开开关即可快照进常驻存储。</string>
+    <string name="metro_persistent_pinned">已固定的模块</string>
+    <string name="metro_persistent_available">已安装的模块</string>
+    <string name="metro_persistent_apply">立即应用</string>
+    <string name="metro_persistent_last_apply">上次应用：%1$s</string>
+    <string name="metro_persistent_never">从未</string>
+    <string name="metro_persistent_applied">常驻清单已应用</string>
+    <string name="metro_persistent_failed">应用常驻清单失败</string>
+    <string name="metro_persistent_unavailable">常驻模块功能需要 Root 和原生工具支持</string>
+    <string name="metro_persistent_version">版本 %1$s (%2$d)</string>
+    <string name="metro_persistent_missing">设备上缺失——将在开机时恢复</string>
+    <string name="metro_persistent_info_title">什么是常驻模块？</string>
+    <string name="metro_persistent_goto_settings">常驻模块尚未配置：请先到 设置 · 杂项 打开“配置常驻模块”。</string>
+    <string name="metro_persistent_info">常驻模块以 JSON 清单声明，并快照到不可变存储中。每次开机时，原生链接管理器会恢复任何被删除或停用的已固定模块，使你的模块集合可重现、不怕误删。</string>
+
+    <!-- 动态授权 -->
+    <string name="metro_su_once">仅本次</string>
+    <string name="metro_su_zero">授予 0 级授权</string>
+    <string name="metro_su_zero_hint">0 级授权提供 root 的 shell 身份但不具备任何真实权限——所有高危系统调用都会被拦截并审计。</string>
+    <string name="metro_su_zero_title">0 级授权</string>
+    <string name="metro_su_once_hint">单次授权不会出现在“授权”列表中，本次请求结束后立即失效。</string>
+    <string name="metro_su_policy_zero">0 级（欺骗性）</string>
+    <string name="metro_su_ghost_log">幽灵审计</string>
+    <string name="metro_denylist_sandbox">排除列表沙箱（Seccomp）</string>
+    <string name="metro_denylist_sandbox_summary">让排除列表中的应用运行在强化的用户空间隐藏环境中，并用 Seccomp BPF 拦截高危系统调用</string>
+    <string name="metro_denylist_ghost_summary">以目标应用不可见的方式记录每一次被拦截的系统调用</string>
 </resources>

@@ -18,6 +18,7 @@ import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.databinding.FragmentActionMd2Binding
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
 import com.topjohnwu.magisk.core.R as CoreR
 
 class ActionFragment : BaseFragment<FragmentActionMd2Binding>(), MenuProvider {
@@ -69,6 +70,7 @@ class ActionFragment : BaseFragment<FragmentActionMd2Binding>(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.menu_flash, menu)
+        MetroColors.applyMenuAccent(menu, requireContext(), metroAccentRole)
     }
 
     override fun onMenuItemSelected(item: MenuItem): Boolean {

@@ -76,9 +76,9 @@ abi_alias = {
     "x64": "x86_64",
 }
 default_abis = support_abis.keys() - {"riscv64"}
-support_targets = {"magisk", "magiskinit", "magiskboot", "magiskpolicy", "resetprop"}
+support_targets = {"magisk", "magiskinit", "magiskboot", "magiskpolicy", "resetprop", "metrolink"}
 default_targets = support_targets - {"resetprop"}
-rust_targets = default_targets.copy()
+rust_targets = default_targets - {"metrolink"}
 clean_targets = {"native", "cpp", "rust", "app"}
 ondk_version = "r29.5"
 
@@ -296,6 +296,81 @@ def build_rust_src(targets: set[str]):
             mv(source, target)
 
 
+def build_metro_link():
+    """Builds metrolink, the Zig + C persistent-module link manager, against the Rust
+    declarative-manifest parser (crate metroconf). Zig emits the orchestrator object file,
+    ndk-build links it with shim.c and the Rust static library into a static executable."""
+    if shutil.which("zig") is None:
+        vprint("* zig not found, skipping metrolink")
+        return
+
+    zig_targets = {
+        "armeabi-v7a": "arm-linux-androideabi",
+        "x86": "x86-linux-android",
+        "arm64-v8a": "aarch64-linux-android",
+        "x86_64": "x86_64-linux-android",
+    }
+
+    # 1. Rust static libraries for the android targets, built with the workspace profile
+    #    (panic=immediate-abort) so no unwinder is required at link time.
+    os.chdir(Path("native", "src"))
+    for arch, triple in build_abis.items():
+        cmds = ["build", "-p", "metroconf", "--target", triple]
+        if args.release:
+            cmds.append("-r")
+        proc = run_cargo(cmds)
+        if proc.returncode != 0:
+            error("Build metroconf failed!")
+    os.chdir(Path("..", ".."))
+
+    # 2. Zig orchestrator object + archives, colocated where Android-rs.mk looks for them.
+    for arch, triple in build_abis.items():
+        profile = "release" if args.release else "debug"
+        rust_lib = Path("native", "out", "rust", triple, profile, "libmetroconf.a")
+        if not rust_lib.exists():
+            error(f"Missing {rust_lib}")
+        out_dir = Path("native", "out", arch)
+        out_dir.mkdir(mode=0o755, exist_ok=True)
+        shutil.copy(rust_lib, out_dir / "libmetroconf.a")
+
+        zig_target = zig_targets.get(arch)
+        if zig_target is None:
+            vprint(f"* no zig target for {arch}, skipping metrolink object")
+            continue
+        obj = (out_dir / "metrolink.o").resolve()
+        cmds = [
+            "build-obj", "main.zig",
+            "-O", "ReleaseSmall" if args.release else "Debug",
+            "-target", zig_target,
+            # Static PIE executables need position independent objects; stack probing and
+            # safety checks pull bionic-incompatible TLS symbols, so they stay off.
+            "-fPIC",
+            "-fno-stack-check",
+            # The orchestrator uses the C allocator and is linked against bionic.
+            "-lc",
+            f"-femit-bin={obj}",
+        ]
+        proc = subprocess.run(["zig", *cmds], cwd=Path("native", "src", "metro", "link"))
+        if proc.returncode != 0:
+            error("Compile metrolink.zig failed!")
+        proc = subprocess.run(["zig", "ar", "rcs", (out_dir / "libmetrolink-zig.a").resolve(), obj])
+        if proc.returncode != 0:
+            error("Archive metrolink object failed!")
+
+    # 3. ndk-build links the final static executable.
+    os.chdir("native")
+    cmds = ["B_METRO=1", f"APP_ABI={' '.join(build_abis.keys())}", f"-j{cpu_count}"]
+    if args.verbose > 1:
+        cmds.append("V=1")
+    if not args.release:
+        cmds.append("MAGISK_DEBUG=1")
+    proc = execv([ndk_build, "NDK_PROJECT_PATH=.", "NDK_APPLICATION_MK=src/Application.mk", *cmds])
+    if proc.returncode != 0:
+        error("Build metrolink failed!")
+    os.chdir("..")
+    collect_ndk_build()
+
+
 def write_if_diff(file_name: Path, text: str):
     do_write = True
     if file_name.exists():
@@ -355,6 +430,8 @@ def build_native():
     dump_flag_header()
     build_rust_src(targets)
     build_cpp_src(targets)
+    if "metrolink" in targets:
+        build_metro_link()
 
 
 ############

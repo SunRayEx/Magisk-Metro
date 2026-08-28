@@ -62,7 +62,9 @@ fun setMetroRole(view: View, role: String?) {
     val parsed = runCatching {
         MetroAccentRole.valueOf(role!!.uppercase(java.util.Locale.ROOT))
     }.getOrNull() ?: return
-    MetroColors.applyMetroAccent(view, parsed)
+    // RecyclerView item bindings can apply their regular tint/text attributes after this adapter.
+    // Repaint on the next UI turn so role colors remain the final values for dynamic themes.
+    view.post { MetroColors.applyMetroAccent(view, parsed) }
 }
 
 @BindingAdapter("invisible")

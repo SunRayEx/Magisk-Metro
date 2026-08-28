@@ -23,6 +23,7 @@
 #include <base.hpp>
 #include <flags.h>
 #include <core.hpp>
+#include "ghost.hpp" 
 
 using namespace std;
 
@@ -307,6 +308,32 @@ static bool proc_is_restricted(pid_t pid) {
     return equal;
 }
 
+/* Full capability wipe for level 0 shells: unlike drop_caps() no marker capability is kept,
+ * so the process is uid 0 in name only. */
+static void drop_caps_zero() {
+    static auto last_valid_cap = []() {
+        uint32_t cap = CAP_WAKE_ALARM;
+        while (prctl(PR_CAPBSET_READ, cap) >= 0) {
+            cap++;
+        }
+        return cap - 1;
+    }();
+    for (uint32_t cap = 0; cap <= last_valid_cap; cap++) {
+        prctl(PR_CAPBSET_DROP, cap);
+    }
+    __user_cap_header_struct header = {.version = _LINUX_CAPABILITY_VERSION_3};
+    __user_cap_data_struct data[_LINUX_CAPABILITY_U32S_3] = {};
+    if (capget(&header, &data[0]) == 0) {
+        for (size_t i = 0; i < _LINUX_CAPABILITY_U32S_3; i++) {
+            data[i].inheritable = 0;
+            data[i].permitted = 0;
+            data[i].effective = 0;
+        }
+        capset(&header, &data[0]);
+    }
+    prctl(PR_SET_SECUREBITS, SECBIT_NOROOT | SECBIT_NO_CAP_UNRAISE);
+}
+
 static void set_identity(int uid, const rust::Vec<gid_t> &groups) {
     gid_t gid;
     if (!groups.empty()) {
@@ -405,6 +432,19 @@ void exec_root_shell(int client, int pid, SuRequest &req, MntNsMode mode) {
             xunshare(CLONE_NEWNS);
             xmount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr);
             break;
+    }
+
+    // Level 0 sandbox: hide Magisk's user-space footprint, wipe every capability, then wall
+    // off the kernel with seccomp while silently auditing intercepted attempts. The audit log
+    // is opened while still root and inherited by the shell.
+    if (req.zero) {
+        LOGD("su: level 0 sandbox\n");
+        xunshare(CLONE_NEWNS);
+        xmount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr);
+        revert_unmount();
+        ghost_open_audit(GHOST_AUDIT_LOG);
+        drop_caps_zero();
+        ghost_install();
     }
 
     const char *argv[4] = { nullptr };

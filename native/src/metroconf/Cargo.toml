@@ -1,0 +1,8 @@
+[package]
+name = "metroconf"
+version = "0.1.0"
+edition = "2021"
+description = "Declarative persistent-module manifest parser for MagisKube Metro"
+
+[lib]
+crate-type = ["staticlib", "rlib"]

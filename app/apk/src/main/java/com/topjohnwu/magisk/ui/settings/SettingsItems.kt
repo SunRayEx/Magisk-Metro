@@ -24,6 +24,7 @@ import com.topjohnwu.magisk.databinding.set
 import com.topjohnwu.magisk.utils.TextHolder
 import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.magisk.view.MagiskDialog
+import com.topjohnwu.magisk.ui.home.MetroUiState
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.magisk.core.R as CoreR
 
@@ -61,6 +62,17 @@ object LanguageSystem : BaseSettingsItem.Blank() {
 object Theme : BaseSettingsItem.Blank() {
     override val icon = R.drawable.ic_paint
     override val title = CoreR.string.section_theme.asText()
+    override val description = R.string.metro_theme_summary.asText()
+}
+
+/** Kept in Settings for existing Metro users; it is no longer shown on the theme chooser page. */
+object MetroThemeColors : BaseSettingsItem.Blank() {
+    override val title = R.string.metro_custom_colors.asText()
+    override val description = R.string.metro_custom_colors_summary.asText()
+
+    override fun refresh() {
+        isEnabled = Config.metroCustomTheme
+    }
 }
 
 object DarkMode : BaseSettingsItem.Selector() {
@@ -86,17 +98,60 @@ object DarkMode : BaseSettingsItem.Selector() {
 object MetroTileCustomization : BaseSettingsItem.Toggle() {
     override val title = R.string.metro_tile_customize.asText()
     override val description = R.string.metro_tile_customize_summary.asText()
-    override var value by Config::metroTileCustomization
+    override var value
+        get() = Config.metroTileCustomization
+        set(value) {
+            Config.metroTileCustomization = value
+            MetroTileGrid.refresh()
+            MetroTileContent.refresh()
+            MetroUiState.invalidate()
+        }
 }
 
 object MetroTileGrid : BaseSettingsItem.Selector() {
     override val title = R.string.metro_tile_grid.asText()
     override val description = R.string.metro_tile_grid_summary.asText()
     override val entryRes = R.array.metro_tile_grid_entries
-    override var value by Config::metroTileGrid
+    override var value
+        get() = Config.metroTileGrid
+        set(value) {
+            Config.metroTileGrid = value
+            MetroUiState.invalidate()
+        }
 
     override fun refresh() {
         isEnabled = Config.metroTileCustomization
+    }
+}
+
+object MetroTileContent : BaseSettingsItem.Blank() {
+    override val title = R.string.metro_tile_content.asText()
+    override val description = R.string.metro_tile_content_summary.asText()
+
+    override fun refresh() {
+        isEnabled = Config.metroTileCustomization
+    }
+}
+
+/** Master switch for the persistent-modules feature; owns the boot-time enforcement script. */
+object PersistentModules : BaseSettingsItem.Toggle() {
+    override val title = R.string.metro_persistent_title.asText()
+    override val description = R.string.metro_persistent_summary.asText()
+    override var value
+        get() = Config.metroPersistentModules
+        set(value) {
+            Config.metroPersistentModules = value
+            PersistentManage.refresh()
+        }
+}
+
+/** Entry to the persistent-modules management page; only meaningful while configured. */
+object PersistentManage : BaseSettingsItem.Blank() {
+    override val title = R.string.metro_persistent.asText()
+    override val description = R.string.metro_persistent_summary.asText()
+
+    override fun refresh() {
+        isEnabled = Config.metroPersistentModules
     }
 }
 
@@ -282,6 +337,21 @@ object DenyList : BaseSettingsItem.Toggle() {
 object DenyListConfig : BaseSettingsItem.Blank() {
     override val title = CoreR.string.settings_denylist_config_title.asText()
     override val description = CoreR.string.settings_denylist_config_summary.asText()
+}
+
+/** Ghost sandbox: seccomp BPF hardening with invisible auditing for deny-listed apps. */
+object GhostSandbox : BaseSettingsItem.Toggle() {
+    override val title = R.string.metro_denylist_sandbox.asText()
+    override val description = R.string.metro_denylist_sandbox_summary.asText()
+    override var value
+        get() = Config.metroGhostSandbox
+        set(value) {
+            Config.metroGhostSandbox = value
+        }
+
+    override fun refresh() {
+        isEnabled = Info.env.isActive
+    }
 }
 
 // --- Superuser

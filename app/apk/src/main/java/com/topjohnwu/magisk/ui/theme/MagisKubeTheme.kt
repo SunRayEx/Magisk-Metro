@@ -1,7 +1,6 @@
 package com.topjohnwu.magisk.ui.theme
 
 import android.os.Build
-import android.util.TypedValue
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -13,16 +12,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.google.android.material.R as MaterialR
 import com.topjohnwu.magisk.R
 
-private fun android.content.Context.themeColor(attr: Int): Color {
-    val value = TypedValue()
-    theme.resolveAttribute(attr, value, true)
-    return Color(value.data)
-}
-
-private fun android.content.Context.themeColor(name: String): Color =
-    themeColor(resources.getIdentifier(name, "attr", packageName))
+private fun android.content.Context.themeColor(attr: Int, fallback: Int = 0): Color =
+    obtainStyledAttributes(intArrayOf(attr)).use { Color(it.getColor(0, fallback)) }
 
 enum class MetroAccentRole {
     MAGISK, MODULES, APPS, SETTINGS, CONTRIBUTORS, LOGS, SPONSOR
@@ -80,12 +74,12 @@ fun MagisKubeTheme(content: @Composable () -> Unit) {
     val colors = if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        val primary = context.themeColor("colorPrimary")
-        val secondary = context.themeColor("colorSecondary")
-        val background = context.themeColor("colorSurface")
+        val primary = Color(MetroColors.themePrimary(context))
+        val secondary = context.themeColor(MaterialR.attr.colorSecondary)
+        val background = context.themeColor(MaterialR.attr.colorSurface)
         val surfaceVariant = context.themeColor(R.attr.colorSurfaceVariant)
-        val onPrimary = context.themeColor("colorOnPrimary")
-        val onSurface = context.themeColor("colorOnSurface")
+        val onPrimary = Color(MetroColors.themeOnPrimary(context))
+        val onSurface = context.themeColor(MaterialR.attr.colorOnSurface)
         val onSurfaceVariant = context.themeColor(R.attr.colorOnSurfaceVariant)
         if (dark) {
             darkColorScheme(
@@ -114,7 +108,17 @@ fun MagisKubeTheme(content: @Composable () -> Unit) {
         }
     }
     val usesDynamicColor = Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val palette = if (!usesDynamicColor && Theme.selected == Theme.Default) {
+    val palette = if (Theme.selected == Theme.Custom) {
+        MetroPalette(
+            magisk = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.MAGISK)), Color(MetroColors.onAccent(context, MetroAccentRole.MAGISK))),
+            modules = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.MODULES)), Color(MetroColors.onAccent(context, MetroAccentRole.MODULES))),
+            apps = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.APPS)), Color(MetroColors.onAccent(context, MetroAccentRole.APPS))),
+            settings = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.SETTINGS)), Color(MetroColors.onAccent(context, MetroAccentRole.SETTINGS))),
+            contributors = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.CONTRIBUTORS)), Color(MetroColors.onAccent(context, MetroAccentRole.CONTRIBUTORS))),
+            logs = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.LOGS)), Color(MetroColors.onAccent(context, MetroAccentRole.LOGS))),
+            sponsor = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.SPONSOR)), Color(MetroColors.onAccent(context, MetroAccentRole.SPONSOR))),
+        )
+    } else if (!usesDynamicColor && Theme.selected == Theme.Default) {
         DefaultMetroPalette
     } else {
         uniformMetroPalette(MetroAccent(colors.primary, colors.onPrimary))

@@ -3,6 +3,20 @@
     <string name="metro_dark_mode_title">Dark mode</string>
     <string name="metro_dynamic_color_title">Wallpaper colors</string>
     <string name="metro_dynamic_color_summary">Use Material You colors from the current wallpaper on Android 12 and newer</string>
+    <string name="metro_custom_theme">Custom theme</string>
+    <string name="metro_theme_summary">Choose a packaged, wallpaper, or custom Metro theme</string>
+    <string name="metro_custom_colors">Custom tile colors</string>
+    <string name="metro_custom_colors_summary">Set a HEX color for each Start tile and its secondary pages</string>
+    <string name="metro_invalid_hex">Enter a valid HEX color, for example #4EAFF5</string>
+    <string name="metro_tile_content">Change tile content</string>
+    <string name="metro_tile_content_summary">Add or remove rooted apps and tile groups from Start</string>
+    <string name="metro_tile_add">Add tile</string>
+    <string name="metro_tile_delete">Delete tile</string>
+    <string name="metro_tile_restore">Restore built-in tiles</string>
+    <string name="metro_tile_name">Tile name</string>
+    <string name="metro_tile_ticker">Rolling list content</string>
+    <string name="metro_invalid_tile">Select 1, 2, or 4 apps and enter a valid color</string>
+    <string name="metro_no_root_apps">No rooted apps are available</string>
     <string name="metro_magisk_version">MagisKube %1$s</string>
     <string name="metro_enabled">Enabled</string>
     <string name="metro_disabled">Disabled</string>
@@ -59,7 +73,7 @@
     <string name="metro_log_su">superuser</string>
     <string name="metro_log_magisk">magisk</string>
     <string name="metro_granted">authorized</string>
-    <string name="metro_blocked">denied</string>
+    <string name="metro_blocked">excluded</string>
     <string name="metro_installed">installed</string>
     <string name="metro_updates">updates</string>
     <string name="metro_updatable">updatable</string>
@@ -92,4 +106,42 @@
         <item>Light</item>
         <item>Dark</item>
     </string-array>
+
+    <!-- Tile groups -->
+    <string name="metro_tile_group">Tile group</string>
+    <string name="metro_tile_group_members">%1$d apps in this group</string>
+    <string name="metro_tile_group_open">open</string>
+    <string name="metro_tile_group_empty">This group has no apps</string>
+    <string name="metro_tile_add_builtin">Restore built-in tiles</string>
+
+    <!-- Persistent modules -->
+    <string name="metro_persistent">persistent</string>
+    <string name="metro_persistent_title">Configure persistent modules</string>
+    <string name="metro_persistent_summary">Pin modules to a reproducible declarative manifest that is restored on every boot</string>
+    <string name="metro_persistent_empty">No modules are pinned yet. Toggle a module below to snapshot it into the persistent store.</string>
+    <string name="metro_persistent_pinned">Pinned modules</string>
+    <string name="metro_persistent_available">Installed modules</string>
+    <string name="metro_persistent_apply">Apply now</string>
+    <string name="metro_persistent_last_apply">Last applied: %1$s</string>
+    <string name="metro_persistent_never">never</string>
+    <string name="metro_persistent_applied">Persistent manifest applied</string>
+    <string name="metro_persistent_failed">Failed to apply persistent manifest</string>
+    <string name="metro_persistent_unavailable">Persistent module support requires root and the native tool</string>
+    <string name="metro_persistent_version">version %1$s (%2$d)</string>
+    <string name="metro_persistent_missing">missing on device — will be restored</string>
+    <string name="metro_persistent_info_title">What are persistent modules?</string>
+    <string name="metro_persistent_goto_settings">Persistent modules are not configured. Enable "Configure persistent modules" under Settings · Misc first.</string>
+    <string name="metro_persistent_info">Persistent modules are declared in a JSON manifest and snapshotted into an immutable store. On every boot the native link manager restores any pinned module that was deleted or disabled, so your module set stays reproducible and safe from accidental removal.</string>
+
+    <!-- Dynamic authorization -->
+    <string name="metro_su_once">Just once</string>
+    <string name="metro_su_zero">Grant level 0</string>
+    <string name="metro_su_zero_hint">Level 0 grants the shell identity of root without any real privileges — every privileged syscall is blocked and audited.</string>
+    <string name="metro_su_zero_title">Level 0 authorization</string>
+    <string name="metro_su_once_hint">A one-time grant never appears in the authorized list and expires immediately after this request.</string>
+    <string name="metro_su_policy_zero">level 0 (deceptive)</string>
+    <string name="metro_su_ghost_log">Ghost audit</string>
+    <string name="metro_denylist_sandbox">DenyList sandbox (Seccomp)</string>
+    <string name="metro_denylist_sandbox_summary">Run deny-listed apps inside a hardened user-space hiding environment and intercept high-risk syscalls with Seccomp BPF</string>
+    <string name="metro_denylist_ghost_summary">Record every intercepted syscall invisibly to the target app</string>
 </resources>

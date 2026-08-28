@@ -12,6 +12,7 @@ import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils.displayName
 import com.topjohnwu.magisk.databinding.FragmentModuleMd2Binding
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
 import rikka.recyclerview.addEdgeSpacing
 import rikka.recyclerview.addInvalidateItemDecorationsObserver
 import rikka.recyclerview.addItemSpacing
@@ -50,6 +51,7 @@ class ModuleFragment : BaseFragment<FragmentModuleMd2Binding>(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         menuInflater.inflate(R.menu.menu_module_metro, menu)
+        MetroColors.applyMenuAccent(menu, requireContext(), metroAccentRole)
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {

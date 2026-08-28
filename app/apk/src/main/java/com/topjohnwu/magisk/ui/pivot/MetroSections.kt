@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -95,12 +97,14 @@ private fun MetroTextButton(
     text: String,
     accent: MetroAccent,
     enabled: Boolean = true,
+    selected: Boolean = true,
     compact: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val solid = enabled && selected
     Box(
         modifier = Modifier
-            .background(if (enabled) accent.color else accent.color.copy(alpha = 0.28f))
+            .background(if (solid) accent.color else accent.color.copy(alpha = 0.28f))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(
                 horizontal = if (compact) 8.dp else 14.dp,
@@ -109,7 +113,11 @@ private fun MetroTextButton(
     ) {
         Text(
             text = text,
-            color = accent.onColor.copy(alpha = if (enabled) 1f else 0.5f),
+            color = accent.onColor.copy(alpha = when {
+                !enabled -> 0.5f
+                selected -> 1f
+                else -> 0.75f
+            }),
             fontSize = if (compact) 11.sp else 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -169,12 +177,13 @@ private fun MetroSubPivot(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             titles.forEachIndexed { index, title ->
-                val selected = pagerState.currentPage == index
+                val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
+                val selected = distance < 0.5f
                 item(key = title) {
                     Text(
                         text = title,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (selected) 1f else 0.38f),
-                        fontSize = if (selected) 56.sp else 48.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 1f - distance.coerceIn(0f, 1f) * 0.62f),
+                        fontSize = (56f - distance.coerceIn(0f, 1f) * 8f).sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Light,
                         maxLines = 1,
                         modifier = Modifier.clickable {
@@ -444,7 +453,7 @@ private fun AppSearchAndFilters(
             MetroTextButton(
                 text = stringResource(R.string.show_user_app),
                 accent = accent,
-                enabled = appFilter == DenyListViewModel.AppFilter.USER,
+                selected = appFilter == DenyListViewModel.AppFilter.USER,
                 compact = true,
             ) { onAppFilterChange(DenyListViewModel.AppFilter.USER) }
         }
@@ -452,7 +461,7 @@ private fun AppSearchAndFilters(
             MetroTextButton(
                 text = stringResource(CoreR.string.show_system_app),
                 accent = accent,
-                enabled = appFilter == DenyListViewModel.AppFilter.SYSTEM,
+                selected = appFilter == DenyListViewModel.AppFilter.SYSTEM,
                 compact = true,
             ) { onAppFilterChange(DenyListViewModel.AppFilter.SYSTEM) }
         }
@@ -460,7 +469,7 @@ private fun AppSearchAndFilters(
             MetroTextButton(
                 text = stringResource(R.string.sort_by_install_time),
                 accent = accent,
-                enabled = sortOrder == DenyListViewModel.SortOrder.INSTALL_TIME,
+                selected = sortOrder == DenyListViewModel.SortOrder.INSTALL_TIME,
                 compact = true,
             ) { onSortOrderChange(DenyListViewModel.SortOrder.INSTALL_TIME) }
         }
@@ -468,7 +477,7 @@ private fun AppSearchAndFilters(
             MetroTextButton(
                 text = stringResource(R.string.sort_by_alphabetical),
                 accent = accent,
-                enabled = sortOrder == DenyListViewModel.SortOrder.ALPHABETICAL,
+                selected = sortOrder == DenyListViewModel.SortOrder.ALPHABETICAL,
                 compact = true,
             ) { onSortOrderChange(DenyListViewModel.SortOrder.ALPHABETICAL) }
         }
@@ -524,7 +533,9 @@ private fun PolicyRow(item: PolicyRvItem, accent: MetroAccent) {
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = item.packageName,
+                        text = if (item.item.policy == SuPolicy.ZERO)
+                            "${item.packageName} · " + stringResource(R.string.metro_su_policy_zero)
+                        else item.packageName,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         fontSize = 12.sp,
                         maxLines = 1,
@@ -609,6 +620,8 @@ fun LogsSection(vm: LogViewModel) {
     val loading = remember(tick) { vm.loading }
     val suItems by vm.items.asComposeState()
     val magiskItems by vm.logs.asComposeState()
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
 
     MetroSubPivot(
         titles = listOf(
@@ -621,6 +634,32 @@ fun LogsSection(vm: LogViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
+                if (page == 0) {
+                    MetroTextButton(stringResource(R.string.metro_su_ghost_log), accent) {
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val auditText = com.topjohnwu.superuser.Shell.cmd(
+                                "cat /data/adb/metromod/ghost_audit.log 2>/dev/null",
+                            ).exec().out.joinToString("\n").trim()
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                (view.context as? android.app.Activity)?.let { host ->
+                                    com.topjohnwu.magisk.view.MagiskDialog(
+                                        host,
+                                        metroAccentRole = com.topjohnwu.magisk.ui.theme.MetroAccentRole.LOGS,
+                                    ).apply {
+                                        setTitle(R.string.metro_su_ghost_log)
+                                        setMessage(auditText.ifEmpty {
+                                            view.context.getString(R.string.metro_no_logs)
+                                        })
+                                        setButton(com.topjohnwu.magisk.view.MagiskDialog.ButtonType.POSITIVE) {
+                                            text = android.R.string.ok
+                                        }
+                                    }.show()
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (page == 1) {
                     MetroTextButton(stringResource(R.string.metro_save), accent) { vm.saveMagiskLog() }
                     Spacer(Modifier.width(8.dp))
@@ -697,13 +736,18 @@ fun ModulesSection(vm: ModuleViewModel) {
     val updates = modules.filter { it.item.updateInfo != null && it.item.outdated }
     MetroSubPivot(
         titles = listOf(
+            stringResource(R.string.metro_persistent),
             stringResource(R.string.metro_installed),
             stringResource(R.string.metro_updatable),
         ),
     ) { page, visible ->
-        val pageModules = if (page == 0) modules else updates
+        val pageModules = if (page == 1) modules else updates
+        if (page == 0) {
+            PersistentTab(accent, visible)
+            return@MetroSubPivot
+        }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            if (page == 0 && installModule != null) {
+            if (page == 1 && installModule != null) {
                 item {
                     MetroFlipItem(index = 0, visible = visible) {
                         Row(modifier = Modifier.padding(SectionPadding)) {
@@ -716,12 +760,68 @@ fun ModulesSection(vm: ModuleViewModel) {
             }
             if (pageModules.isEmpty()) {
                 item {
-                    MetroCentered(stringResource(if (page == 0) R.string.metro_no_modules else R.string.metro_no_updates))
+                    MetroCentered(stringResource(if (page == 1) R.string.metro_no_modules else R.string.metro_no_updates))
                 }
             } else {
                 itemsIndexed(pageModules) { index, item ->
-                    MetroFlipItem(index = index + if (page == 0 && installModule != null) 1 else 0, visible = visible) {
+                    MetroFlipItem(index = index + if (page == 1 && installModule != null) 1 else 0, visible = visible) {
                         ModuleRow(vm, item, accent)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Read-only mirror of the persistent declaration with a jump into the management page. */
+@Composable
+private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
+    val context = LocalContext.current
+    val revision = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(0 to null, revision.intValue) {
+        value = revision.intValue to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.topjohnwu.magisk.core.PersistentModules.fetch()
+        }
+    }
+    val declaration = snapshot.second
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item {
+            MetroFlipItem(index = 0, visible = visible) {
+                Column(modifier = Modifier.padding(SectionPadding)) {
+                    Text(
+                        text = stringResource(R.string.metro_persistent),
+                        color = accent.color,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = declaration?.modules?.joinToString(", ") { it.name }
+                            ?.takeIf(String::isNotEmpty)
+                            ?: stringResource(R.string.metro_persistent_empty),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+            }
+        }
+        item {
+            MetroFlipItem(index = 1, visible = visible) {
+                Row(modifier = Modifier.padding(SectionPadding)) {
+                    MetroTextButton(stringResource(R.string.metro_persistent_apply), accent) {
+                        val host = context as? android.app.Activity ?: return@MetroTextButton
+                        val nav = androidx.navigation.Navigation.findNavController(host, R.id.main_nav_host)
+                        if (!com.topjohnwu.magisk.core.Config.metroPersistentModules) {
+                            // Not configured yet: send the user to Settings · Misc to flip the switch.
+                            android.widget.Toast.makeText(
+                                context,
+                                R.string.metro_persistent_goto_settings,
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                            nav.navigate(com.topjohnwu.magisk.MainDirections.actionSectionPivotFragment("SETTINGS"))
+                        } else {
+                            nav.navigate(R.id.action_persistentFragment)
+                        }
                     }
                 }
             }
@@ -740,7 +840,7 @@ private fun ModuleRow(vm: ModuleViewModel, item: LocalModuleRvItem, accent: Metr
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .alpha(if (inactive) 0.38f else 1f)
+                .alpha(if (removed) 0.48f else if (!enabled) 0.68f else 1f)
                 .padding(SectionPadding),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

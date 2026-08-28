@@ -433,6 +433,10 @@ bool is_deny_target(int uid, string_view process) {
 void update_deny_flags(int uid, rust::Str process, uint32_t &flags) {
     if (is_deny_target(uid, { process.begin(), process.end() })) {
         flags |= +ZygiskStateFlags::ProcessOnDenyList;
+        // Ghost sandbox: harden deny-listed processes with the seccomp interceptor.
+        if (access("/data/adb/metromod/ghost_sandbox", F_OK) == 0) {
+            flags |= +ZygiskStateFlags::GhostSandbox;
+        }
     }
     if (denylist_enforced) {
         flags |= +ZygiskStateFlags::DenyListEnforced;

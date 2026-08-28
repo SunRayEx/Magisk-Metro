@@ -179,6 +179,33 @@
 
     </fragment>
 
+    <fragment
+        android:id="@+id/tileGroupFragment"
+        android:name="com.topjohnwu.magisk.ui.home.TileGroupFragment"
+        android:label="TileGroupFragment"
+        tools:layout="@layout/fragment_tile_group">
+
+        <argument
+            android:name="tileId"
+            app:argType="string" />
+
+    </fragment>
+
+    <fragment
+        android:id="@+id/persistentFragment"
+        android:name="com.topjohnwu.magisk.ui.module.PersistentFragment"
+        android:label="PersistentFragment"
+        tools:layout="@layout/fragment_persistent" />
+
+    <action
+        android:id="@+id/action_tileGroupFragment"
+        app:destination="@id/tileGroupFragment"
+        app:popUpTo="@id/homeFragment" />
+
+    <action
+        android:id="@+id/action_persistentFragment"
+        app:destination="@id/persistentFragment" />
+
     <action
         android:id="@+id/action_homeFragment"
         app:destination="@id/homeFragment"

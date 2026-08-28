@@ -27,6 +27,7 @@
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             gone="@{viewModel.loading}"
             android:id="@+id/log_filter_toggle"
+            android:tag="metroAccentButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"

@@ -2,7 +2,7 @@ cargo-features = ["panic-immediate-abort"]
 
 [workspace]
 exclude = ["external"]
-members = ["base", "base/derive", "boot", "core", "init", "sepolicy"]
+members = ["base", "base/derive", "boot", "core", "init", "sepolicy", "metroconf"]
 resolver = "2"
 
 [workspace.package]

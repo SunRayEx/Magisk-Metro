@@ -13,6 +13,7 @@ import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentLogMd2Binding
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
 import com.topjohnwu.magisk.utils.AccessibilityUtils
 import com.topjohnwu.magisk.utils.MotionRevealHelper
 import rikka.recyclerview.addEdgeSpacing
@@ -64,6 +65,7 @@ class LogFragment : BaseFragment<FragmentLogMd2Binding>(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.menu_log_md2, menu)
+        MetroColors.applyMenuAccent(menu, requireContext(), metroAccentRole)
         actionSave = menu.findItem(R.id.action_save)?.also {
             it.isVisible = !isMagiskLogVisible
         }

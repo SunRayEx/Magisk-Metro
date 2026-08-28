@@ -19,11 +19,14 @@ import com.topjohnwu.magisk.core.R as CoreR
 import androidx.navigation.findNavController
 import com.topjohnwu.magisk.arch.NavigationActivity
 import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 
 class HomeFragment : BaseFragment<FragmentHomeMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_home_md2
     override val viewModel by viewModel<HomeViewModel>()
+    // Dialogs raised over the Start screen belong to the Magisk tile accent.
+    override val metroAccentRole = MetroAccentRole.MAGISK
 
     override fun onStart() {
         super.onStart()

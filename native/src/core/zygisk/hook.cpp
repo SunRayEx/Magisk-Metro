@@ -12,6 +12,7 @@
 #include "zygisk.hpp"
 #include "module.hpp"
 #include "jni_hooks.hpp"
+#include "../su/ghost.hpp" 
 
 using namespace std;
 
@@ -159,6 +160,11 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
     if (g_ctx && (flags & CLONE_NEWNS) != 0 && res == 0) {
         if (g_ctx->flags & DO_REVERT_UNMOUNT) {
             revert_unmount();
+            // DenyList sandbox hardening: wall deny-listed app processes off from privileged
+            // kernel surfaces. Interceptions are invisible to the target (ghost audit).
+            if (g_ctx->info_flags & +ZygiskStateFlags::GhostSandbox) {
+                ghost_install();
+            }
         }
         // Restore errno back to 0
         errno = 0;

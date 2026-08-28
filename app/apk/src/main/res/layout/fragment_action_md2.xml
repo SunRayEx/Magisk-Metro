@@ -76,6 +76,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/close_btn"
+            android:tag="metroAccentButton"
             style="@style/WidgetFoundation.Button.Metro"
             android:visibility="gone"
             android:layout_width="wrap_content"

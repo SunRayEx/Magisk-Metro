@@ -1,13 +1,9 @@
 package com.topjohnwu.magisk.ui.theme
 
 import android.os.Bundle
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import com.google.android.material.color.DynamicColors
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseFragment
@@ -30,28 +26,19 @@ class ThemeFragment : BaseFragment<FragmentThemeMd2Binding>() {
         super.onCreateView(inflater, container, savedInstanceState)
 
         for (theme in Theme.displayValues) {
-            val themed = if (theme == Theme.Dynamic) {
-                DynamicColors.wrapContextIfAvailable(requireContext())
-            } else {
-                ContextThemeWrapper(activity, theme.themeRes)
-            }
-            ItemThemeBindingImpl.inflate(
-                LayoutInflater.from(themed), binding.themeContainer, true
-            ).also {
+            // Sample every preview through the same MetroColors pipeline the running UI uses,
+            // and inflate the row from its own themed context so its tint matches the theme
+            // it represents even while a wallpaper theme is selected.
+            val themed = MetroColors.previewThemeContext(requireContext(), theme)
+            val palette = MetroColors.previewPalette(requireContext(), theme)
+            ItemThemeBindingImpl.inflate(LayoutInflater.from(themed), binding.themeContainer, true).also {
                 it.setVariable(BR.viewModel, viewModel)
                 it.setVariable(BR.theme, theme)
                 it.lifecycleOwner = viewLifecycleOwner
-                if (theme == Theme.Default) {
-                    it.themePreview.background = GradientDrawable(
-                        GradientDrawable.Orientation.TL_BR,
-                        intArrayOf(
-                            Color.rgb(31, 177, 83), Color.rgb(36, 121, 201),
-                            Color.rgb(194, 28, 32), Color.rgb(255, 197, 18),
-                            Color.rgb(167, 72, 170), Color.rgb(247, 247, 247),
-                            Color.rgb(245, 111, 181),
-                        ),
-                    )
-                }
+                it.themePreview.background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                    palette.toIntArray(),
+                )
             }
         }
 

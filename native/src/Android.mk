@@ -22,6 +22,7 @@ LOCAL_SRC_FILES := \
     core/core-rs.cpp \
     core/resetprop/sys.cpp \
     core/su/su.cpp \
+    core/su/ghost.cpp \
     core/zygisk/entry.cpp \
     core/zygisk/module.cpp \
     core/zygisk/hook.cpp \
@@ -94,6 +95,27 @@ LOCAL_LDFLAGS += -lm -Wl,--defsym=vfprintf=musl_vfprintf
 endif
 
 include $(BUILD_EXECUTABLE)
+
+endif
+
+ifdef B_METRO
+
+# Built by build.py: zig build-obj (orchestrator) + cargo -p metroconf (parser).
+METROLINK_ZIG = ../out/$(TARGET_ARCH_ABI)/libmetrolink-zig.a
+METROCONF_RS = ../out/$(TARGET_ARCH_ABI)/libmetroconf.a
+
+ifneq (,$(wildcard $(LOCAL_PATH)/$(METROLINK_ZIG))$(wildcard $(LOCAL_PATH)/$(METROCONF_RS)))
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := metrolink
+LOCAL_STATIC_LIBRARIES := metrolink-zig metroconf-rs
+LOCAL_SRC_FILES := metro/link/shim.c
+# Fully static: no bionic runtime dependencies, and no exec-label surprises for the
+# post-fs-data script or the manager app.
+LOCAL_LDFLAGS := -static
+include $(BUILD_EXECUTABLE)
+
+endif
 
 endif
 

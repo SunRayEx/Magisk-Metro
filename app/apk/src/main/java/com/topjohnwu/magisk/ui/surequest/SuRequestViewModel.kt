@@ -26,6 +26,7 @@ import com.topjohnwu.magisk.core.ktx.getLabel
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ALLOW
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.DENY
+import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ZERO
 import com.topjohnwu.magisk.core.su.SuRequestHandler
 import com.topjohnwu.magisk.databinding.set
 import com.topjohnwu.magisk.events.AuthEvent
@@ -80,6 +81,27 @@ class SuRequestViewModel(
             AuthEvent { respond(ALLOW) }.publish()
         } else {
             respond(ALLOW)
+        }
+    }
+
+    /** Grants exactly this request; the policy is never persisted, so it cannot be found in
+     * the authorized list afterwards. */
+    fun grantOncePressed() {
+        cancelTimer()
+        if (Config.suAuth) {
+            AuthEvent { respondOnce(ALLOW) }.publish()
+        } else {
+            respondOnce(ALLOW)
+        }
+    }
+
+    /** Deceptive grant: uid 0 in name only; the daemon sandboxes and ghost-audits the shell. */
+    fun zeroPressed() {
+        cancelTimer()
+        if (Config.suAuth) {
+            AuthEvent { respondZero() }.publish()
+        } else {
+            respondZero()
         }
     }
 
@@ -143,6 +165,30 @@ class SuRequestViewModel(
         viewModelScope.launch {
             handler.respond(action, Config.Value.TIMEOUT_LIST[pos])
             // Kill activity after response
+            DieEvent().publish()
+        }
+    }
+
+    private fun respondZero() {
+        if (!initialized) {
+            return
+        }
+
+        timer.cancel()
+        viewModelScope.launch {
+            handler.respond(ZERO, 0)
+            DieEvent().publish()
+        }
+    }
+
+    private fun respondOnce(action: Int) {
+        if (!initialized) {
+            return
+        }
+
+        timer.cancel()
+        viewModelScope.launch {
+            handler.respond(action, -1)
             DieEvent().publish()
         }
     }

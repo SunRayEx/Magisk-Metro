@@ -46,7 +46,9 @@ fun MetroFlipItem(
             delay(index.coerceAtMost(AnimatedItems - 1).coerceAtLeast(0) * StaggerMs)
             progress.animateTo(1f, tween(FlipDurationMs, easing = MetroEaseOut))
         } else {
-            delay(index.coerceAtMost(AnimatedItems - 1).coerceAtLeast(0) * StaggerMs)
+            // Leaving is the entrance played backwards: the far end departs first, items flip
+            // away with the same turnstile motion they arrived with.
+            delay((AnimatedItems - 1 - index.coerceAtMost(AnimatedItems - 1)).coerceAtLeast(0) * StaggerMs)
             progress.animateTo(0f, tween(FlipDurationMs, easing = MetroEaseOut))
         }
     }
@@ -54,7 +56,6 @@ fun MetroFlipItem(
         modifier = modifier.graphicsLayer {
             val p = progress.value
             rotationX = -90f * (1f - p)
-            translationX = if (MetroPageExit.active) (1f - p) * 96f * density else 0f
             alpha = p
             transformOrigin = TransformOrigin(0.5f, 0f)
             cameraDistance = 16f * density

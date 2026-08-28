@@ -29,12 +29,17 @@ import com.topjohnwu.magisk.databinding.RvItem
 import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.databinding.set
 import com.topjohnwu.magisk.databinding.setAdapter
+import com.topjohnwu.magisk.ui.anim.MetroViewAnimations
+import com.topjohnwu.magisk.ui.theme.MetroAccentRole
+import com.topjohnwu.magisk.ui.theme.MetroColors
 import com.topjohnwu.magisk.view.MagiskDialog.DialogClickListener
 
 typealias DialogButtonClickListener = (DialogInterface) -> Unit
 
 class MagiskDialog(
-    context: Activity, theme: Int = 0
+    context: Activity,
+    theme: Int = 0,
+    private val metroAccentRole: MetroAccentRole = MetroAccentRole.SETTINGS,
 ) : AppCompatDialog(context, theme) {
 
     private val binding: DialogMagiskBaseBinding =
@@ -141,6 +146,14 @@ class MagiskDialog(
             setBackgroundDrawable(materialShapeDrawable)
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Dialogs are secondary Metro surfaces too. Paint after the binding has created its
+        // buttons so runtime-created dialogs cannot fall back to an unrelated Material accent.
+        MetroColors.applyMetroAccent(binding.root, metroAccentRole)
+        binding.root.post { MetroViewAnimations.flipIn(binding.root) }
     }
 
     override fun setTitle(@StringRes titleId: Int) { data.title = context.getString(titleId) }

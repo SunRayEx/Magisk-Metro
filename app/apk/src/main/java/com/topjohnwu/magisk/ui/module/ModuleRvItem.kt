@@ -59,7 +59,7 @@ class LocalModuleRvItem(
         }
 
     @get:Bindable
-    val showUpdate get() = item.updateInfo != null
+    val showUpdate get() = item.updateInfo != null && item.outdated
 
     @get:Bindable
     val updateReady get() = item.outdated && !isRemoved && isEnabled
