@@ -308,20 +308,14 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
             }
             val title = MetroDialogViews.editText(context, context.getString(AppR.string.metro_tile_name))
             val ticker = MetroDialogViews.editText(context, context.getString(AppR.string.metro_tile_ticker))
-            // New tiles default to the accent the tile board would give them anyway (the Apps
-            // role color under the current theme: role palette, custom palette, or wallpaper).
-            val defaultColor = String.format(
-                "#%06X",
-                0xFFFFFF and MetroColors.accent(context, MetroAccentRole.APPS),
-            )
-            val color = MetroDialogViews.editText(context, defaultColor, defaultColor)
+            // Tile colors follow the theme (only the custom-theme palette recolors them), so
+            // no color input here on purpose.
             val checks = apps.map { app -> CheckBox(context).apply { text = "${app.label}\n${app.packageName}" } }
             val content = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(24, 4, 24, 4)
                 addView(title)
                 addView(ticker)
-                addView(color)
                 checks.forEach { addView(it) }
             }
             // Deleted built-in tiles are re-addable right where new tiles are added, so a
@@ -348,9 +342,9 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
                     text = android.R.string.ok
                     onClick {
                         val selected = checks.mapIndexedNotNull { index, check -> apps[index].takeIf { check.isChecked } }
-                        if (selected.size !in setOf(0, 1, 2, 4) || (selected.isNotEmpty() && runCatching { Color.parseColor(color.text.toString()) }.isFailure)) {
+                        if (selected.size > 9) {
                             doNotDismiss = true
-                            color.error = context.getString(AppR.string.metro_invalid_tile)
+                            AppContext.toast(AppR.string.metro_invalid_tile, Toast.LENGTH_SHORT)
                         } else if (selected.isEmpty()) {
                             // Nothing to add; the user only restored built-ins above.
                             MetroUiState.invalidate()
@@ -360,7 +354,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
                                 packageName = selected.first().packageName,
                                 title = title.text.toString().ifBlank { selected.first().label },
                                 ticker = ticker.text.toString(),
-                                color = color.text.toString(),
+                                color = "",
                                 groupMembers = selected.map { it.packageName },
                             )
                             MetroUiState.invalidate()

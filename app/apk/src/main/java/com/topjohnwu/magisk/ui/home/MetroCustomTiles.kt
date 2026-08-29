@@ -4,7 +4,7 @@ import android.util.Base64
 import com.topjohnwu.magisk.core.Config
 import java.util.UUID
 
-/** A user-created Start tile; groupMembers may contain one, two, or four packages. */
+/** A user-created Start tile; groupMembers may contain one to nine packages. */
 data class MetroCustomTile(
     val id: String,
     val packageName: String,
@@ -68,7 +68,7 @@ object MetroCustomTiles {
             title = title,
             ticker = ticker,
             color = color,
-            groupMembers = groupMembers.take(4),
+            groupMembers = groupMembers.take(9),
         )
         save(load() + tile)
         return tile

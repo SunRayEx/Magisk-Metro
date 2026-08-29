@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +30,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +46,7 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.BaseFragment
 import com.topjohnwu.magisk.arch.viewModel
 import com.topjohnwu.magisk.databinding.FragmentTileGroupBinding
+import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
 import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
 import com.topjohnwu.magisk.ui.theme.MetroAccent
@@ -100,13 +103,8 @@ private fun TileGroupScreen(tileId: String) {
         }
     }
 
-    val accentColor = tile?.color
-        ?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
-        ?: MaterialTheme.colorScheme.primary
-    val accent = MetroAccent(
-        color = accentColor,
-        onColor = if (accentColor.luminance() > 0.45f) Color.Black else Color.White,
-    )
+    // The group page wears the Apps role accent of the active theme, like its tile does.
+    val accent = com.topjohnwu.magisk.ui.theme.LocalMetroPalette.current.apps
 
     val view = LocalView.current
     LaunchedEffect(view, accent.color) {
@@ -117,11 +115,22 @@ private fun TileGroupScreen(tileId: String) {
         }
     }
 
+    // Full Metro entrance: the page slides in from the right and settles while its rows
+    // flip in underneath.
+    val entrance = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        entrance.animateTo(1f, tween(durationMillis = 260, easing = MetroEaseOut))
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .graphicsLayer {
+                alpha = entrance.value
+                translationX = (1f - entrance.value) * 120f * density
+            },
     ) {
         Text(
             text = tile?.title ?: stringResource(R.string.metro_tile_group),

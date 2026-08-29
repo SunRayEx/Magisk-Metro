@@ -42,6 +42,7 @@ import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** A top-level Metro destination selected from the home tile board. */
@@ -104,7 +105,11 @@ fun MetroPivotScreen(
     }
     LaunchedEffect(accent) {
         (view.context as? Activity)?.window?.let { window ->
-            window.statusBarColor = accent.color.toArgb()
+            // Blend between section accents instead of snapping when pages settle.
+            android.animation.ValueAnimator.ofArgb(window.statusBarColor, accent.color.toArgb()).apply {
+                duration = 200
+                addUpdateListener { window.statusBarColor = it.animatedValue as Int }
+            }.start()
             WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
                 accent.onColor.luminance() < 0.5f
         }
@@ -124,25 +129,22 @@ fun MetroPivotScreen(
             state = headerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(pagerState.currentPage) {
-                    var dragDistance = 0f
+                .pointerInput(Unit) {
+                    // The page follows the finger live, so the titles scale, fade and flow
+                    // during the drag exactly like they do while swiping the content.
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { change, amount ->
-                            dragDistance += amount
                             change.consume()
+                            pagerState.dispatchRawDelta(-amount)
                         },
                         onDragEnd = {
-                            val target = when {
-                                dragDistance <= -28f -> pagerState.currentPage + 1
-                                dragDistance >= 28f -> pagerState.currentPage - 1
-                                else -> pagerState.currentPage
-                            }.coerceIn(0, sections.lastIndex)
-                            dragDistance = 0f
-                            if (target != pagerState.currentPage) {
-                                scope.launch { pagerState.animateScrollToPage(target) }
-                            }
+                            val target = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                                .roundToInt().coerceIn(0, sections.lastIndex)
+                            scope.launch { pagerState.animateScrollToPage(target) }
                         },
-                        onDragCancel = { dragDistance = 0f },
+                        onDragCancel = {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) }
+                        },
                     )
                 }
                 .padding(start = 24.dp, end = 28.dp, top = 12.dp, bottom = 8.dp),

@@ -325,10 +325,12 @@ private fun MetroBoard(
         // never restart from a standstill. The resizing tile tracks a bit tighter than its
         // reflowing neighbours.
         val resizing = resizingId == item.id
+        // High stiffness on purpose: customization must feel instant, with the board
+        // reflowing as fast as the finger moves.
         val animation = if (resizing) {
-            spring<Dp>(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow)
+            spring<Dp>(dampingRatio = 0.8f, stiffness = 600f)
         } else {
-            spring<Dp>(dampingRatio = 0.88f, stiffness = 340f)
+            spring<Dp>(dampingRatio = 0.85f, stiffness = 650f)
         }
         val x by animateDpAsState(targetX, animation, label = "tileX")
         val y by animateDpAsState(targetY, animation, label = "tileY")
@@ -398,7 +400,7 @@ private fun MetroBoard(
             val rawX = cell * rendered.column + if (horizontal > 0) tileSize * rendered.width + gap * (rendered.width - 1) - 18.dp else 0.dp
             val rawY = cell * rendered.row + if (vertical > 0) tileSize * rendered.height + gap * (rendered.height - 1) - 18.dp else 0.dp
             // Handles ride the same spring as the tile so they never visibly detach from it.
-            val springSpec = spring<Dp>(dampingRatio = 0.88f, stiffness = 340f)
+            val springSpec = spring<Dp>(dampingRatio = 0.85f, stiffness = 650f)
             val hx by animateDpAsState(rawX, springSpec, label = "handleX")
             val hy by animateDpAsState(rawY, springSpec, label = "handleY")
             Modifier
@@ -487,12 +489,14 @@ private fun MetroBoard(
         }
         customTiles.forEachIndexed { index, tile ->
             val placement = placements.firstOrNull { it.id == tile.id } ?: return@forEachIndexed
-            val tileColor = runCatching { Color(android.graphics.Color.parseColor(tile.color)) }
-                .getOrDefault(LocalMetroPalette.current.apps.color)
+            // Custom tiles are theme citizens: they ride the Apps role accent and change with
+            // the theme, exactly like built-in tiles. Only the custom-theme palette can
+            // recolor them (through the per-role custom colors).
+            val accent = LocalMetroPalette.current.apps
             CustomTile(
                 modifier = place(placement),
                 tile = tile,
-                color = tileColor,
+                accent = accent,
                 navigationIndex = MetroTileCount + index,
             )
         }
@@ -522,11 +526,12 @@ private fun MetroBoard(
 private fun CustomTile(
     modifier: Modifier,
     tile: MetroCustomTile,
-    color: Color,
+    accent: com.topjohnwu.magisk.ui.theme.MetroAccent,
     navigationIndex: Int,
 ) {
     val context = LocalContext.current
-    val foreground = if (color.luminance() > 0.45f) Color.Black else Color.White
+    val color = accent.color
+    val foreground = accent.onColor
     MetroTile(
         modifier = modifier,
         color = color,

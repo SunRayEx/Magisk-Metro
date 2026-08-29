@@ -15,7 +15,7 @@
     <string name="metro_tile_restore">Restore built-in tiles</string>
     <string name="metro_tile_name">Tile name</string>
     <string name="metro_tile_ticker">Rolling list content</string>
-    <string name="metro_invalid_tile">Select 1, 2, or 4 apps and enter a valid color</string>
+    <string name="metro_invalid_tile">Select at most 9 apps for one tile</string>
     <string name="metro_no_root_apps">No rooted apps are available</string>
     <string name="metro_magisk_version">MagisKube %1$s</string>
     <string name="metro_enabled">Enabled</string>
