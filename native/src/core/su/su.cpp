@@ -331,7 +331,11 @@ static void drop_caps_zero() {
         }
         capset(&header, &data[0]);
     }
-    prctl(PR_SET_SECUREBITS, SECBIT_NOROOT | SECBIT_NO_CAP_UNRAISE);
+    unsigned securebits = SECBIT_NOROOT;
+#ifdef SECBIT_NO_CAP_UNRAISE
+    securebits |= SECBIT_NO_CAP_UNRAISE;
+#endif
+    prctl(PR_SET_SECUREBITS, securebits);
 }
 
 static void set_identity(int uid, const rust::Vec<gid_t> &groups) {
