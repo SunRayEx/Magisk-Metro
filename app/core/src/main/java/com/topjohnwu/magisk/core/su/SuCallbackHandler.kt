@@ -73,6 +73,10 @@ object SuCallbackHandler {
             notify(context, log.action >= SuPolicy.ALLOW, log.appName)
 
         runBlocking { ServiceLocator.logRepo.insert(log) }
+<<<<<<< HEAD
+=======
+        SuEvents.notifyLogUpdated()
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 
     private fun handleNotify(context: Context, data: Bundle) {

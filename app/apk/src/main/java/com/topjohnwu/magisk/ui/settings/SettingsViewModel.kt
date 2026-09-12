@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk.ui.settings
 
+<<<<<<< HEAD
 import android.os.Build
 import android.view.View
 import android.widget.Toast
@@ -13,25 +14,32 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.MainDirections
+=======
+import android.widget.Toast
+import androidx.lifecycle.viewModelScope
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.AppContext
-import com.topjohnwu.magisk.core.BuildConfig
 import com.topjohnwu.magisk.core.Config
-import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.R
-import com.topjohnwu.magisk.core.isRunningAsStub
-import com.topjohnwu.magisk.core.ktx.activity
 import com.topjohnwu.magisk.core.ktx.toast
-import com.topjohnwu.magisk.core.tasks.AppMigration
-import com.topjohnwu.magisk.core.utils.LocaleSetting
 import com.topjohnwu.magisk.core.utils.RootUtils
+<<<<<<< HEAD
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.events.AddHomeIconEvent
 import com.topjohnwu.magisk.events.AuthEvent
 import com.topjohnwu.magisk.events.SnackbarEvent
 import com.topjohnwu.magisk.events.RecreateEvent
+=======
+import com.topjohnwu.magisk.ui.navigation.Route
+import com.topjohnwu.magisk.view.Shortcuts
+import com.topjohnwu.superuser.Shell
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import kotlinx.coroutines.launch
 import com.topjohnwu.magisk.core.PersistentModules as PersistentModulesTool
 import com.topjohnwu.magisk.ui.home.MetroCustomTiles
@@ -43,13 +51,20 @@ import com.topjohnwu.magisk.ui.dialog.MetroDialogViews
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.magisk.R as AppR
 
-class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
+class SettingsViewModel : BaseViewModel() {
 
-    val items = createItems()
-    val extraBindings = bindExtra {
-        it.put(BR.handler, this)
+    private val _denyListEnabled = MutableStateFlow(Config.denyList)
+    val denyListEnabled: StateFlow<Boolean> = _denyListEnabled.asStateFlow()
+
+    val zygiskMismatch get() = Config.zygisk != Info.isZygiskEnabled
+
+    var authenticate: (onSuccess: () -> Unit) -> Unit = { it() }
+
+    fun navigateToDenyList() {
+        navigateTo(Route.DenyList)
     }
 
+<<<<<<< HEAD
     private fun createItems(): List<BaseSettingsItem> {
         val context = AppContext
         val hidden = context.packageName != BuildConfig.APP_PACKAGE_NAME
@@ -165,12 +180,20 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
     }
 
     private fun createHosts() {
+=======
+    fun requestAddShortcut() {
+        Shortcuts.addHomeIcon(AppContext)
+    }
+
+    fun createHosts() {
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         viewModelScope.launch {
             RootUtils.addSystemlessHosts()
             AppContext.toast(R.string.settings_hosts_toast, Toast.LENGTH_SHORT)
         }
     }
 
+<<<<<<< HEAD
     private fun showCustomThemeDialog(view: View) {
         val context = view.context
         val fields = MetroAccentRole.entries.associateWith { role ->
@@ -371,4 +394,23 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
 
     private val dialogRef = java.util.concurrent.atomic.AtomicReference<MagiskDialog?>()
 
+=======
+    fun toggleDenyList(enabled: Boolean) {
+        _denyListEnabled.value = enabled
+        val cmd = if (enabled) "enable" else "disable"
+        Shell.cmd("magisk --denylist $cmd").submit { result ->
+            if (result.isSuccess) {
+                Config.denyList = enabled
+            } else {
+                _denyListEnabled.value = !enabled
+            }
+        }
+    }
+
+    fun withAuth(action: () -> Unit) = authenticate(action)
+
+    fun notifyZygiskChange() {
+        if (zygiskMismatch) showSnackbar(R.string.reboot_apply_change)
+    }
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }

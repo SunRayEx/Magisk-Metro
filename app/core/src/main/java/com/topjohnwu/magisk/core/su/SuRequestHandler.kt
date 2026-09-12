@@ -104,6 +104,10 @@ class SuRequestHandler(
             }
             if (time >= 0) {
                 policyDB.update(policy)
+<<<<<<< HEAD
+=======
+                SuEvents.notifyPolicyChanged()
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
             }
         }
     }

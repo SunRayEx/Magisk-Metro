@@ -15,6 +15,7 @@
     <string name="app_changelog">Değişiklik Günlüğü</string>
     <string name="loading">Yükleniyor…</string>
     <string name="update">Güncelle</string>
+<<<<<<< HEAD
     <string name="not_available">Mevcut Değil</string>
     <string name="hide">Gizle</string>
     <string name="home_package">Paket</string>
@@ -29,6 +30,19 @@
     <string name="invalid_update_channel">Geçersiz güncelleme kanalı</string>
     <string name="uninstall_magisk_title">Magisk\'i Kaldır</string>
     <string name="uninstall_magisk_msg">Tüm modüller devre dışı bırakılacak/kaldırılacak!\nRoot kaldırılacak!\nMagisk kullanılarak şifresi çözülen dahili depolama birimleri yeniden şifrelenecek!</string>
+=======
+    <string name="not_available">Yok</string>
+    <string name="hide">Gizle</string>    <string name="home_package">Paket</string>
+    <string name="home_app_title">Uygulama</string>    <string name="reinstall">Yeniden Yükle</string>
+    <string name="home_notice_content">Magisk\'i SADECE resmi GitHub sayfasından indirin. Bilinmeyen kaynaklardan alınan dosyalar kötü amaçlı olabilir!</string>
+    <string name="home_support_title">Bizi Destekleyin</string>
+    <string name="home_follow_title">Bizi Takip Edin</string>
+    <string name="home_item_source">Kaynak</string>
+    <string name="home_support_content">Magisk her zaman ücretsiz ve açık kaynaklı kalacaktır. Ancak bağış yaparak bize destek olduğunuzu gösterebilirsiniz.</string>    <string name="home_installed_version">Yüklü</string>
+    <string name="home_latest_version">En Son</string>
+    <string name="invalid_update_channel">Geçersiz güncelleme kanalı</string>    <string name="uninstall_magisk_title">Magisk\'i Kaldır</string>
+    <string name="uninstall_magisk_msg">Tüm modüller devre dışı bırakılacak/kaldırılacak!\nRoot kaldırılacak!\nMagisk kullanımıyla şifresi çözülen tüm dahili depolama birimleri yeniden şifrelenecek!</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     <!--Install-->
     <string name="keep_force_encryption">Zorunlu Şifrelemeyi Koru</string>
@@ -36,6 +50,7 @@
     <string name="recovery_mode">Kurtarma Modu</string>
     <string name="install_options_title">Seçenekler</string>
     <string name="install_method_title">Yöntem</string>
+<<<<<<< HEAD
     <string name="install_next">Sonraki</string>
     <string name="install_start">Hadi Başlayalım</string>
     <string name="manager_download_install">İndirmek ve kurmak için basın</string>
@@ -43,6 +58,13 @@
     <string name="install_inactive_slot">Etkin olmayan slota kur (OTA sonrası)</string>
     <string name="install_inactive_slot_msg">Cihazınız, yeniden başlattıktan sonra mevcut etkin olmayan slota önyükleme yapmaya ZORLANACAKTIR!\nBu seçeneği yalnızca OTA güncellemesi yapıldıktan sonra kullanın.\nDevam edilsin mi?</string>
     <string name="setup_title">Ek Kurulum</string>
+=======
+    <string name="install_next">İleri</string>
+    <string name="install_start">Başlayalım</string>
+    <string name="manager_download_install">İndirmek ve yüklemek için dokunun</string>
+    <string name="direct_install">Doğrudan kurulum (Önerilen)</string>    <string name="install_inactive_slot">Etkin olmayan slota kur (OTA\'dan sonra)</string>    <string name="install_inactive_slot_msg">Cihazınız yeniden başlatıldıktan sonra mevcut etkin olmayan slottan başlatılmaya ZORLANACAK!\nBu seçeneği yalnızca OTA işlemi bittikten sonra kullanın.\nDevam edilsin mi?</string>
+    <string name="setup_title">Ek kurulum</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="select_patch_file">Bir dosya seçin ve yamalayın</string>
     <string name="patch_file_msg">Ham bir imaj (*.img), bir ODIN tar dosyası (*.tar) veya bir payload.bin (*.bin) seçin</string>
     <string name="reboot_delay_toast">5 saniye içinde yeniden başlatılıyor…</string>
@@ -79,11 +101,20 @@
     <string name="superuser_policy_none">Henüz hiçbir uygulama Süper Kullanıcı izni istemedi.</string>
 
     <!--Logs-->
+<<<<<<< HEAD
     <string name="log_data_none">Günlüğünüz temiz. Root uygulamalarınızı daha fazla kullanmayı deneyin.</string>
     <string name="log_data_magisk_none">Magisk günlükleri boş, bu garip.</string>
     <string name="menuSaveLog">Günlüğü Kaydet</string>
     <string name="menuClearLog">Günlüğü Şimdi Temizle</string>
     <string name="logs_cleared">Günlük başarıyla temizlendi</string>
+=======
+    <string name="log_data_none">Günlüğünüz boş. Root uygulamalarınızı daha fazla kullanmayı deneyin.</string>
+    <string name="log_data_magisk_none">Magisk günlükleri boş, bu çok garip.</string>
+    <string name="menuSaveLog">Günlüğü kaydet</string>
+    <string name="menuClearLog">Günlüğü şimdi temizle</string>
+    <string name="logs_cleared">Günlük başarıyla temizlendi</string>    <string name="back">Geri</string>    <string name="enabled">Etkin</string>
+    <string name="disabled">Devre Dışı</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="pid">PID: %1$d</string>
     <string name="target_uid">Hedef UID: %1$d</string>
     <string name="target_pid">Hedef PID: %s</string>
@@ -211,11 +242,17 @@
     <string name="download">İndir</string>
     <string name="reboot">Yeniden Başlat</string>
     <string name="close">Kapat</string>
+<<<<<<< HEAD
     <string name="release_notes">Sürüm Notları</string>
     <string name="flashing">Flaşlanıyor…</string>
     <string name="running">Çalışıyor…</string>
     <string name="done">Bitti!</string>
     <string name="done_action">%1$s eylemi tamamlandı</string>
+=======
+    <string name="release_notes">Sürüm notları</string>
+    <string name="flashing">Yazılıyor…</string>    <string name="done">Tamamlandı!</string>
+    <string name="done_action">%1$s işlemi tamamlandı</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="failure">Başarısız!</string>
     <string name="hide_app_title">Magisk uygulaması gizleniyor…</string>
     <string name="open_link_failed_toast">Bağlantıyı açacak bir uygulama bulunamadı</string>

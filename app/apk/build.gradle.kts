@@ -1,26 +1,24 @@
 plugins {
     id("com.android.application")
     kotlin("plugin.parcelize")
+<<<<<<< HEAD
     alias(libs.plugins.kotlin.compose)
     id("com.android.legacy-kapt")
     id("androidx.navigation.safeargs.kotlin")
+=======
+    alias(libs.plugins.compose.compiler)
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }
 
 
 setupMainApk()
 
-kapt {
-    correctErrorTypes = true
-    useBuildCache = true
-    mapDiagnosticLocations = true
-    javacOptions {
-        option("-Xmaxerrs", "1000")
-    }
-}
-
 android {
     buildFeatures {
+<<<<<<< HEAD
         dataBinding = true
+=======
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         compose = true
     }
 
@@ -34,6 +32,12 @@ android {
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
+    }
+
+    packaging {
+        jniLibs {
+            excludes += "lib/*/libandroidx.graphics.path.so"
+        }
     }
 
     defaultConfig {
@@ -52,22 +56,19 @@ dependencies {
     implementation(project(":core"))
     coreLibraryDesugaring(libs.jdk.libs)
 
-    implementation(libs.indeterminate.checkbox)
-    implementation(libs.rikka.layoutinflater)
-    implementation(libs.rikka.insets)
-    implementation(libs.rikka.recyclerview)
-
-    implementation(libs.navigation.fragment.ktx)
-    implementation(libs.navigation.ui.ktx)
-
-    implementation(libs.constraintlayout)
-    implementation(libs.swiperefreshlayout)
-    implementation(libs.recyclerview)
-    implementation(libs.transition)
-    implementation(libs.fragment.ktx)
-    implementation(libs.appcompat)
+    // Compose
+    implementation(libs.compose.ui)
+    implementation(libs.accompanist.drawablepainter)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.compose.material3)
     implementation(libs.material)
 
+<<<<<<< HEAD
     // Jetpack Compose
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -81,4 +82,11 @@ dependencies {
     // Make sure kapt runs with a proper kotlin-stdlib
     kapt(kotlin("stdlib"))
 
+=======
+    // Navigation3
+    implementation(libs.navigation3.runtime)
+    implementation(libs.navigationevent.compose)
+    implementation(libs.lifecycle.viewmodel.navigation3)
+    implementation(libs.navigation3.ui)
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }

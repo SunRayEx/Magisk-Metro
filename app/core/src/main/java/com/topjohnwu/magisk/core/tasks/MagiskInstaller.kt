@@ -468,7 +468,13 @@ abstract class MagiskInstallImpl protected constructor(
 
                     try {
                         if (magic.contentEquals("CrAU".toByteArray())) {
+<<<<<<< HEAD
                             processPayload(src)
+=======
+                            DataSourceChannel(channel).use { source ->
+                                Payload(source).extract(boot, console, logs)
+                            }
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
                         } else if (magic.contentEquals("PK\u0003\u0004".toByteArray())) {
                             processZip(ZipArchiveInputStream(src))
                         } else {
@@ -555,16 +561,8 @@ abstract class MagiskInstallImpl protected constructor(
 
     private fun flashBoot() = "direct_install $installDir $srcBoot".sh().isSuccess
 
-    private suspend fun postOTA(): Boolean {
-        try {
-            val bootctl = File.createTempFile("bootctl", null, context.cacheDir)
-            context.assets.open("bootctl").writeTo(bootctl)
-            "post_ota $bootctl".sh()
-        } catch (e: IOException) {
-            console.add("! Unable to download bootctl")
-            Timber.e(e)
-            return false
-        }
+    private fun postOTA(): Boolean {
+        "post_ota".sh()
 
         console.add("*************************************************************")
         console.add(" Next reboot will boot to second slot!")

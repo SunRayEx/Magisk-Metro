@@ -16,13 +16,19 @@
     <string name="loading">Duke u ngarkuar…</string>
     <string name="update">Përditëso</string>
     <string name="not_available">N/A</string>
+<<<<<<< HEAD
     <string name="hide">Fshih</string>
     <string name="home_package">Paketa</string>
     <string name="home_app_title">Aplikacioni</string>
+=======
+    <string name="hide">Fshih</string>    <string name="home_package">Paketa</string>
+    <string name="home_app_title">Aplikacioni</string>    <string name="reinstall">Rinstalo</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="home_notice_content">Shkarkoni Magisk VETËM nga faqja zyrtare në GitHub. Skedarët nga burime të panjohura mund të jenë të dëmshëm!</string>
     <string name="home_support_title">Na mbështetni</string>
     <string name="home_follow_title">Na ndiqni</string>
     <string name="home_item_source">Burimi</string>
+<<<<<<< HEAD
     <string name="home_support_content">Magisk është dhe do të mbetet gjithmonë falas dhe me burim të hapur. Megjithatë, mund të na mbështesni duke bërë një donacion.</string>
     <string name="home_installed_version">Instaluar</string>
     <string name="home_latest_version">Më i fundit</string>
@@ -31,6 +37,12 @@
     <string name="uninstall_magisk_msg">Të gjitha modulet do të çaktivizohen/hiqen!
 Root-i do të hiqet!
 Çdo memorie e brendshme që është çenkriptuar përmes Magisk do të rikriptohet!</string>
+=======
+    <string name="home_support_content">Magisk është dhe do të jetë gjithmonë falas dhe me kod të hapur. Megjithatë, ju mund të tregoni vlerësimin tuaj duke bërë një donacion.</string>    <string name="home_installed_version">I instaluar</string>
+    <string name="home_latest_version">I fundit</string>
+    <string name="invalid_update_channel">Kanal përditësimi i pavlefshëm</string>    <string name="uninstall_magisk_title">Çinstalo Magisk</string>
+    <string name="uninstall_magisk_msg">Të gjitha modulet do të çaktivizohen/hiqen!\nRoot do të hiqet!\nÇdo hapësirë ruajtëse e brendshme e çkoduar përmes Magisk do të ri-enkriptohet!</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     <!--Install-->
     <string name="keep_force_encryption">Ruaj enkriptimin e detyruar</string>
@@ -41,11 +53,15 @@ Root-i do të hiqet!
     <string name="install_next">Vazhdoni</string>
     <string name="install_start">Le të fillojmë</string>
     <string name="manager_download_install">Shtypni për të shkarkuar dhe instaluar</string>
+<<<<<<< HEAD
     <string name="direct_install">Instalim i drejtpërdrejtë (Rekomandohet)</string>
     <string name="install_inactive_slot">Instalo në slot-in joaktiv (Pas OTA)</string>
     <string name="install_inactive_slot_msg">Pajisja juaj do të detyrohet të niset në slot-in joaktiv pas rinisjes!
 Përdorni këtë opsion vetëm pasi OTA të ketë përfunduar.
 Të vazhdoj?</string>
+=======
+    <string name="direct_install">Instalim direkt (I rekomanduar)</string>    <string name="install_inactive_slot">Instalo në slotin joaktiv (Pas OTA)</string>    <string name="install_inactive_slot_msg">Pajisja juaj do të DETYROHET të ndizet në slotin aktual joaktiv pas rinisjes!\nPërdoreni këtë opsion vetëm pasi të ketë përfunduar OTA.\nVazhdoni?</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="setup_title">Konfigurim shtesë</string>
     <string name="select_patch_file">Zgjidh dhe përpuno një skedar</string>
     <string name="patch_file_msg">Zgjidh një imazh të papërpunuar (*.img) ose një skedar ODIN (*.tar) ose një payload.bin (*.bin)</string>
@@ -84,11 +100,20 @@ Refuzoni nëse nuk jeni të sigurt!</string>
     <string name="superuser_policy_none">Asnjë aplikacion nuk ka kërkuar ende leje Superuser.</string>
 
     <!--Logs-->
+<<<<<<< HEAD
     <string name="log_data_none">Nuk keni regjistrime. Provojeni të përdorni më shumë aplikacionet me root.</string>
     <string name="log_data_magisk_none">Regjistrimet e Magisk janë bosh — çuditërisht.</string>
     <string name="menuSaveLog">Ruaj regjistrimin</string>
     <string name="menuClearLog">Pastro regjistrimin tani</string>
     <string name="logs_cleared">Regjistrimet u pastruan me sukses</string>
+=======
+    <string name="log_data_none">Nuk keni regjistra. Provoni të përdorni më shumë aplikacionet root.</string>
+    <string name="log_data_magisk_none">Regjistrat e Magisk janë bosh, kjo është e çuditshme.</string>
+    <string name="menuSaveLog">Ruaj regjistrin</string>
+    <string name="menuClearLog">Pastro regjistrin tani</string>
+    <string name="logs_cleared">Regjistri u pastrua me sukses</string>    <string name="back">Mbrapa</string>    <string name="enabled">Aktivizuar</string>
+    <string name="disabled">Çaktivizuar</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="pid">PID: %1$d</string>
     <string name="target_uid">UID i synuar: %1$d</string>
     <string name="target_pid">PID i synuar: %s</string>
@@ -217,10 +242,15 @@ Refuzoni nëse nuk jeni të sigurt!</string>
     <string name="reboot">Rinise</string>
     <string name="close">Mbyll</string>
     <string name="release_notes">Shënimet e versionit</string>
+<<<<<<< HEAD
     <string name="flashing">Duke flashuar..</string>
     <string name="running">Duke u ekzekutuar..</string>
     <string name="done">U krye!</string>
     <string name="done_action">Veprimi i %1$s u krye</string>
+=======
+    <string name="flashing">Duke u flash-uar…</string>    <string name="done">U krye!</string>
+    <string name="done_action">U krye veprimi i %1$s</string>
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="failure">Dështoi!</string>
     <string name="hide_app_title">Duke fshehur aplikacionin Magisk..</string>
     <string name="open_link_failed_toast">Nuk u gjet asnjë aplikacion për të hapur lidhjen</string>

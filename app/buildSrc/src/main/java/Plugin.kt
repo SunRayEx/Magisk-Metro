@@ -11,6 +11,7 @@ import java.util.Random
 // CI builds are always reproducible
 val RAND_SEED = if (System.getenv("CI") != null) 42 else 0
 lateinit var RANDOM: Random
+val ABI_SUPPORT_LIST = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64", "riscv64")
 
 private val props = Properties()
 private var commitHash = ""
@@ -25,6 +26,7 @@ object Config {
 
     fun contains(key: String) = get(key) != null
 
+<<<<<<< HEAD:app/buildSrc/src/main/java/Plugin.kt
     val version: String get() = get("version") ?: commitHash.ifBlank { "MagisKube-dev" }
     val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
     val stubVersion: String get() = get("magisk.stubVersion")!!
@@ -32,6 +34,15 @@ object Config {
         val abiList = get("abiList") ?: return defaultAbis
         return abiList.split(Regex("\\s*,\\s*")).toSet() intersect supportAbis
     }
+=======
+    // Properties from config.prop and flags.prop, may be null
+    val version: String get() = get("version") ?: "null"
+    val abiList: List<String> get() = get("abiList")?.split(",") ?: ABI_SUPPORT_LIST
+
+    // Properties from gradle.properties, should always exist
+    val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
+    val stubVersion: String get() = get("magisk.stubVersion")!!
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Plugin.kt
 }
 
 fun Project.rootFile(path: String): File {
@@ -48,10 +59,10 @@ class MagiskPlugin : Plugin<Project> {
         props.clear()
 
         // Get gradle properties relevant to Magisk
-        props.putAll(properties.filter { (key, _) -> key.startsWith("magisk.") })
+        props.putAll(providers.gradlePropertiesPrefixedBy("magisk.").get())
 
         // Load config.prop
-        val configPath: String? by this
+        val configPath = findProperty("configPath") as String?
         val configFile = rootFile(configPath ?: "config.prop")
         if (configFile.exists()) {
             configFile.inputStream().use {

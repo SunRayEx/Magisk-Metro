@@ -3,6 +3,7 @@ package com.topjohnwu.magisk.core
 import android.os.Bundle
 import androidx.core.content.edit
 import com.topjohnwu.magisk.core.di.ServiceLocator
+import com.topjohnwu.magisk.core.model.ColorMode
 import com.topjohnwu.magisk.core.repository.DBConfig
 import com.topjohnwu.magisk.core.repository.PreferenceConfig
 import com.topjohnwu.magisk.core.utils.LocaleSetting
@@ -116,14 +117,24 @@ object Config : PreferenceConfig, DBConfig {
 
     var safetyNotice by preference(Key.SAFETY, true)
     var darkTheme by preference(Key.DARK_THEME, -1)
+<<<<<<< HEAD
     var dynamicColor by preference(Key.DYNAMIC_COLOR, true)
     // Default is appended to the app theme enum to preserve ordinals of existing installs.
     var themeOrdinal by preference(Key.THEME_ORDINAL, 8)
+=======
+    var themeOrdinal by preference(Key.THEME_ORDINAL, 0)
+    var colorMode by preference(Key.COLOR_MODE, ColorMode.MONET_SYSTEM.value)
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     private var checkUpdatePrefs by preference(Key.CHECK_UPDATES, true)
     private var localePrefs by preference(Key.LOCALE, "")
     var doh by preference(Key.DOH, false)
     var updateChannel by preference(Key.RELEASE_CHANNEL, Value.DEFAULT_CHANNEL)
+    val updateChannelIndex get() = when (updateChannel) {
+        Value.DEFAULT_CHANNEL ->
+            if (BuildConfig.DEBUG) Value.DEBUG_CHANNEL else Value.STABLE_CHANNEL
+        else -> updateChannel
+    }
     var customChannelUrl by preference(Key.CUSTOM_CHANNEL, "")
     var downloadDir by preference(Key.DOWNLOAD_DIR, "")
     var randName by preference(Key.RAND_NAME, true)

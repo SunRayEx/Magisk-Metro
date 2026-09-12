@@ -47,13 +47,21 @@ internal fun Project.androidAppComponents(configure: Action<ApplicationAndroidCo
 fun Project.setupCommon() {
     android {
         compileSdk {
+<<<<<<< HEAD:app/buildSrc/src/main/java/Setup.kt
             version = release(36) {
+=======
+            version = release(37) {
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Setup.kt
                 minorApiLevel = 1
             }
         }
         buildToolsVersion = "36.1.0"
         ndkPath = "${androidComponents.sdkComponents.sdkDirectory.get().asFile}/ndk/magisk"
+<<<<<<< HEAD:app/buildSrc/src/main/java/Setup.kt
         ndkVersion = "29.0.14206865"
+=======
+        ndkVersion = "30.0.15729638"
+>>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Setup.kt
 
         defaultConfig.apply {
             minSdk = 23
@@ -121,6 +129,11 @@ const val BUSYBOX_DOWNLOAD_URL =
 const val BUSYBOX_ZIP_CHECKSUM =
     "b4d0551feabaf314e53c79316c980e8f66432e9fb91a69dbbf10a93564b40951"
 
+const val BOOTCTL_DOWNLOAD_URL =
+    "https://github.com/topjohnwu/magisk-files/releases/download/files/bootctl-android-14.0.0_r1.zip"
+const val BOOTCTL_ZIP_CHECKSUM =
+    "2cf515aeb17259e88393a1322671ebab1968925864bc04ae57dad54e53ccf15b"
+
 private abstract class SyncWithDir : Sync() {
     @get:OutputDirectory
     abstract val outputFolder: DirectoryProperty
@@ -150,6 +163,8 @@ fun Project.setupCoreLib() {
                 }
                 from(zipTree(downloadFile(BUSYBOX_DOWNLOAD_URL, BUSYBOX_ZIP_CHECKSUM)))
                 include(abiList.map { "$it/libbusybox.so" })
+                from(zipTree(downloadFile(BOOTCTL_DOWNLOAD_URL, BOOTCTL_ZIP_CHECKSUM)))
+                include(abiList.map { "$it/libbootctl.so" })
                 onlyIf {
                     if (inputs.sourceFiles.files.size != abiList.size * 7)
                         throw StopExecutionException("Please build binaries first! (./build.py binary)")
@@ -190,7 +205,6 @@ fun Project.setupCoreLib() {
                     include("util_functions.sh", "boot_patch.sh", "addon.d.sh",
                         "app_functions.sh", "uninstaller.sh", "module_installer.sh")
                 }
-                from(rootFile("tools/bootctl"))
                 into("chromeos") {
                     from(rootFile("tools/futility"))
                     from(rootFile("tools/keys")) {
@@ -302,7 +316,7 @@ fun Project.setupMainApk() {
             versionName = Config.version
             versionCode = Config.versionCode
             ndk {
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64", "riscv64")
+                abiFilters += ABI_SUPPORT_LIST
                 debugSymbolLevel = "FULL"
             }
         }
@@ -320,9 +334,9 @@ fun Project.setupMainApk() {
 }
 
 const val LSPOSED_DOWNLOAD_URL =
-    "https://github.com/LSPosed/LSPosed/releases/download/v1.9.2/LSPosed-v1.9.2-7024-zygisk-release.zip"
+    "https://github.com/topjohnwu/magisk-files/releases/download/files/LSPosed-v2.1.1-7790-release.zip"
 const val LSPOSED_CHECKSUM =
-    "0ebc6bcb465d1c4b44b7220ab5f0252e6b4eb7fe43da74650476d2798bb29622"
+    "f58eb92678e9d8b982de4987b249bfa8593f7c1524aff3be9976a5cb478d3263"
 
 const val SHAMIKO_DOWNLOAD_URL =
     "https://github.com/LSPosed/LSPosed.github.io/releases/download/shamiko-383/Shamiko-v1.2.1-383-release.zip"
