@@ -11,7 +11,6 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.StopExecutionException
 import org.gradle.api.tasks.Sync
 import org.gradle.kotlin.dsl.assign
 import org.gradle.kotlin.dsl.exclude
@@ -47,21 +46,13 @@ internal fun Project.androidAppComponents(configure: Action<ApplicationAndroidCo
 fun Project.setupCommon() {
     android {
         compileSdk {
-<<<<<<< HEAD:app/buildSrc/src/main/java/Setup.kt
-            version = release(36) {
-=======
             version = release(37) {
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Setup.kt
                 minorApiLevel = 1
             }
         }
         buildToolsVersion = "36.1.0"
         ndkPath = "${androidComponents.sdkComponents.sdkDirectory.get().asFile}/ndk/magisk"
-<<<<<<< HEAD:app/buildSrc/src/main/java/Setup.kt
-        ndkVersion = "29.0.14206865"
-=======
         ndkVersion = "30.0.15729638"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Setup.kt
 
         defaultConfig.apply {
             minSdk = 23
@@ -166,9 +157,14 @@ fun Project.setupCoreLib() {
                 from(zipTree(downloadFile(BOOTCTL_DOWNLOAD_URL, BOOTCTL_ZIP_CHECKSUM)))
                 include(abiList.map { "$it/libbootctl.so" })
                 onlyIf {
-                    if (inputs.sourceFiles.files.size != abiList.size * 7)
-                        throw StopExecutionException("Please build binaries first! (./build.py binary)")
-                    true
+                    // Gradle 9 evaluates onlyIf predicates during task graph setup and treats
+                    // exceptions here as task failures. Check the native outputs directly and
+                    // skip this task when the binaries have not been built yet.
+                    abiList.all { abi ->
+                        val dir = rootFile("native/out/$abi")
+                        listOf("magiskboot", "magiskinit", "magiskpolicy", "magisk", "metrolink", "libinit-ld.so")
+                            .all { dir.resolve(it).isFile }
+                    }
                 }
             }
 

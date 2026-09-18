@@ -4,7 +4,7 @@
 
 # MagisKube · Magisk Metro
 
-**Magisk 的 Metro 重制版。** 管理器 UI 从零重写为 Windows 8 / Windows Phone 设计语言(磁贴开始屏幕、Pivot 导航、七色角色强调色系统),并在此基础上扩展了原生功能:**常驻模块**(nix 式声明式模块管理,Rust + Zig + C 原生栈)与**动态授权**(单次授权 / 0 级授权 / DenyList 沙箱加强)。
+**Magisk 的 Metro 重制版。** 管理器 UI 重写为 Windows 8 / Windows Phone 设计语言(磁贴开始屏幕、Pivot 导航、七色角色强调色系统),并在此基础上扩展了原生功能:**常驻模块**(声明式模块管理,Rust + Zig + C 原生栈)与**动态授权**(单次授权 / 0 级授权 / DenyList 沙箱加强)。
 
 上游的全部核心能力原样保留:**MagiskSU** root 授权、**Magisk Modules** 无系统分区修改、**MagiskBoot** 镜像解包重打包、**Zygisk** 进程注入。
 

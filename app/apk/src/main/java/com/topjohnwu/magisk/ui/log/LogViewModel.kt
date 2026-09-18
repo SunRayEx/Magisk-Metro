@@ -13,15 +13,6 @@ import com.topjohnwu.magisk.core.repository.LogRepository
 import com.topjohnwu.magisk.core.su.SuEvents
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils.outputStream
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.DiffList
-import com.topjohnwu.magisk.databinding.bindExtra
-import com.topjohnwu.magisk.databinding.diffList
-import com.topjohnwu.magisk.databinding.set
-import com.topjohnwu.magisk.events.SnackbarEvent
-import com.topjohnwu.magisk.view.TextItem
-=======
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,26 +27,11 @@ class LogViewModel(
     private val repo: LogRepository
 ) : AsyncLoadViewModel() {
 
-<<<<<<< HEAD
-    // --- empty view
-
-    val itemEmpty = TextItem(R.string.log_data_none)
-    val itemMagiskEmpty = TextItem(R.string.log_data_magisk_none)
-
-    // --- su log
-
-    // Explicit type: kapt stubs degrade the inferred generic to java.lang.Object,
-    // which breaks data binding accessors on this property.
-    val items: DiffList<SuLogRvItem> = diffList()
-    val extraBindings = bindExtra {
-        it.put(BR.viewModel, this)
-=======
     init {
         @OptIn(kotlinx.coroutines.FlowPreview::class)
         viewModelScope.launch {
             SuEvents.logUpdated.debounce(500).collect { reload() }
         }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 
     data class UiState(

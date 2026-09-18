@@ -58,6 +58,7 @@ object Const {
         const val PATCH_FILE = "patch"
         const val FLASH_MAGISK = "magisk"
         const val FLASH_INACTIVE_SLOT = "slot"
+        const val DOWNLOAD = "download"
         const val UNINSTALL = "uninstall"
     }
 

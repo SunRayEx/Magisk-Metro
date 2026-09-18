@@ -10,15 +10,7 @@ import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.repository.NetworkService
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.set
-import com.topjohnwu.magisk.dialog.SecondSlotWarningDialog
-import com.topjohnwu.magisk.events.GetContentEvent
-import com.topjohnwu.magisk.ui.flash.FlashFragment
-import io.noties.markwon.Markwon
-=======
 import com.topjohnwu.magisk.ui.navigation.Route
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,36 +39,8 @@ class InstallViewModel(svc: NetworkService) : BaseViewModel() {
     val skipOptions = Info.isEmulator || (Info.isSAR && !Info.isFDE && Info.ramdisk)
     val noSecondSlot = !isRooted || !Info.isAB || Info.isEmulator
 
-<<<<<<< HEAD
-    @get:Bindable
-    var step = if (skipOptions) 1 else 0
-        set(value) = set(value, field, { field = it }, BR.step)
-
-    private var methodId = -1
-
-    @get:Bindable
-    var method
-        get() = methodId
-        set(value) = set(value, methodId, { methodId = it }, BR.method) {
-            when (it) {
-                R.id.method_patch -> {
-                    GetContentEvent("*/*", UriCallback()).publish()
-                }
-                R.id.method_inactive_slot -> {
-                    SecondSlotWarningDialog().show()
-                }
-            }
-        }
-
-    val data: LiveData<Uri?> get() = uri
-
-    @get:Bindable
-    var notes: Spanned = SpannedString("")
-        set(value) = set(value, field, { field = it }, BR.notes)
-=======
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -101,12 +65,6 @@ class InstallViewModel(svc: NetworkService) : BaseViewModel() {
     fun selectMethod(method: Method) {
         _uiState.update { it.copy(method = method) }
         when (method) {
-<<<<<<< HEAD
-            R.id.method_patch -> FlashFragment.patch(data.value!!).navigate(true)
-            R.id.method_direct -> FlashFragment.flash(false).navigate(true)
-            R.id.method_inactive_slot -> FlashFragment.flash(true).navigate(true)
-            else -> error("Unknown value")
-=======
             Method.PATCH -> {
                 AppContext.toast(CoreR.string.patch_file_msg, Toast.LENGTH_LONG)
                 _uiState.update { it.copy(requestFilePicker = true) }
@@ -118,7 +76,6 @@ class InstallViewModel(svc: NetworkService) : BaseViewModel() {
                 _uiState.update { it.copy(showDownloadDialog = true) }
             }
             else -> {}
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
     }
 

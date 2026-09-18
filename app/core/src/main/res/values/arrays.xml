@@ -63,8 +63,6 @@
     <string-array name="update_channel">
         <item>@string/settings_update_stable</item>
         <item>@string/settings_update_beta</item>
-<<<<<<< HEAD
-=======
         <item>@string/settings_update_debug</item>
         <item>@string/settings_update_custom</item>
     </string-array>
@@ -76,6 +74,5 @@
         <item>@string/color_mode_system</item>
         <item>@string/color_mode_light</item>
         <item>@string/color_mode_dark</item>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     </string-array>
 </resources>

@@ -12,7 +12,9 @@
     <string name="metro_tile_content_summary">从开始屏幕添加或删除 Root 应用与磁贴组</string>
     <string name="metro_tile_add">增加磁贴</string>
     <string name="metro_tile_delete">删除磁贴</string>
-    <string name="metro_tile_restore">恢复内置磁贴</string>
+    <string name="metro_tile_restore">修改主页磁贴</string>
+    <string name="metro_edit_tiles_summary">显示或隐藏内置磁贴，并将应用与 Magisk 页面固定到开始屏幕</string>
+    <string name="metro_start_tiles">开始磁贴</string>
     <string name="metro_tile_name">磁贴名称</string>
     <string name="metro_tile_ticker">动态滚动列表内容</string>
     <string name="metro_invalid_tile">单个磁贴最多选择 9 个应用</string>
@@ -93,13 +95,6 @@
     <string name="metro_back">返回</string>
     <string name="metro_tile_customize">自定义开始屏幕磁贴</string>
     <string name="metro_tile_customize_summary">在手机开始屏幕上调整磁贴大小和位置</string>
-    <string name="metro_tile_grid">开始屏幕网格</string>
-    <string name="metro_tile_grid_summary">选择手机磁贴基底布局</string>
-    <string-array name="metro_tile_grid_entries">
-        <item>3 × 6</item>
-        <item>4 × 6</item>
-        <item>4 × 8</item>
-    </string-array>
 
     <string-array name="metro_dark_mode_entries">
         <item>跟随系统</item>
@@ -113,6 +108,25 @@
     <string name="metro_tile_group_open">打开</string>
     <string name="metro_tile_group_empty">该磁贴组暂无应用</string>
     <string name="metro_tile_add_builtin">恢复默认磁贴</string>
+
+    <!-- 修改主页磁贴 -->
+    <string name="metro_edit_tiles_title">修改主页磁贴</string>
+    <string name="metro_edit_tiles_builtin">内置磁贴</string>
+    <string name="metro_edit_tiles_custom">自定义磁贴</string>
+    <string name="metro_edit_tiles_add">添加磁贴</string>
+    <string name="metro_edit_tiles_add_app">添加应用磁贴</string>
+    <string name="metro_edit_tiles_add_group">添加磁贴组</string>
+    <string name="metro_edit_tiles_add_setting">添加 Magisk 磁贴</string>
+    <string name="metro_edit_tiles_hidden">已隐藏</string>
+    <string name="metro_edit_tiles_visible">已显示</string>
+    <string name="metro_edit_tiles_no_custom">暂无自定义磁贴</string>
+    <string name="metro_edit_tiles_delete">删除</string>
+    <string name="metro_edit_tiles_pick_app">选择一个应用</string>
+    <string name="metro_edit_tiles_pick_apps">最多选择 9 个应用</string>
+    <string name="metro_edit_tiles_selected">已选 %1$d 个</string>
+    <string name="metro_edit_tiles_confirm">完成</string>
+    <string name="metro_edit_tiles_no_apps">没有可用应用</string>
+    <string name="metro_edit_tiles_lockout">设置磁贴不能被隐藏</string>
 
     <!-- 常驻模块 -->
     <string name="metro_persistent">常驻模块</string>

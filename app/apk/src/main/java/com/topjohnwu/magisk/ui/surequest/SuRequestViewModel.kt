@@ -15,14 +15,6 @@ import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ALLOW
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.DENY
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ZERO
 import com.topjohnwu.magisk.core.su.SuRequestHandler
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.set
-import com.topjohnwu.magisk.events.AuthEvent
-import com.topjohnwu.magisk.events.DieEvent
-import com.topjohnwu.magisk.events.ShowUIEvent
-import com.topjohnwu.magisk.utils.TextHolder
-=======
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,7 +75,7 @@ class SuRequestViewModel(
     fun grantOncePressed() {
         cancelTimer()
         if (Config.suAuth) {
-            AuthEvent { respondOnce(ALLOW) }.publish()
+            authenticate { respondOnce(ALLOW) }
         } else {
             respondOnce(ALLOW)
         }
@@ -93,7 +85,7 @@ class SuRequestViewModel(
     fun zeroPressed() {
         cancelTimer()
         if (Config.suAuth) {
-            AuthEvent { respondZero() }.publish()
+            authenticate { respondZero() }
         } else {
             respondZero()
         }
@@ -170,9 +162,16 @@ class SuRequestViewModel(
             responded = true
             val pos = _uiState.value.selectedItemPosition
             runBlocking(Dispatchers.IO) {
-                handler.respond(DENY, Config.Value.TIMEOUT_LIST[pos])
+                handler.respond(DENY, timeoutAt(pos))
             }
         }
+    }
+
+    /** Resolves a slider position to a timeout, tolerating the level-0 sentinel: that slot has
+     * no timeout of its own, so fall back to the default rather than indexing out of bounds. */
+    private fun timeoutAt(pos: Int): Long {
+        val list = Config.Value.TIMEOUT_LIST
+        return if (pos in list.indices) list[pos] else 0
     }
 
     private fun respond(action: Int) {
@@ -185,7 +184,7 @@ class SuRequestViewModel(
         timeoutPrefs.edit { putInt(pkg, pos) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            handler.respond(action, Config.Value.TIMEOUT_LIST[pos])
+            handler.respond(action, timeoutAt(pos))
             withContext(Dispatchers.Main) {
                 finishActivity()
             }
@@ -193,14 +192,22 @@ class SuRequestViewModel(
     }
 
     private fun respondZero() {
-        if (!initialized) {
+        if (!initialized || responded) {
             return
         }
-
+        responded = true
         timer.cancel()
-        viewModelScope.launch {
+
+        // Remember the choice the same way a normal grant remembers its timeout.
+        val pkg = _uiState.value.packageName
+        val pos = _uiState.value.selectedItemPosition
+        timeoutPrefs.edit { putInt(pkg, pos) }
+
+        viewModelScope.launch(Dispatchers.IO) {
             handler.respond(ZERO, 0)
-            DieEvent().publish()
+            withContext(Dispatchers.Main) {
+                finishActivity()
+            }
         }
     }
 
@@ -212,7 +219,7 @@ class SuRequestViewModel(
         timer.cancel()
         viewModelScope.launch {
             handler.respond(action, -1)
-            DieEvent().publish()
+            finishActivity()
         }
     }
 
@@ -238,35 +245,5 @@ class SuRequestViewModel(
             _uiState.update { it.copy(denyCountdown = 0) }
             respond(DENY)
         }
-<<<<<<< HEAD
-
-    }
-
-    inner class DenyText : TextHolder() {
-        var seconds = 0
-            set(value) = set(value, field, { field = it }, BR.denyText)
-
-        override fun getText(resources: Resources): CharSequence {
-            return if (seconds != 0)
-                "${resources.getString(R.string.deny)} ($seconds)"
-            else
-                resources.getString(R.string.deny)
-        }
-    }
-
-    // Invisible for accessibility services
-    object EmptyAccessibilityDelegate : View.AccessibilityDelegate() {
-        override fun sendAccessibilityEvent(host: View, eventType: Int) {}
-        override fun performAccessibilityAction(host: View, action: Int, args: Bundle?) = true
-        override fun sendAccessibilityEventUnchecked(host: View, event: AccessibilityEvent) {}
-        override fun dispatchPopulateAccessibilityEvent(host: View, event: AccessibilityEvent) = true
-        override fun onPopulateAccessibilityEvent(host: View, event: AccessibilityEvent) {}
-        override fun onInitializeAccessibilityEvent(host: View, event: AccessibilityEvent) {}
-        override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {}
-        override fun addExtraDataToAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo, extraDataKey: String, arguments: Bundle?) {}
-        override fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: AccessibilityEvent): Boolean = false
-        override fun getAccessibilityNodeProvider(host: View): AccessibilityNodeProvider? = null
-=======
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 }

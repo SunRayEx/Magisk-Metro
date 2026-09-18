@@ -9,8 +9,8 @@ import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.download.Subject
 import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.model.module.OnlineModule
-import com.topjohnwu.magisk.core.utils.TextHolder
-import com.topjohnwu.magisk.core.utils.asText
+import com.topjohnwu.magisk.utils.TextHolder
+import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.magisk.ui.flash.FlashUtils
 import com.topjohnwu.magisk.ui.navigation.Route
 import com.topjohnwu.magisk.utils.asFlow
@@ -121,14 +121,6 @@ class ModuleViewModel : AsyncLoadViewModel() {
         navigateTo(Route.Action(id, name))
     }
 
-<<<<<<< HEAD
-    fun openWebUi(id: String, name: String) {
-        MainDirections.actionWebUiFragment(id, name).navigate()
-    }
-
-    companion object {
-        private val uri = MutableLiveData<Uri?>()
-=======
     fun toggleEnabled(item: ModuleItem) {
         val newEnabled = !item.isEnabled
         item.module.enable = newEnabled
@@ -151,6 +143,5 @@ class ModuleViewModel : AsyncLoadViewModel() {
                 }
             )
         }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 }

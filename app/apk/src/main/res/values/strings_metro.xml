@@ -12,7 +12,9 @@
     <string name="metro_tile_content_summary">Add or remove rooted apps and tile groups from Start</string>
     <string name="metro_tile_add">Add tile</string>
     <string name="metro_tile_delete">Delete tile</string>
-    <string name="metro_tile_restore">Restore built-in tiles</string>
+    <string name="metro_tile_restore">Edit home tiles</string>
+    <string name="metro_edit_tiles_summary">Show or hide built-in tiles, and pin apps and Magisk destinations to Start</string>
+    <string name="metro_start_tiles">Start tiles</string>
     <string name="metro_tile_name">Tile name</string>
     <string name="metro_tile_ticker">Rolling list content</string>
     <string name="metro_invalid_tile">Select at most 9 apps for one tile</string>
@@ -93,13 +95,6 @@
     <string name="metro_back">back</string>
     <string name="metro_tile_customize">Customize Start tiles</string>
     <string name="metro_tile_customize_summary">Resize and rearrange tiles on the phone Start screen</string>
-    <string name="metro_tile_grid">Start screen grid</string>
-    <string name="metro_tile_grid_summary">Choose the phone tile base layout</string>
-    <string-array name="metro_tile_grid_entries">
-        <item>3 × 6</item>
-        <item>4 × 6</item>
-        <item>4 × 8</item>
-    </string-array>
 
     <string-array name="metro_dark_mode_entries">
         <item>Follow system</item>
@@ -113,6 +108,25 @@
     <string name="metro_tile_group_open">open</string>
     <string name="metro_tile_group_empty">This group has no apps</string>
     <string name="metro_tile_add_builtin">Restore built-in tiles</string>
+
+    <!-- Edit tiles -->
+    <string name="metro_edit_tiles_title">Edit home tiles</string>
+    <string name="metro_edit_tiles_builtin">Built-in tiles</string>
+    <string name="metro_edit_tiles_custom">Custom tiles</string>
+    <string name="metro_edit_tiles_add">Add a tile</string>
+    <string name="metro_edit_tiles_add_app">Add an app tile</string>
+    <string name="metro_edit_tiles_add_group">Add a tile group</string>
+    <string name="metro_edit_tiles_add_setting">Add a Magisk tile</string>
+    <string name="metro_edit_tiles_hidden">Hidden</string>
+    <string name="metro_edit_tiles_visible">Shown</string>
+    <string name="metro_edit_tiles_no_custom">No custom tiles yet</string>
+    <string name="metro_edit_tiles_delete">Delete</string>
+    <string name="metro_edit_tiles_pick_app">Pick an app</string>
+    <string name="metro_edit_tiles_pick_apps">Pick up to 9 apps</string>
+    <string name="metro_edit_tiles_selected">%1$d selected</string>
+    <string name="metro_edit_tiles_confirm">Done</string>
+    <string name="metro_edit_tiles_no_apps">No apps available</string>
+    <string name="metro_edit_tiles_lockout">The Settings tile cannot be hidden</string>
 
     <!-- Persistent modules -->
     <string name="metro_persistent">persistent</string>

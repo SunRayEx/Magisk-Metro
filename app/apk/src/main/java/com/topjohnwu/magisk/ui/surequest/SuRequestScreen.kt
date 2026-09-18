@@ -40,10 +40,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
+import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.superuser.SharedUidBadge
 import com.topjohnwu.magisk.core.R as CoreR
+import com.topjohnwu.magisk.R
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -62,17 +64,21 @@ fun SuRequestScreen(
     val denyCountdown = uiState.denyCountdown
     val selectedPosition = uiState.selectedItemPosition
     val timeoutEntries = stringArrayResource(CoreR.array.allow_timeout).toList()
-    // Slider order: Once(1), 10min(2), 20min(3), 30min(4), 60min(5), Forever(0)
-    val sliderToIndex = intArrayOf(1, 2, 3, 4, 5, 0)
-    val indexToSlider = remember {
-        IntArray(sliderToIndex.size).also { arr ->
+    // A sentinel outside the valid timeout indices that marks the level-0 slot. It is persisted
+    // alongside real timeouts so the slider reopens where the user left it.
+    val zeroPosition = Config.Value.TIMEOUT_LIST.size
+    // Slider order: Zero, Once(1), 10min(2), 20min(3), 30min(4), 60min(5), Forever(0)
+    val sliderToIndex = remember { intArrayOf(zeroPosition, 1, 2, 3, 4, 5, 0) }
+    val indexToSlider = remember(zeroPosition) {
+        IntArray(zeroPosition + 1).also { arr ->
             sliderToIndex.forEachIndexed { slider, orig -> arr[orig] = slider }
         }
     }
     val sliderValue = indexToSlider[selectedPosition].toFloat()
-    val sliderLabel by remember(sliderValue) {
-        derivedStateOf { timeoutEntries[sliderToIndex[sliderValue.toInt()]] }
-    }
+    val isZeroGrant = selectedPosition == zeroPosition
+    val zeroLabel = stringResource(R.string.metro_su_zero)
+    val sliderLabel = if (isZeroGrant) zeroLabel
+        else timeoutEntries[sliderToIndex[sliderValue.toInt()]]
 
     val denyText = if (denyCountdown > 0) {
         "${stringResource(CoreR.string.deny)} ($denyCountdown)"
@@ -123,7 +129,15 @@ fun SuRequestScreen(
         confirmButton = {
             TextButton(
                 enabled = grantEnabled,
-                onClick = { viewModel.grantPressed() },
+                onClick = {
+                    // The far-left slider stop is the deceptive grant: a root identity with no
+                    // real privileges. Route it to its own responder instead of a normal allow.
+                    if (isZeroGrant) {
+                        viewModel.zeroPressed()
+                    } else {
+                        viewModel.grantPressed()
+                    }
+                },
                 modifier = if (uiState.useTapjackProtection) {
                     Modifier.pointerInteropFilter { event ->
                         if (event.flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED != 0 ||
@@ -190,6 +204,18 @@ fun SuRequestScreen(
                     .fillMaxWidth()
                     .padding(start = 4.dp),
             )
+            // Explain the deceptive grant inline so the user knows the shell gets a root
+            // identity without any real privileges.
+            if (isZeroGrant) {
+                Text(
+                    text = stringResource(R.string.metro_su_zero_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, top = 2.dp),
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Slider(
                 value = sliderValue,
@@ -198,8 +224,9 @@ fun SuRequestScreen(
                     val pos = value.toInt().coerceIn(0, sliderToIndex.lastIndex)
                     viewModel.setSelectedItemPosition(sliderToIndex[pos])
                 },
-                valueRange = 0f..5f,
-                steps = 4,
+                // 7 stops: level 0 on the far left, then the 6 timeout choices.
+                valueRange = 0f..6f,
+                steps = 5,
                 modifier = Modifier.fillMaxWidth()
             )
         }

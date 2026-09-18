@@ -17,29 +17,19 @@
     <string name="loading">Учитавање…</string>
     <string name="update">Ажурирање</string>
     <string name="not_available">N/A</string>
-<<<<<<< HEAD
     <string name="hide">Сакриј</string>
     <string name="home_package">Пакет</string>
     <string name="home_app_title">Апл.</string>
-=======
-    <string name="hide">Сакриј</string>    <string name="home_package">Пакет</string>
-    <string name="home_app_title">Апл.</string>    <string name="reinstall">Поново инсталирај</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
+    <string name="reinstall">Поново инсталирај</string>
     <string name="home_notice_content">Преузмите Magisk САМО са званичне GitHub странице. Фајлови из непознатих извора могу бити малициозни!</string>
     <string name="home_support_title">Подржите нас</string>
     <string name="home_follow_title">Запратите нас</string>
     <string name="home_item_source">Извор</string>
-<<<<<<< HEAD
-    <string name="home_support_content">Magisk јесте и увек ће бити бесплатан и open source. Међутим, можете показати да вам је стало својом донацијом.</string>
+    <string name="home_support_content">Magisk јесте и увек ће бити бесплатан и open source. Међутим, можете показати да Вам је стало својом донацијом.</string>
     <string name="home_installed_version">Инсталирано</string>
     <string name="home_latest_version">Најновије</string>
     <string name="invalid_update_channel">Невалидан канал ажурирања</string>
     <string name="uninstall_magisk_title">Деинсталирај Magisk</string>
-=======
-    <string name="home_support_content">Magisk јесте и увек ће бити бесплатан и open source. Међутим, можете показати да Вам је стало својом донацијом.</string>    <string name="home_installed_version">Инсталирано</string>
-    <string name="home_latest_version">Најновије</string>
-    <string name="invalid_update_channel">Невалидан канал ажурирања</string>    <string name="uninstall_magisk_title">Деинсталирај Magisk</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="uninstall_magisk_msg">Сви модули ће бити онемогућени/уклоњени!\nКорен ће бити уклоњен!\nСвако неенкриптовано интерно складиште ће употребом Magisk-а бити поново енкриптовано!</string>
 
     <!--Install-->
@@ -51,13 +41,9 @@
     <string name="install_next">Наредно</string>
     <string name="install_start">Почнимо</string>
     <string name="manager_download_install">Притисни да преузмеш и инсталираш</string>
-<<<<<<< HEAD
     <string name="direct_install">Директна инсталација (Препоручено)</string>
     <string name="install_inactive_slot">Инсталација на неактиван слот (Након OTA)</string>
     <string name="install_inactive_slot_msg">Ваш уређај ће бити ФОРСИРАН да се покрене на тренутно неактивном слоту након поновног покретања!\nКористите опцију само кад се OTA заврши.\nНастави?</string>
-=======
-    <string name="direct_install">Директна инсталација (Препоручено)</string>    <string name="install_inactive_slot">Инсталација на неактиван слот (Након OTA)</string>    <string name="install_inactive_slot_msg">Ваш уређај ће бити ФОРСИРАН да се покрене на тренутно неактивном слоту након поновног покретања!\nКористите опцију само кад се OTA заврши.\nНастави?</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="setup_title">Додатне поставке</string>
     <string name="select_patch_file">Изаберите фајл</string>
     <string name="patch_file_msg">Изаберите слику (*.img) или ODIN tarfile (*.tar) или payload.bin (*.bin)</string>
@@ -99,12 +85,10 @@
     <string name="log_data_magisk_none">Magisk логови су празни, то је чудно.</string>
     <string name="menuSaveLog">Сачувај лог</string>
     <string name="menuClearLog">Уклони лог</string>
-<<<<<<< HEAD
     <string name="logs_cleared">Лог успешно уклоњен</string>
-=======
-    <string name="logs_cleared">Лог успешно уклоњен</string>    <string name="back">Назад</string>    <string name="enabled">Омогућено</string>
+    <string name="back">Назад</string>
+    <string name="enabled">Омогућено</string>
     <string name="disabled">Онемогућено</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="pid">PID: %1$d</string>
     <string name="target_uid">Циљани UID: %1$d</string>
     <string name="target_pid">Циљани PID: %s</string>

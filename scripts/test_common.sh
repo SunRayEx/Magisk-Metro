@@ -8,14 +8,8 @@ export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
 export ANDROID_AVD_HOME="$ANDROID_EMULATOR_HOME/avd"
 export PATH="$PATH:$ANDROID_HOME/platform-tools"
 
-<<<<<<< HEAD
-emu="$ANDROID_HOME/emulator/emulator"
-sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-avd="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-=======
 cmdline_tools="$ANDROID_HOME/cmdline-tools/latest"
 android="$cmdline_tools/bin/android"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
 boot_timeout=100
 

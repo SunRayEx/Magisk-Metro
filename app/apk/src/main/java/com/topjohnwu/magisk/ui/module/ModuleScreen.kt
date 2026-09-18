@@ -327,7 +327,7 @@ private fun ModuleCard(
                 if (item.showNotice) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = textHolder(item.noticeText),
+                        text = textHolder(item.noticeText).toString(),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         color = colorScheme.primary,

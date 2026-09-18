@@ -50,6 +50,7 @@ import com.topjohnwu.magisk.ui.component.SettingsDropdown
 import com.topjohnwu.magisk.ui.component.SettingsSwitch
 import com.topjohnwu.magisk.ui.component.SmallTitle
 import com.topjohnwu.magisk.ui.component.verticalScrollbar
+import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.R as CoreR
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +81,7 @@ fun SettingsScreen(
         ) {
             CustomizationSection(viewModel = viewModel)
             Spacer(Modifier.height(16.dp))
-            AppSettingsSection()
+            AppSettingsSection(viewModel = viewModel)
             if (Info.env.isActive) {
                 Spacer(Modifier.height(16.dp))
                 MagiskSection(viewModel = viewModel)
@@ -96,7 +97,7 @@ fun SettingsScreen(
 // --- Customization ---
 
 @Composable
-private fun CustomizationSection(
+internal fun CustomizationSection(
     viewModel: SettingsViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -108,6 +109,18 @@ private fun CustomizationSection(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
+        // Metro theme chooser: previews every packaged, wallpaper and custom theme.
+        SettingsArrow(
+            title = stringResource(CoreR.string.section_theme),
+            summary = stringResource(R.string.metro_theme_summary),
+            onClick = { viewModel.navigateToTheme() },
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+
         if (LocaleSetting.useLocaleManager) {
             val locale = LocaleSetting.instance.appLocale
             val summary = locale?.getDisplayName(locale) ?: stringResource(CoreR.string.system_default)
@@ -180,12 +193,48 @@ private fun CustomizationSection(
             )
         }
     }
+
+    // --- Start tile customization ---
+    SmallTitle(
+        text = stringResource(R.string.metro_start_tiles),
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        val resources = LocalResources.current
+        val tileCustomization by viewModel.tileCustomization.collectAsStateWithLifecycle()
+        SettingsSwitch(
+            title = stringResource(R.string.metro_tile_customize),
+            summary = stringResource(R.string.metro_tile_customize_summary),
+            checked = tileCustomization,
+            onCheckedChange = { viewModel.toggleTileCustomization(it) },
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+        // The grid is a single fixed shape (portrait 3 columns, landscape 4 rows) with no
+        // variants, so there is nothing to choose and no row is shown for it.
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+        SettingsArrow(
+            title = stringResource(R.string.metro_tile_restore),
+            summary = stringResource(R.string.metro_edit_tiles_summary),
+            onClick = { viewModel.navigateToEditTiles() },
+        )
+    }
 }
 
 // --- App Settings ---
 
 @Composable
-private fun AppSettingsSection(
+internal fun AppSettingsSection(
+    viewModel: SettingsViewModel,
     modifier: Modifier = Modifier
 ) {
     val resources = LocalResources.current
@@ -307,13 +356,40 @@ private fun AppSettingsSection(
                 Config.randName = it
             }
         )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+
+        // Persistent modules (master switch)
+        val persistentModules by viewModel.persistentModules.collectAsStateWithLifecycle()
+        SettingsSwitch(
+            title = stringResource(R.string.metro_persistent_title),
+            summary = stringResource(R.string.metro_persistent_summary),
+            checked = persistentModules,
+            enabled = Info.env.isActive,
+            onCheckedChange = { viewModel.togglePersistentModules(it) }
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+
+        // Configure persistent modules
+        SettingsArrow(
+            title = stringResource(R.string.metro_persistent),
+            summary = stringResource(R.string.metro_persistent_summary),
+            onClick = { viewModel.navigateToPersistentModules() }
+        )
     }
 }
 
 // --- Magisk ---
 
 @Composable
-private fun MagiskSection(
+internal fun MagiskSection(
     viewModel: SettingsViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -377,6 +453,21 @@ private fun MagiskSection(
                 summary = stringResource(CoreR.string.settings_denylist_config_summary),
                 onClick = { viewModel.navigateToDenyList() }
             )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+
+            // Ghost sandbox: seccomp BPF hardening for deny-listed apps
+            val ghostSandbox by viewModel.ghostSandbox.collectAsStateWithLifecycle()
+            SettingsSwitch(
+                title = stringResource(R.string.metro_denylist_sandbox),
+                summary = stringResource(R.string.metro_denylist_sandbox_summary),
+                checked = ghostSandbox,
+                enabled = Info.env.isActive,
+                onCheckedChange = { viewModel.toggleGhostSandbox(it) }
+            )
         }
     }
 }
@@ -384,7 +475,7 @@ private fun MagiskSection(
 // --- Superuser ---
 
 @Composable
-private fun SuperuserSection(
+internal fun SuperuserSection(
     viewModel: SettingsViewModel,
     modifier: Modifier = Modifier
 ) {

@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
@@ -95,6 +96,9 @@ object MediaStoreUtils {
     }
 
     fun Uri.inputStream() = cr.openInputStream(this) ?: throw FileNotFoundException()
+
+    fun Uri.openFd(): ParcelFileDescriptor =
+        cr.openFileDescriptor(this, "r") ?: throw FileNotFoundException()
 
     fun Uri.outputStream() = cr.openOutputStream(this, "rwt") ?: throw FileNotFoundException()
 

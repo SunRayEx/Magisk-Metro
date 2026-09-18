@@ -6,13 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.AsyncLoadViewModel
 import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.ktx.concurrentMap
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.bindExtra
-import com.topjohnwu.magisk.databinding.filterList
-import com.topjohnwu.magisk.databinding.addOnPropertyChangedCallback
-import com.topjohnwu.magisk.databinding.set
-=======
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,30 +54,6 @@ data class DenyAppState(
 
 class DenyListViewModel : AsyncLoadViewModel() {
 
-<<<<<<< HEAD
-    enum class AppFilter {
-        USER,
-        SYSTEM,
-    }
-
-    enum class SortOrder {
-        INSTALL_TIME,
-        ALPHABETICAL,
-    }
-
-    private var allItems = emptyList<DenyListRvItem>()
-
-    var appFilter = AppFilter.USER
-        set(value) {
-            field = value
-            doQuery(query)
-        }
-
-    var sortOrder = SortOrder.INSTALL_TIME
-        set(value) {
-            field = value
-            doQuery(query)
-=======
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
@@ -133,7 +102,6 @@ class DenyListViewModel : AsyncLoadViewModel() {
             SortBy.PACKAGE_NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.info.packageName }
             SortBy.INSTALL_TIME -> compareByDescending { it.info.firstInstallTime }
             SortBy.UPDATE_TIME -> compareByDescending { it.info.lastUpdateTime }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
         val comparator = compareBy<DenyAppState> { !it.initiallyChecked }
             .then(if (reverse) secondary.reversed() else secondary)
@@ -212,12 +180,11 @@ class DenyListViewModel : AsyncLoadViewModel() {
         }
     }
 
-    @get:Bindable
     var stateRevision = 0
-        private set(value) = set(value, field, { field = it }, BR.stateRevision)
+        private set
 
     fun isDenied(packageName: String): Boolean =
-        allItems.any { it.info.packageName == packageName && it.itemsChecked > 0 }
+        _allApps.value.any { it.info.packageName == packageName && it.itemsChecked > 0 }
 
     @SuppressLint("InlinedApi")
     override suspend fun doLoadWork() {
@@ -234,44 +201,6 @@ class DenyListViewModel : AsyncLoadViewModel() {
                     .concurrentMap { DenyAppState(it) }
                     .toCollection(ArrayList(size + 1))
             }
-<<<<<<< HEAD
-            apps
-        }
-        allItems = apps
-        apps.forEach { item ->
-            item.addOnPropertyChangedCallback(BR.checkedPercent) {
-                stateRevision++
-                doQuery(query)
-            }
-        }
-        doQuery(query)
-    }
-
-    private fun doQuery(s: String) {
-        val comparator = compareBy<DenyListRvItem> { it.itemsChecked == 0 }
-            .thenByDescending {
-                if (sortOrder == SortOrder.INSTALL_TIME) it.info.installTime else 0L
-            }
-            .thenBy {
-                if (sortOrder == SortOrder.ALPHABETICAL) it.info.label.lowercase(Locale.ROOT) else ""
-            }
-            .thenBy { it.info.packageName }
-        val filtered = allItems.asSequence().filter {
-            val matchesAppType = when (appFilter) {
-                AppFilter.USER -> !it.info.isSystemApp()
-                AppFilter.SYSTEM -> it.info.isSystemApp()
-            }
-            val matchesQuery = it.info.label.contains(s, true) ||
-                it.info.packageName.contains(s, true) ||
-                it.processes.any { process -> process.process.name.contains(s, true) }
-            matchesAppType && matchesQuery
-        }
-            .sortedWith(comparator)
-            .toList()
-        items.set(filtered)
-        items.filter { true }
-        loading = false
-=======
             apps += DenyAppState(
                 AppProcessInfo.webViewZygote(
                     pm,
@@ -287,6 +216,5 @@ class DenyListViewModel : AsyncLoadViewModel() {
         }
         _allApps.value = apps
         _loading.value = false
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 }

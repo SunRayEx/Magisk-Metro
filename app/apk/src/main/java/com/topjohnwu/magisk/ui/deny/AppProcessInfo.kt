@@ -48,18 +48,11 @@ class AppProcessInfo(
     val label = labelOverride ?: info.getLabel(pm)
     val iconImage: Drawable = runCatching { info.loadIcon(pm) }.getOrDefault(pm.defaultActivityIcon)
     val packageName: String get() = info.packageName
-<<<<<<< HEAD
-    val installTime = runCatching {
-        pm.getPackageInfo(info.packageName, MATCH_UNINSTALLED_PACKAGES).firstInstallTime
-    }.getOrDefault(0L)
-    val processes = fetchProcesses(pm)
-=======
     var firstInstallTime: Long = 0L
         private set
     var lastUpdateTime: Long = 0L
         private set
     val processes = processesOverride ?: fetchProcesses(pm)
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     override fun compareTo(other: AppProcessInfo) = comparator.compare(this, other)
 

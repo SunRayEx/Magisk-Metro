@@ -4,20 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
 import androidx.core.net.toUri
-<<<<<<< HEAD
-import androidx.databinding.Bindable
-import com.topjohnwu.magisk.BR
-import com.topjohnwu.magisk.MainDirections
-import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.arch.ActivityExecutor
-import com.topjohnwu.magisk.arch.AsyncLoadViewModel
-import com.topjohnwu.magisk.arch.ContextExecutor
-import com.topjohnwu.magisk.arch.UIActivity
-import com.topjohnwu.magisk.arch.ViewEvent
-=======
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.AsyncLoadViewModel
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.BuildConfig
 
@@ -26,17 +14,7 @@ import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.ktx.await
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.repository.NetworkService
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.bindExtra
-import com.topjohnwu.magisk.databinding.set
-import com.topjohnwu.magisk.dialog.EnvFixDialog
-import com.topjohnwu.magisk.dialog.ManagerInstallDialog
-import com.topjohnwu.magisk.dialog.UninstallDialog
-import com.topjohnwu.magisk.events.SnackbarEvent
-import com.topjohnwu.magisk.utils.asText
-=======
 import com.topjohnwu.magisk.utils.asFlow
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,31 +69,9 @@ class HomeViewModel(
                 ""
         }
 
-<<<<<<< HEAD
-    @get:Bindable
-    var managerRemoteVersion = CoreR.string.loading.asText()
-        set(value) = set(value, field, { field = it }, BR.managerRemoteVersion)
-
-    val managerInstalledVersion
-        get() = "${BuildConfig.APP_VERSION_NAME} (${BuildConfig.APP_VERSION_CODE})" +
-            if (BuildConfig.DEBUG) " (D)" else ""
-
-    val rooted get() = Info.isRooted
-
-    val zygiskEnabled get() = Info.isZygiskEnabled
-    val ramdisk get() = Info.ramdisk
-
-    @get:Bindable
-    var stateManagerProgress = 0
-        set(value) = set(value, field, { field = it }, BR.stateManagerProgress)
-
-    val extraBindings = bindExtra {
-        it.put(BR.viewModel, this)
-=======
         fun computeManagerInstalledVersion() =
             "${BuildConfig.APP_VERSION_NAME} (${BuildConfig.APP_VERSION_CODE})" +
                 if (BuildConfig.DEBUG) " (D)" else ""
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 
     init {
@@ -136,14 +92,6 @@ class HomeViewModel(
             )
         }
         Info.fetchUpdate(svc)?.apply {
-<<<<<<< HEAD
-            appState = when {
-                BuildConfig.APP_VERSION_CODE < versionCode -> State.OUTDATED
-                else -> State.UP_TO_DATE
-            }
-
-            managerRemoteVersion = "$version (${versionCode})".asText()
-=======
             val isDebug = Config.updateChannel == Config.Value.DEBUG_CHANNEL
             _uiState.update {
                 it.copy(
@@ -151,7 +99,6 @@ class HomeViewModel(
                     managerRemoteVersion = "$version ($versionCode)" + if (isDebug) " (D)" else ""
                 )
             }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         } ?: run {
             _uiState.update { it.copy(appState = State.INVALID, managerRemoteVersion = "") }
         }
@@ -168,14 +115,6 @@ class HomeViewModel(
         }
     }
 
-<<<<<<< HEAD
-    fun onMagiskPressed() = withExternalRW {
-        MainDirections.actionSectionPivotFragment("MAGISK").navigate()
-    }
-
-    fun onInstallPressed() = withExternalRW {
-        MainDirections.actionInstallFragment().navigate()
-=======
     fun onDeletePressed() {
         _uiState.update { it.copy(showUninstall = true) }
     }
@@ -206,7 +145,6 @@ class HomeViewModel(
 
     fun onEnvFixConsumed() {
         _uiState.update { it.copy(envFixCode = 0) }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     }
 
     fun hideNotice() {

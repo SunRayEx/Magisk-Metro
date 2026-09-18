@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -86,7 +88,7 @@ fun MetroContributorScreen(onLinkClick: (String) -> Unit) {
                     )
                 }
                 Icon(
-                    painter = painterResource(com.topjohnwu.magisk.R.drawable.ic_forth_md2),
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),
@@ -127,7 +129,7 @@ fun MetroContributorScreen(onLinkClick: (String) -> Unit) {
                     )
                 }
                 Icon(
-                    painter = painterResource(com.topjohnwu.magisk.R.drawable.ic_forth_md2),
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp),

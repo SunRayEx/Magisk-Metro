@@ -208,14 +208,10 @@ fn parse_sterm<'a>(tokens: &mut Tokens<'a>) -> ParseResult<'a, Vec<&'a str>> {
     }
 }
 
-<<<<<<< HEAD
-=======
 fn parse_xperm_hex(s: &str) -> Option<u16> {
     s.strip_prefix("0x")
         .and_then(|s| u16::from_str_radix(s, 16).ok())
 }
-
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 // xperm ::= HX(low) { Xperm{low, high: low, reset: false} };
 // xperm ::= HX(low) HP HX(high) { Xperm{low, high, reset: false} };
 fn parse_xperm<'a>(tokens: &mut Tokens<'a>) -> ParseResult<'a, Xperm> {
@@ -289,14 +285,11 @@ fn parse_xperms<'a>(tokens: &mut Tokens<'a>) -> ParseResult<'a, Vec<Xperm>> {
                 reset: true,
             });
         }
-<<<<<<< HEAD
-=======
         Some(Token::HX(_)) => {
             let mut xperm = parse_xperm(tokens)?;
             xperm.reset = reset;
             xperms.push(xperm);
         }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         _ => throw!(),
     }
     Ok(xperms)
@@ -356,10 +349,6 @@ fn extract_token<'a>(s: &'a str, tokens: &mut Vec<Token<'a>>) {
             } else if let Some(s) = s.strip_prefix('~') {
                 tokens.push(Token::TL);
                 extract_token(s, tokens);
-<<<<<<< HEAD
-            } else if let Some(s) = s.strip_prefix("0x") {
-                tokens.push(Token::HX(s.parse().unwrap_or(0)));
-=======
             } else if let Some(idx) = s.find('-')
                 && parse_xperm_hex(&s[..idx]).is_some()
             {
@@ -369,7 +358,6 @@ fn extract_token<'a>(s: &'a str, tokens: &mut Vec<Token<'a>>) {
                 extract_token(&b[1..], tokens);
             } else if let Some(n) = parse_xperm_hex(s) {
                 tokens.push(Token::HX(n));
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
             } else {
                 tokens.push(Token::ID(s));
             }

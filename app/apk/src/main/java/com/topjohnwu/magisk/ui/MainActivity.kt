@@ -6,16 +6,18 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.res.Configuration
+import android.os.Build
+import android.app.Activity
 import android.os.Bundle
-<<<<<<< HEAD
-import android.view.View
-=======
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,13 +28,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.pm.ShortcutManagerCompat
-<<<<<<< HEAD
-import androidx.core.view.isVisible
-=======
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -40,13 +39,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.topjohnwu.magisk.R
-<<<<<<< HEAD
-import com.topjohnwu.magisk.arch.BaseViewModel
-import com.topjohnwu.magisk.arch.NavigationActivity
-import com.topjohnwu.magisk.arch.viewModel
-=======
 import com.topjohnwu.magisk.arch.VMFactory
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
@@ -56,12 +49,6 @@ import com.topjohnwu.magisk.core.base.SplashScreenHost
 import com.topjohnwu.magisk.core.isRunningAsStub
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.tasks.AppMigration
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.ActivityMainMd2Binding
-import com.topjohnwu.magisk.ui.theme.MetroAccentRole
-import com.topjohnwu.magisk.ui.theme.Theme
-import com.topjohnwu.magisk.view.MagiskDialog
-=======
 import com.topjohnwu.magisk.core.wrap
 import com.topjohnwu.magisk.ui.component.rememberConfirmDialog
 import com.topjohnwu.magisk.ui.deny.DenyListScreen
@@ -69,6 +56,9 @@ import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.flash.FlashScreen
 import com.topjohnwu.magisk.ui.flash.FlashUtils
 import com.topjohnwu.magisk.ui.flash.FlashViewModel
+import com.topjohnwu.magisk.ui.home.HomeViewModel
+import com.topjohnwu.magisk.ui.log.LogViewModel
+import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.module.ActionScreen
 import com.topjohnwu.magisk.ui.module.ActionViewModel
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
@@ -76,8 +66,20 @@ import com.topjohnwu.magisk.ui.navigation.Navigator
 import com.topjohnwu.magisk.ui.navigation.Route
 import com.topjohnwu.magisk.ui.navigation.rememberNavigator
 import com.topjohnwu.magisk.ui.superuser.SuperuserDetailScreen
+import com.topjohnwu.magisk.ui.home.MetroHomeScreen
+import com.topjohnwu.magisk.ui.home.EditTilesScreen
+import com.topjohnwu.magisk.ui.home.MetroContributorScreen
+import com.topjohnwu.magisk.ui.theme.MetroThemeScreen
+import com.topjohnwu.magisk.ui.theme.MetroColorsScreen
+import com.topjohnwu.magisk.ui.home.TileGroupScreen
+import com.topjohnwu.magisk.ui.module.PersistentScreen
+import com.topjohnwu.magisk.ui.pivot.MetroPivotScreen
+import com.topjohnwu.magisk.ui.pivot.PivotSection
+import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
+import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
+import com.topjohnwu.magisk.ui.theme.METRO_DENSITY_SCALE
+import com.topjohnwu.magisk.ui.theme.Theme
 import com.topjohnwu.magisk.view.Shortcuts
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -88,15 +90,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
 
     override val extension = ActivityExtension(this)
     override val splashController = SplashController(this)
-<<<<<<< HEAD
-    override val snackbarView: View
-        get() {
-            val fragmentOverride = currentFragment?.snackbarView
-            return fragmentOverride ?: super.snackbarView
-        }
-    override val snackbarAnchorView: View?
-        get() = currentFragment?.snackbarAnchorView?.takeIf { it.isVisible }
-=======
 
     private val intentState = MutableStateFlow(0)
     internal val showInvalidState = MutableStateFlow(false)
@@ -104,14 +97,25 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
     internal val showShortcutPrompt = MutableStateFlow(false)
 
     override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(base.wrap())
+        // Windows Phone Metro look: globally scale down the display density so every
+        // screen (View and Compose alike) renders at 0.75x, matching the desired Metro
+        // visual scale without requiring a system-wide DPI change.
+        val wrapped = base.wrap()
+        val config = Configuration(wrapped.resources.configuration)
+        config.densityDpi = (config.densityDpi * METRO_DENSITY_SCALE).toInt()
+        super.attachBaseContext(wrapped.createConfigurationContext(config))
     }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The user's selected Metro theme (Piplup, Rayquaza, ...) is an XML theme; MagisKubeTheme
+        // reads its accent colors from it, so it must be applied at the activity level.
+        setTheme(Theme.selected.themeRes)
+        if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // The library's own OEM whitelist skips many Android 12 devices; apply the overlay directly.
+            setTheme(com.google.android.material.R.style.ThemeOverlay_Material3_DynamicColors_DayNight)
+        }
         extension.onCreate(savedInstanceState)
         splashController.preOnCreate()
-        theme.applyStyle(R.style.Main, true)
         super.onCreate(savedInstanceState)
         splashController.onCreate(savedInstanceState)
     }
@@ -139,27 +143,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
 
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
-<<<<<<< HEAD
-        // Top toolbar + bottom navigation were removed for the Metro redesign. The home screen is
-        // an edge-to-edge Compose tile grid and the four sections live in a Compose pivot that
-        // manages its own status-bar tint, so there is no Activity-level chrome left to wire up.
-
-        val section =
-            if (intent.action == Intent.ACTION_APPLICATION_PREFERENCES)
-                Const.Nav.SETTINGS
-            else
-                intent.getStringExtra(Const.Key.OPEN_SECTION)
-
-        getScreen(section)?.navigate()
-    }
-
-    private fun getScreen(name: String?): NavDirections? {
-        return when (name) {
-            Const.Nav.SUPERUSER -> MainDirections.actionSectionPivotFragment("APPS")
-            Const.Nav.MODULES -> MainDirections.actionSectionPivotFragment("MODULES")
-            Const.Nav.SETTINGS -> MainDirections.actionSectionPivotFragment("SETTINGS")
-            else -> null
-=======
         val initialTab = getInitialTab(intent)
 
         setContent {
@@ -172,22 +155,115 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                         NavDisplay(
                             backStack = navigator.backStack,
                             onBack = { navigator.pop() },
+                            // The Metro screens run their own tile entrance/exit choreography
+                            // (MetroFlipItem stagger + board leave animation), so the nav host's
+                            // own crossfade would double up on top of it.
+                            transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
+                            popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
                             entryDecorators = listOf(
                                 rememberSaveableStateHolderNavEntryDecorator(),
                                 rememberViewModelStoreNavEntryDecorator<Any>()
                             ),
                             entryProvider = entryProvider {
                                 entry<Route.Main> {
+                                    val homeVM: HomeViewModel = viewModel(factory = VMFactory)
+                                    LaunchedEffect(Unit) { homeVM.startLoading() }
+                                    MagisKubeTheme {
+                                        MetroHomeScreen(
+                                            viewModel = homeVM,
+                                            onSettingsClick = { navigator.push(Route.MetroPivot("SETTINGS")) },
+                                            onModulesClick = { navigator.push(Route.MetroPivot("MODULES")) },
+                                            onAppsClick = { navigator.push(Route.MetroPivot("APPS")) },
+                                            onLogsClick = { navigator.push(Route.MetroPivot("LOGS")) },
+                                            onContributorsClick = { navigator.push(Route.Contributors) },
+                                            onMagiskClick = { navigator.push(Route.MetroPivot("MAGISK")) },
+                                        )
+                                    }
+                                }
+                                entry<Route.MetroPivot> { key ->
                                     val superuserVm: SuperuserViewModel = viewModel(
                                         viewModelStoreOwner = this@MainActivity, factory = VMFactory
                                     )
-                                    MainScreen(
-                                        initialTab = initialTab,
-                                        superuserViewModel = superuserVm,
-                                        onAuthenticate = { action ->
-                                            extension.withAuthentication { if (it) action() }
+                                    val homeVM: HomeViewModel = viewModel(factory = VMFactory)
+                                    val logVM: LogViewModel = viewModel(factory = VMFactory)
+                                    val moduleVM: ModuleViewModel = viewModel(factory = VMFactory)
+                                    val settingsVM: SettingsViewModel = viewModel(factory = VMFactory)
+                                    val denyListVM: DenyListViewModel = viewModel(factory = VMFactory)
+                                    LaunchedEffect(Unit) {
+                                        homeVM.startLoading()
+                                        superuserVm.startLoading()
+                                        logVM.startLoading()
+                                        moduleVM.startLoading()
+                                        denyListVM.startLoading()
+                                    }
+                                    LaunchedEffect(Unit) {
+                                        superuserVm.authenticate = { onSuccess ->
+                                            extension.withAuthentication { if (it) onSuccess() }
                                         }
-                                    )
+                                        settingsVM.authenticate = { onSuccess ->
+                                            extension.withAuthentication { if (it) onSuccess() }
+                                        }
+                                    }
+                                    MagisKubeTheme {
+                                        MetroPivotScreen(
+                                            superuserVM = superuserVm,
+                                            logVM = logVM,
+                                            moduleVM = moduleVM,
+                                            settingsVM = settingsVM,
+                                            homeVM = homeVM,
+                                            denyListVM = denyListVM,
+                                            showDenyListInitially = false,
+                                            initialSection = PivotSection.fromName(key.section),
+                                        )
+                                    }
+                                }
+                                entry<Route.TileGroup> { key ->
+                                    MagisKubeTheme {
+                                        TileGroupScreen(key.tileId)
+                                    }
+                                }
+                                entry<Route.PersistentModules> {
+                                    MagisKubeTheme {
+                                        PersistentScreen()
+                                    }
+                                }
+                                entry<Route.EditTiles> {
+                                    MagisKubeTheme {
+                                        EditTilesScreen()
+                                    }
+                                }
+                                entry<Route.Contributors> {
+                                    val homeVM: HomeViewModel = viewModel(factory = VMFactory)
+                                    MagisKubeTheme {
+                                        MetroContributorScreen(onLinkClick = homeVM::onLinkPressed)
+                                    }
+                                }
+                                entry<Route.Theme> {
+                                    val view = LocalView.current
+                                    val navigator = LocalNavigator.current
+                                    MagisKubeTheme {
+                                        MetroThemeScreen(
+                                            onEditCustomColors = { navigator.push(Route.MetroColors) },
+                                            onThemeApplied = {
+                                                // The activity theme is resolved in onCreate, so
+                                                // the whole UI must be recreated for the new
+                                                // palette to take effect.
+                                                (view.context as? Activity)?.recreate()
+                                            },
+                                        )
+                                    }
+                                }
+                                entry<Route.MetroColors> {
+                                    val view = LocalView.current
+                                    MagisKubeTheme {
+                                        MetroColorsScreen(
+                                            onApplied = {
+                                                // Same as a theme switch: the palette is resolved
+                                                // in onCreate, so recreate to repaint everything.
+                                                (view.context as? Activity)?.recreate()
+                                            },
+                                        )
+                                    }
                                 }
                                 entry<Route.DenyList> { _ ->
                                     val vm: DenyListViewModel = viewModel(factory = VMFactory)
@@ -291,29 +367,10 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
             Const.Nav.MODULES -> Tab.MODULES.ordinal
             Const.Nav.SETTINGS -> Tab.SETTINGS.ordinal
             else -> Tab.HOME.ordinal
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
     }
 
     @SuppressLint("InlinedApi")
-<<<<<<< HEAD
-    override fun showInvalidStateMessage(): Unit = runOnUiThread {
-        MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-            setTitle(CoreR.string.unsupport_nonroot_stub_title)
-            setMessage(CoreR.string.unsupport_nonroot_stub_msg)
-            setButton(MagiskDialog.ButtonType.POSITIVE) {
-                text = CoreR.string.install
-                onClick {
-                    withPermission(REQUEST_INSTALL_PACKAGES) {
-                        if (!it) {
-                            toast(CoreR.string.install_unknown_denied, Toast.LENGTH_SHORT)
-                            showInvalidStateMessage()
-                        } else {
-                            lifecycleScope.launch {
-                                AppMigration.restore(this@MainActivity)
-                            }
-                        }
-=======
     override fun showInvalidStateMessage() {
         showInvalidState.value = true
     }
@@ -327,7 +384,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                 lifecycleScope.launch {
                     if (!AppMigration.restoreApp(this@MainActivity)) {
                         toast(CoreR.string.failure, Toast.LENGTH_LONG)
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
                     }
                 }
             }
@@ -335,18 +391,7 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
     }
 
     private fun showUnsupportedMessage() {
-<<<<<<< HEAD
-        if (Info.env.isUnsupported) {
-            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-                setTitle(CoreR.string.unsupport_magisk_title)
-                setMessage(CoreR.string.unsupport_magisk_msg, Const.Version.MIN_VERSION)
-                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
-                setCancelable(false)
-            }.show()
-        }
-=======
         val messages = mutableListOf<Pair<Int, Int>>()
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
         if (Info.env.isUnsupported) {
             messages.add(CoreR.string.unsupport_magisk_title to CoreR.string.unsupport_magisk_msg)
@@ -355,35 +400,9 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                 ?.split(':')
                 ?.filterNot { File("$it/magisk").exists() }
                 ?.any { File("$it/su").exists() } == true) {
-<<<<<<< HEAD
-            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-                setTitle(CoreR.string.unsupport_general_title)
-                setMessage(CoreR.string.unsupport_other_su_msg)
-                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
-                setCancelable(false)
-            }.show()
-=======
             messages.add(CoreR.string.unsupport_general_title to CoreR.string.unsupport_other_su_msg)
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
         if (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) {
-<<<<<<< HEAD
-            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-                setTitle(CoreR.string.unsupport_general_title)
-                setMessage(CoreR.string.unsupport_system_app_msg)
-                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
-                setCancelable(false)
-            }.show()
-        }
-
-        if (applicationInfo.flags and ApplicationInfo.FLAG_EXTERNAL_STORAGE != 0) {
-            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-                setTitle(CoreR.string.unsupport_general_title)
-                setMessage(CoreR.string.unsupport_external_storage_msg)
-                setButton(MagiskDialog.ButtonType.POSITIVE) { text = android.R.string.ok }
-                setCancelable(false)
-            }.show()
-=======
             messages.add(CoreR.string.unsupport_general_title to CoreR.string.unsupport_system_app_msg)
         }
         if (applicationInfo.flags and ApplicationInfo.FLAG_EXTERNAL_STORAGE != 0) {
@@ -392,7 +411,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
 
         if (messages.isNotEmpty()) {
             showUnsupported.value = messages
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
     }
 
@@ -400,22 +418,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
         if (isRunningAsStub && !Config.askedHome &&
             ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
             Config.askedHome = true
-<<<<<<< HEAD
-            MagiskDialog(this, metroAccentRole = MetroAccentRole.MAGISK).apply {
-                setTitle(CoreR.string.add_shortcut_title)
-                setMessage(CoreR.string.add_shortcut_msg)
-                setButton(MagiskDialog.ButtonType.NEGATIVE) {
-                    text = android.R.string.cancel
-                }
-                setButton(MagiskDialog.ButtonType.POSITIVE) {
-                    text = android.R.string.ok
-                    onClick {
-                        Shortcuts.addHomeIcon(this@MainActivity)
-                    }
-                }
-                setCancelable(true)
-            }.show()
-=======
             showShortcutPrompt.value = true
         }
     }
@@ -475,7 +477,6 @@ private fun MainActivityDialogs(
                 title = resources.getString(CoreR.string.add_shortcut_title),
                 content = resources.getString(CoreR.string.add_shortcut_msg),
             )
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
         }
     }
 }

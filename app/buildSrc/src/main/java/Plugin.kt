@@ -26,7 +26,6 @@ object Config {
 
     fun contains(key: String) = get(key) != null
 
-<<<<<<< HEAD:app/buildSrc/src/main/java/Plugin.kt
     val version: String get() = get("version") ?: commitHash.ifBlank { "MagisKube-dev" }
     val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
     val stubVersion: String get() = get("magisk.stubVersion")!!
@@ -34,15 +33,6 @@ object Config {
         val abiList = get("abiList") ?: return defaultAbis
         return abiList.split(Regex("\\s*,\\s*")).toSet() intersect supportAbis
     }
-=======
-    // Properties from config.prop and flags.prop, may be null
-    val version: String get() = get("version") ?: "null"
-    val abiList: List<String> get() = get("abiList")?.split(",") ?: ABI_SUPPORT_LIST
-
-    // Properties from gradle.properties, should always exist
-    val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
-    val stubVersion: String get() = get("magisk.stubVersion")!!
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6:app/build-logic/src/main/java/Plugin.kt
 }
 
 fun Project.rootFile(path: String): File {

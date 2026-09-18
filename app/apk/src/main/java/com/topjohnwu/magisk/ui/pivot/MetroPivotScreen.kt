@@ -42,6 +42,7 @@ import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -93,6 +94,13 @@ fun MetroPivotScreen(
         PivotSection.LOGS -> palette.logs
         PivotSection.MODULES -> palette.modules
         PivotSection.SETTINGS -> palette.settings
+    }
+
+    // Settings pushes secondary destinations (persistent modules, deny list config, theme)
+    // through the shared Navigator instead of Fragment directions.
+    val navigator = LocalNavigator.current
+    LaunchedEffect(settingsVM) {
+        settingsVM.navEvents.collect { navigator.push(it) }
     }
 
     // The top-level pager is the single source of truth. This keeps a tap, header drag, and a

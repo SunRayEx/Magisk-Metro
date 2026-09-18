@@ -20,10 +20,7 @@
     <string name="hide">Hide</string>
     <string name="home_package">Package</string>
     <string name="home_app_title">App</string>
-<<<<<<< HEAD
-=======
     <string name="reinstall">Reinstall</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="home_notice_content">Download Magisk ONLY from the official GitHub page. Files from unknown sources can be malicious!</string>
     <string name="home_support_title">Support Us</string>
     <string name="home_follow_title">Follow Us</string>
@@ -49,6 +46,9 @@
     <string name="install_inactive_slot_msg">Your device will be FORCED to boot to the current inactive slot after a reboot!\nOnly use this option after OTA is done.\nContinue?</string>
     <string name="setup_title">Additional setup</string>
     <string name="select_patch_file">Select and patch a file</string>
+    <string name="download_patch_file">Download and patch a file</string>
+    <string name="download_dialog_title">Enter image URL</string>
+    <string name="download_dialog_msg">Full OTA image or factory image</string>
     <string name="patch_file_msg">Select a raw image (*.img) or an ODIN tarfile (*.tar) or a payload.bin (*.bin)</string>
     <string name="reboot_delay_toast">Rebooting in 5 seconds…</string>
     <string name="flash_screen_title">Installation</string>
@@ -78,11 +78,9 @@
     <string name="su_revoke_title">Revoke?</string>
     <string name="su_revoke_msg">Confirm to revoke %1$s Superuser rights</string>
     <string name="toast">Toast</string>
+    <string name="notification">Notification</string>
     <string name="none">None</string>
-<<<<<<< HEAD
-=======
     <string name="back">Back</string>
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
     <string name="superuser_toggle_notification">Notifications</string>
     <string name="superuser_toggle_revoke">Revoke</string>
     <string name="superuser_policy_none">No apps have asked for Superuser permission yet.</string>
@@ -93,6 +91,8 @@
     <string name="menuSaveLog">Save log</string>
     <string name="menuClearLog">Clear log</string>
     <string name="logs_cleared">Log successfully cleared</string>
+    <string name="granted">Granted</string>
+    <string name="denied">Denied</string>
     <string name="pid">PID: %1$d</string>
     <string name="target_uid">Target UID: %1$d</string>
     <string name="target_pid">Target PID: %s</string>
@@ -104,6 +104,12 @@
     <string name="show_os_app">Show core apps</string>
     <string name="hide_filter_hint">Filter by name</string>
     <string name="hide_search">Search</string>
+    <string name="sort_by_name">Sort by name</string>
+    <string name="sort_by_package_name">Sort by package name</string>
+    <string name="sort_by_install_time">Sort by install time</string>
+    <string name="sort_by_update_time">Sort by update time</string>
+    <string name="sort_reverse">Reverse order</string>
+    <string name="menu_sort">Sort</string>
 
     <!--Module-->
     <string name="no_info_provided">(No info provided)</string>
@@ -258,4 +264,12 @@
     <string name="reboot_apply_change">Reboot to apply changes</string>
     <string name="restore_app_confirmation">This will restore the hidden app back to the original app. Do you really want to do this?</string>
 
+    <string name="settings_color_mode">Color mode</string>
+    <string name="color_mode_system">System</string>
+    <string name="color_mode_light">Light</string>
+    <string name="color_mode_dark">Dark</string>
+    <string name="color_mode_monet_system">Monet (System)</string>
+    <string name="color_mode_monet_light">Monet (Light)</string>
+    <string name="color_mode_monet_dark">Monet (Dark)</string>
+    <string name="running">Running…</string>
 </resources>

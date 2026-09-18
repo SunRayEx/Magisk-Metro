@@ -3,6 +3,7 @@ package com.topjohnwu.magisk.ui.home
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
 import android.os.Process
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.compose.foundation.Image
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -12,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -37,9 +39,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +58,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.ContentScale
@@ -79,12 +80,12 @@ import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.navigation.LocalNavigator
+import com.topjohnwu.magisk.ui.navigation.Route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.toArgb
 
@@ -114,21 +115,31 @@ fun MetroHomeScreen(
     onAppsClick: () -> Unit,
     onLogsClick: () -> Unit,
     onContributorsClick: () -> Unit,
+    onMagiskClick: () -> Unit,
 ) {
     var leaving by remember { mutableStateOf(false) }
     var entering by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = object : DefaultLifecycleObserver {
-            override fun onResume(owner: LifecycleOwner) {
-                leaving = false
-                entering = true
-            }
+
+    // Ground truth for "the Start screen is on top". The back stack is a SnapshotStateList,
+    // so reading its top entry here is reactive and this composable recomposes on every push
+    // and pop.
+    val navigator = LocalNavigator.current
+    val isCurrentRoute = navigator.backStack.lastOrNull() === Route.Main
+    // Tiles are hidden only while another route is actually on top. This is derived on purpose:
+    // the manual leaving flag can get stuck if the composition is disposed mid fly-out or a
+    // route change does not deliver the event the flag relied on, and then coming back to the
+    // Start screen would show nothing and accept no touches (while leaving is true the tiles
+    // are translated off-screen, so their hit areas move away too). When we are the current
+    // route the tiles are always visible no matter what the flag says.
+    val tilesLeaving = leaving || !isCurrentRoute
+    LaunchedEffect(isCurrentRoute) {
+        if (isCurrentRoute) {
+            leaving = false
+            entering = true
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
     LaunchedEffect(entering) {
         if (entering) {
             delay(10)
@@ -139,26 +150,32 @@ fun MetroHomeScreen(
     // must clear it again, exactly like returning from the browser (sponsor tile) does.
     val view = LocalView.current
     val boardBackground = MaterialTheme.colorScheme.background
-    LaunchedEffect(view, boardBackground) {
-        (view.context as? android.app.Activity)?.window?.let { window ->
-            window.statusBarColor = boardBackground.toArgb()
-            WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
-                boardBackground.luminance() > 0.5f
+    LaunchedEffect(view, boardBackground, isCurrentRoute) {
+        if (isCurrentRoute) {
+            (view.context as? android.app.Activity)?.window?.let { window ->
+                window.statusBarColor = boardBackground.toArgb()
+                WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
+                    boardBackground.luminance() > 0.5f
+            }
         }
     }
-    val tileNavigator = MetroTileNavigator(leaving, entering) { index, action ->
+    val tileNavigator = MetroTileNavigator(tilesLeaving, entering) { index, action ->
         if (!leaving && !entering) {
             leaving = true
             scope.launch {
                 // The bottom-right tile starts first; each predecessor follows toward the top-left.
                 delay((MetroTileCount - 1 - index).coerceAtLeast(0) * 45L + 290L)
                 action()
+                // The pushed route now covers the Start screen, so this flag is free to clear.
+                // !isCurrentRoute keeps the tiles hidden for as long as that route is on top.
+                leaving = false
             }
         }
     }
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
-    val numCols = if (isTablet) 5 else MetroTileLayout.grid().first
+    // A wide screen (landscape phone or tablet) scrolls sideways; a tall screen scrolls down.
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || isTablet
     val customTiles = remember(MetroUiState.version) { MetroCustomTiles.load() }
 
     val modules by produceState<List<LocalModule>>(initialValue = emptyList()) {
@@ -212,8 +229,7 @@ fun MetroHomeScreen(
     CompositionLocalProvider(LocalMetroTileNavigator provides tileNavigator) {
         MetroGrid(
             viewModel = viewModel,
-            isTablet = isTablet,
-            numCols = numCols,
+            isLandscape = isLandscape,
             modules = modules,
             rootApps = rootApps,
             importantLogs = importantLogs,
@@ -223,6 +239,7 @@ fun MetroHomeScreen(
             onAppsClick = onAppsClick,
             onLogsClick = onLogsClick,
             onContributorsClick = onContributorsClick,
+            onMagiskClick = onMagiskClick,
         )
     }
 }
@@ -230,8 +247,7 @@ fun MetroHomeScreen(
 @Composable
 private fun MetroGrid(
     viewModel: HomeViewModel,
-    isTablet: Boolean,
-    numCols: Int,
+    isLandscape: Boolean,
     modules: List<LocalModule>,
     rootApps: List<String>,
     importantLogs: List<String>,
@@ -241,34 +257,69 @@ private fun MetroGrid(
     onAppsClick: () -> Unit,
     onLogsClick: () -> Unit,
     onContributorsClick: () -> Unit,
+    onMagiskClick: () -> Unit,
 ) {
     val gap = 3.dp
+    val customizing = Config.metroTileCustomization
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState()),
+            // The board only scrolls while it is being customized; otherwise the tiles are
+            // packed into exactly the visible free-axis extent, so the whole start screen
+            // is always on screen.
+            .then(
+                if (!customizing) Modifier
+                else if (isLandscape) Modifier.horizontalScroll(rememberScrollState())
+                else Modifier.verticalScroll(rememberScrollState()),
+            ),
     ) {
-        val tileSize = (maxWidth - gap * (numCols + 1)) / numCols
-        Box(modifier = Modifier.padding(gap)) {
+        val cap = MetroTileLayout.fixedSpan(isLandscape)
+        val constrainedMax = if (isLandscape) maxHeight else maxWidth
+        val tileSize = (constrainedMax - gap * (cap + 1)) / cap
+        val freeViewport = if (isLandscape) maxWidth else maxHeight
+        // Whole cells that fit on the free axis; used as the packing bound when not scrolling.
+        val visibleFreeExtent = ((freeViewport - gap) / (tileSize + gap)).toInt().coerceAtLeast(1)
+        val customIds = customTiles.map { it.id }
+        val customWidths = customTiles.associate { it.id to (if (it.groupMembers.size > 1) 2 else 1) }
+        var placements by remember(cap, isLandscape, MetroUiState.version, customIds, customWidths, customizing, visibleFreeExtent) {
+            mutableStateOf(
+                MetroTileLayout.load(
+                    isLandscape, customIds, customWidths,
+                    freeBound = if (customizing) Int.MAX_VALUE else visibleFreeExtent,
+                ),
+            )
+        }
+        // The board is only as long as the last tile, so the page never scrolls past it.
+        // Without scrolling the board is pinned to the visible extent.
+        val freeExtent = MetroTileLayout.usedFreeExtent(placements, isLandscape)
+            .let { if (customizing) it else it.coerceAtMost(visibleFreeExtent) }.coerceAtLeast(1)
+        fun persist(next: List<MetroTilePlacement>) {
+            placements = MetroTileLayout.save(next, isLandscape)
+        }
+        val boardWidth = if (isLandscape) tileSize * freeExtent + gap * (freeExtent - 1) else tileSize * cap + gap * (cap - 1)
+        val boardHeight = if (isLandscape) tileSize * cap + gap * (cap - 1) else tileSize * freeExtent + gap * (freeExtent - 1)
+        Box(modifier = Modifier.padding(gap).size(boardWidth, boardHeight)) {
             MetroBoard(
                 viewModel = viewModel,
+                placements = placements,
+                onPlacementsChange = ::persist,
                 tileSize = tileSize,
                 gap = gap,
-                rows = if (isTablet) 7 else 6 + ((customTiles.size + numCols - 1) / numCols),
-                isTablet = isTablet,
+                cap = cap,
+                isLandscape = isLandscape,
                 modules = modules,
                 rootApps = rootApps,
                 importantLogs = importantLogs,
                 customTiles = customTiles,
-                uiVersion = MetroUiState.version,
                 onSettingsClick = onSettingsClick,
                 onModulesClick = onModulesClick,
                 onAppsClick = onAppsClick,
                 onLogsClick = onLogsClick,
                 onContributorsClick = onContributorsClick,
+                onMagiskClick = onMagiskClick,
             )
         }
     }
@@ -277,30 +328,25 @@ private fun MetroGrid(
 @Composable
 private fun MetroBoard(
     viewModel: HomeViewModel,
+    placements: List<MetroTilePlacement>,
+    onPlacementsChange: (List<MetroTilePlacement>) -> Unit,
     tileSize: Dp,
     gap: Dp,
-    rows: Int,
-    isTablet: Boolean,
+    cap: Int,
+    isLandscape: Boolean,
     modules: List<LocalModule>,
     rootApps: List<String>,
     importantLogs: List<String>,
     customTiles: List<MetroCustomTile>,
-    uiVersion: Int,
     onSettingsClick: () -> Unit,
     onModulesClick: () -> Unit,
     onAppsClick: () -> Unit,
     onLogsClick: () -> Unit,
     onContributorsClick: () -> Unit,
+    onMagiskClick: () -> Unit,
 ) {
-    val (phoneColumns, phoneRows) = MetroTileLayout.grid()
-    val columns = if (isTablet) 5 else phoneColumns
-    val boardRows = if (isTablet) rows else rows
-    val customIds = customTiles.map { it.id }
-    val customWidths = customTiles.associate { it.id to if (it.groupMembers.size > 1) 2 else 1 }
-    var placements by remember(columns, boardRows, isTablet, Config.metroTileCustomization, uiVersion, customIds) {
-        mutableStateOf(MetroTileLayout.load(columns, boardRows, customIds, customWidths))
-    }
-    val customizing = !isTablet && Config.metroTileCustomization
+    val cellPx = LocalDensity.current.run { (tileSize + gap).toPx() }
+    val customizing = Config.metroTileCustomization
     var dragging by remember { mutableStateOf<String?>(null) }
     var dragX by remember { mutableStateOf(0f) }
     var dragY by remember { mutableStateOf(0f) }
@@ -309,9 +355,13 @@ private fun MetroBoard(
     val boardScope = rememberCoroutineScope()
     var hoverJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
-    fun persist(next: List<MetroTilePlacement>) {
-        placements = MetroTileLayout.save(next, columns, boardRows)
-    }
+    /**
+     * The free axis is unbounded, so a drag only clamps the constrained one: columns in portrait,
+     * rows in landscape.
+     */
+    fun clampColumn(raw: Int, width: Int) = if (isLandscape) raw.coerceAtLeast(0) else raw.coerceIn(0, cap - width)
+    fun clampRow(raw: Int, height: Int) = if (isLandscape) raw.coerceIn(0, cap - height) else raw.coerceAtLeast(0)
+
     @Composable
     fun place(item: MetroTilePlacement): Modifier {
         val rendered = resizePreview?.takeIf { it.id == item.id } ?: item
@@ -364,8 +414,8 @@ private fun MetroBoard(
                         change.consume()
                         dragX += amount.x
                         dragY += amount.y
-                        val targetColumn = (item.column + dragX / cell.toPx()).roundToInt().coerceIn(0, columns - item.width)
-                        val targetRow = (item.row + dragY / cell.toPx()).roundToInt().coerceIn(0, boardRows - item.height)
+                        val targetColumn = clampColumn((item.column + dragX / cellPx).roundToInt(), item.width)
+                        val targetRow = clampRow((item.row + dragY / cellPx).roundToInt(), item.height)
                         val target = placements.firstOrNull { it.id != item.id &&
                             targetColumn in it.column until it.column + it.width &&
                             targetRow in it.row until it.row + it.height }
@@ -376,16 +426,16 @@ private fun MetroBoard(
                                 // the next vacant slot before the drag is released.
                                 delay(2000)
                                 if (dragging == item.id) {
-                                    persist(MetroTileLayout.move(placements, target.id, target.column, target.row, columns, boardRows))
+                                    onPlacementsChange(MetroTileLayout.move(placements, target.id, target.column, target.row, isLandscape))
                                 }
                             }
                         }
                     },
                     onDragEnd = {
                         hoverJob?.cancel()
-                        val targetColumn = (item.column + dragX / cell.toPx()).roundToInt().coerceIn(0, columns - item.width)
-                        val targetRow = (item.row + dragY / cell.toPx()).roundToInt().coerceIn(0, boardRows - item.height)
-                        persist(MetroTileLayout.move(placements, item.id, targetColumn, targetRow, columns, boardRows))
+                        val targetColumn = clampColumn((item.column + dragX / cellPx).roundToInt(), item.width)
+                        val targetRow = clampRow((item.row + dragY / cellPx).roundToInt(), item.height)
+                        onPlacementsChange(MetroTileLayout.move(placements, item.id, targetColumn, targetRow, isLandscape))
                         dragging = null
                     },
                     onDragCancel = { hoverJob?.cancel(); dragging = null },
@@ -423,24 +473,23 @@ private fun MetroBoard(
                             totalY += amount.y
                             val deltaX = (totalX / (tileSize + gap).toPx()).roundToInt()
                             val deltaY = (totalY / (tileSize + gap).toPx()).roundToInt()
-                            val right = item.column + item.width
-                            val bottom = item.row + item.height
-                            val width = (if (horizontal > 0) item.width + deltaX else item.width - deltaX)
-                                .coerceIn(1, if (horizontal > 0) columns - item.column else right)
-                            val height = (if (vertical > 0) item.height + deltaY else item.height - deltaY)
-                                .coerceIn(1, if (vertical > 0) boardRows - item.row else bottom)
-                            val column = if (horizontal > 0) item.column else right - width
-                            val row = if (vertical > 0) item.row else bottom - height
+                            // The constrained axis has a hard cap; the free axis can grow without limit.
+                            val widthMax = if (isLandscape) Int.MAX_VALUE else (cap - item.column).coerceAtLeast(1)
+                            val heightMax = if (isLandscape) (cap - item.row).coerceAtLeast(1) else Int.MAX_VALUE
+                            val width = (if (horizontal > 0) item.width + deltaX else item.width - deltaX).coerceIn(1, widthMax)
+                            val height = (if (vertical > 0) item.height + deltaY else item.height - deltaY).coerceIn(1, heightMax)
+                            val column = clampColumn(if (horizontal > 0) item.column else item.column + item.width - width, width)
+                            val row = clampRow(if (vertical > 0) item.row else item.row + item.height - height, height)
                             val candidate = item.copy(column = column, row = row, width = width, height = height)
-                            if (MetroTileLayout.canPlace(placements, candidate, columns, boardRows)) {
+                            if (MetroTileLayout.canPlace(placements, candidate, isLandscape)) {
                                 resizePreview = candidate
                             }
                         },
                         onDragEnd = {
                             resizePreview?.let { preview ->
-                                persist(MetroTileLayout.resizeRect(
+                                onPlacementsChange(MetroTileLayout.resizeRect(
                                     placements, preview.id, preview.column, preview.row,
-                                    preview.width, preview.height, columns, boardRows,
+                                    preview.width, preview.height, isLandscape,
                                 ))
                             }
                             resizePreview = null
@@ -455,13 +504,9 @@ private fun MetroBoard(
         }
     /* The layout engine owns every rectangle, making a custom phone grid impossible to overlap. */
     fun placement(id: String) = resizePreview?.takeIf { it.id == id } ?: placements.first { it.id == id }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(tileSize * boardRows + gap * (boardRows - 1)),
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         if (MetroTileLayout.isVisible(MetroTileLayout.Magisk)) {
-            MagiskTile(modifier = place(placement(MetroTileLayout.Magisk)), navigationIndex = 0, onClick = viewModel::onMagiskPressed)
+            MagiskTile(modifier = place(placement(MetroTileLayout.Magisk)), navigationIndex = 0, onClick = onMagiskClick)
         }
         // Modules 1x1 and Apps 1x1 to the right of Magisk
         if (MetroTileLayout.isVisible(MetroTileLayout.Modules)) {
@@ -530,6 +575,7 @@ private fun CustomTile(
     navigationIndex: Int,
 ) {
     val context = LocalContext.current
+    val navigator = LocalNavigator.current
     val color = accent.color
     val foreground = accent.onColor
     MetroTile(
@@ -537,12 +583,18 @@ private fun CustomTile(
         color = color,
         navigationIndex = navigationIndex,
         onClick = {
-            if (tile.groupMembers.size > 1) {
-                showTileGroup(context, tile)
-            } else {
-                context.packageManager.getLaunchIntentForPackage(tile.packageName)?.let {
-                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(it)
+            val shortcut = MetroMagiskShortcuts.routeFor(tile.packageName)
+            when {
+                shortcut != null -> navigator.push(shortcut)
+                tile.groupMembers.size > 1 -> {
+                    // A group opens as its own secondary Metro destination listing every member app.
+                    navigator.push(Route.TileGroup(tile.id))
+                }
+                else -> {
+                    context.packageManager.getLaunchIntentForPackage(tile.packageName)?.let {
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(it)
+                    }
                 }
             }
         },
@@ -577,13 +629,6 @@ private fun CustomTile(
 }
 
 /** A tile group opens as its own secondary Metro destination listing every member app. */
-private fun showTileGroup(context: android.content.Context, tile: MetroCustomTile) {
-    val activity = context as? android.app.Activity ?: return
-    androidx.navigation.Navigation.findNavController(activity, R.id.main_nav_host)
-        .navigate(R.id.action_tileGroupFragment, android.os.Bundle().apply {
-            putString("tileId", tile.id)
-        })
-}
 
 @Composable
 private fun MetroTile(

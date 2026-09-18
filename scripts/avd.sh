@@ -4,14 +4,10 @@ set -e
 shopt -s extglob
 . scripts/test_common.sh
 
-<<<<<<< HEAD
-emu_args_base="-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -read-only -no-snapshot -cores $core_count"
-=======
 emu="$ANDROID_HOME/emulator/emulator"
 avd="$cmdline_tools/bin/avdmanager"
 
 emu_args_base="-no-window -no-audio -no-boot-anim -gpu software -read-only -no-snapshot -cores $core_count"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 log_args="-show-kernel -logcat '' -logcat-output logcat.log"
 avd_name='magisk_avd'
 emu_args=
@@ -22,13 +18,8 @@ atd_max_api=36
 huge_ram_min_api=26
 
 cleanup() {
-<<<<<<< HEAD
-  rm -f magisk_*.img
-  "$avd" delete avd -n test
-=======
   rm -f magisk-*.img
   "$avd" delete avd -n $avd_name > /dev/null 2>&1
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }
 
 test_error() {
@@ -102,11 +93,6 @@ path_to_pkg() {
 
 resolve_vars() {
   set +x
-<<<<<<< HEAD
-  local arg_list="$1"
-  local ver=$2
-  local type=$3
-=======
   local return_vals="$1"
   shift
 
@@ -143,7 +129,6 @@ resolve_vars() {
     print_error "! No system image version specified"
     exit 1
   fi
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
   # Determine default arch
   if [ -z "$arch" ]; then
@@ -206,29 +191,15 @@ resolve_vars() {
 
 dl_emu() {
   local avd_pkg=$1
-<<<<<<< HEAD
-  yes | "$sdk" --licenses > /dev/null 2>&1
-  "$sdk" --channel=3 platform-tools emulator $avd_pkg
-=======
   ensure_android_cli
   "$android" sdk install --canary platform-tools emulator "$avd_pkg"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }
 
 setup_emu() {
   local avd_pkg=$1
   local ver=$2
   dl_emu $avd_pkg
-<<<<<<< HEAD
-  echo no | "$avd" create avd -f -n test -k $avd_pkg
-
-  # avdmanager is outdated, it might not set the proper target
-  local ini=$ANDROID_AVD_HOME/test.ini
-  sed "s:^target\s*=.*:target=android-$ver:g" $ini > $ini.new
-  mv $ini.new $ini
-=======
   echo no | "$avd" create avd -f -n $avd_name -k "$(path_to_pkg "$1")"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 }
 
 test_emu() {
@@ -242,11 +213,8 @@ test_emu() {
   else
     "$emu" "@${avd_name}" $emu_args $magisk_args > /dev/null 2>&1 &
   fi
-<<<<<<< HEAD
-=======
   local emu_pid=$!
   wait_for_boot $emu_pid
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
   emu_pid=$!
   wait_emu
@@ -254,11 +222,7 @@ test_emu() {
   run_setup $variant
 
   adb reboot
-<<<<<<< HEAD
-  wait_emu
-=======
   wait_for_boot $emu_pid
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
   run_tests
 
@@ -283,14 +247,8 @@ test_main() {
 
   # Launch stock emulator
   print_title "* Launching $avd_pkg"
-<<<<<<< HEAD
-  "$emu" @test $emu_args >/dev/null 2>&1 &
-  emu_pid=$!
-  wait_emu
-=======
   "$emu" "@${avd_name}" $emu_args > /dev/null 2>&1 &
   wait_for_boot $!
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
   # Patch images
   if [ -z "$AVD_TEST_SKIP_DEBUG" ]; then
@@ -321,9 +279,6 @@ run_main() {
   eval $(resolve_vars "ver avd_pkg" $1 $2)
   setup_emu "$avd_pkg" $ver
   print_title "* Launching $avd_pkg"
-<<<<<<< HEAD
-  "$emu" @test $emu_args 2>/dev/null
-=======
   local emu_log=$(mktemp)
   "$emu" "@${avd_name}" $emu_args > "$emu_log" 2>&1 &
   local emu_pid=$!
@@ -335,7 +290,6 @@ run_main() {
     exit 1
   fi
   rm -f "$emu_log"
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
   cleanup
 }
 

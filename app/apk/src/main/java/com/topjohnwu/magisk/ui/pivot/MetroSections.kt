@@ -1,5 +1,8 @@
 package com.topjohnwu.magisk.ui.pivot
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -13,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -41,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
-import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -50,24 +50,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.ui.home.HomeViewModel
+import com.topjohnwu.magisk.arch.VMFactory
+import com.topjohnwu.magisk.core.Info
+import com.topjohnwu.magisk.core.PersistentModules
+import com.topjohnwu.magisk.core.ktx.timeDateFormat
+import com.topjohnwu.magisk.core.ktx.toTime
+import com.topjohnwu.magisk.core.model.su.SuLog
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
-import com.topjohnwu.magisk.ui.deny.DenyListRvItem
+import com.topjohnwu.magisk.ui.component.MagiskDialog
+import com.topjohnwu.magisk.ui.deny.DenyAppState
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
+import com.topjohnwu.magisk.ui.deny.SortBy
+import com.topjohnwu.magisk.ui.deny.DenyProcessState
+import com.topjohnwu.magisk.ui.home.HomeViewModel
+import com.topjohnwu.magisk.ui.install.InstallDialog
+import com.topjohnwu.magisk.ui.install.InstallViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
-import com.topjohnwu.magisk.ui.module.InstallModule
-import com.topjohnwu.magisk.ui.module.LocalModuleRvItem
+import com.topjohnwu.magisk.ui.log.MagiskLogEntry
+import com.topjohnwu.magisk.ui.module.ModuleItem
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
-import com.topjohnwu.magisk.ui.settings.BaseSettingsItem
+import com.topjohnwu.magisk.ui.module.OnlineModuleSubject
+import com.topjohnwu.magisk.ui.settings.AppSettingsSection
+import com.topjohnwu.magisk.ui.settings.CustomizationSection
+import com.topjohnwu.magisk.ui.settings.MagiskSection as SettingsMagiskSection
+import com.topjohnwu.magisk.ui.settings.SuperuserSection
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
-import com.topjohnwu.magisk.ui.superuser.PolicyRvItem
+import com.topjohnwu.magisk.ui.superuser.PolicyItem
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
 import com.topjohnwu.magisk.ui.theme.MetroAccent
+import com.topjohnwu.magisk.utils.textHolder
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.topjohnwu.magisk.core.R as CoreR
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ---- Shared Metro primitives -------------------------------------------------
 
@@ -207,6 +227,9 @@ private fun MetroSubPivot(
 @Composable
 fun MagiskSection(vm: HomeViewModel) {
     val accent = LocalMetroPalette.current.magisk
+    val installVm: InstallViewModel = viewModel(factory = VMFactory)
+    var showInstallDialog by remember { mutableStateOf(false) }
+
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_actions),
@@ -221,7 +244,7 @@ fun MagiskSection(vm: HomeViewModel) {
                             title = stringResource(R.string.metro_install_magisk),
                             summary = stringResource(R.string.metro_install_magisk_summary),
                             accent = accent,
-                            onClick = vm::onInstallPressed,
+                            onClick = { showInstallDialog = true },
                         )
                     }
                 }
@@ -251,15 +274,21 @@ fun MagiskSection(vm: HomeViewModel) {
                 item {
                     MetroFlipItem(index = 0, visible = visible) {
                         Column(modifier = Modifier.fillMaxWidth().padding(SectionPadding)) {
-                            MetroStatusRow(stringResource(R.string.metro_info_root), vm.rooted, accent)
-                            MetroStatusRow(stringResource(R.string.metro_info_zygisk), vm.zygiskEnabled, accent)
-                            MetroStatusRow(stringResource(R.string.metro_info_ramdisk), vm.ramdisk, accent)
+                            MetroStatusRow(stringResource(R.string.metro_info_root), Info.isRooted, accent)
+                            MetroStatusRow(stringResource(R.string.metro_info_zygisk), Info.isZygiskEnabled, accent)
+                            MetroStatusRow(stringResource(R.string.metro_info_ramdisk), Info.ramdisk, accent)
                         }
                     }
                 }
             }
         }
     }
+
+    InstallDialog(
+        show = showInstallDialog,
+        onDismiss = { showInstallDialog = false },
+        installVm = installVm,
+    )
 }
 
 @Composable
@@ -300,55 +329,41 @@ fun AppsSection(
     showDenyListInitially: Boolean,
 ) {
     val accent = LocalMetroPalette.current.apps
-    val tick = vm.observeAsTick()
-    val loading = remember(tick) { vm.loading }
-    val policyRevision = remember(tick) { vm.policyRevision }
-    val items by vm.items.asComposeState()
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val loading = uiState.loading
+    val policies = uiState.policies
 
-    if (loading && items.isEmpty()) {
+    if (loading && policies.isEmpty()) {
         MetroCentered(stringResource(R.string.metro_loading))
         return
     }
-    val policies = remember(items, policyRevision) { items.filterIsInstance<PolicyRvItem>() }
-    val denyTick = denyListVM.observeAsTick()
-    val denyLoading = remember(denyTick) { denyListVM.loading }
-    val denyItems by denyListVM.items.asComposeState()
+    val denyLoading by denyListVM.loading.collectAsStateWithLifecycle()
+    val denyItems by denyListVM.filteredApps.collectAsStateWithLifecycle()
     val authorizedQuery = remember { mutableStateOf("") }
-    val authorizedAppFilter = remember { mutableStateOf(DenyListViewModel.AppFilter.USER) }
-    val authorizedSortOrder = remember { mutableStateOf(DenyListViewModel.SortOrder.INSTALL_TIME) }
+    val authorizedAppFilter = remember { mutableStateOf(AppFilter.USER) }
+    val authorizedSortOrder = remember { mutableStateOf(SortOrder.ALPHABETICAL) }
     // Keep unconfigured applications here so root can be granted without a separate prompt page.
     // ALLOW is sorted above QUERY, so newly authorized apps move immediately after the write.
     val authorized = remember(
         policies,
-        policyRevision,
-        denyTick,
+        denyItems,
         authorizedQuery.value,
         authorizedAppFilter.value,
         authorizedSortOrder.value,
     ) {
         policies.asSequence()
-            .filter { it.item.policy != SuPolicy.DENY && !denyListVM.isDenied(it.packageName) }
+            .filter { it.policy.policy != SuPolicy.DENY && !denyListVM.isDenied(it.packageName) }
             .filter { item ->
                 val matchesType = when (authorizedAppFilter.value) {
-                    DenyListViewModel.AppFilter.USER -> !item.isSystemApp
-                    DenyListViewModel.AppFilter.SYSTEM -> item.isSystemApp
+                    AppFilter.USER -> !item.isSystemApp
+                    AppFilter.SYSTEM -> item.isSystemApp
                 }
                 val query = authorizedQuery.value
                 matchesType && (query.isBlank() ||
                     item.appName.contains(query, true) || item.packageName.contains(query, true))
             }
             .sortedWith(
-                compareBy<PolicyRvItem> { it.item.policy < SuPolicy.ALLOW }
-                    .thenByDescending {
-                        if (authorizedSortOrder.value == DenyListViewModel.SortOrder.INSTALL_TIME) {
-                            it.installTime
-                        } else 0L
-                    }
-                    .thenBy {
-                        if (authorizedSortOrder.value == DenyListViewModel.SortOrder.ALPHABETICAL) {
-                            it.appName.lowercase()
-                        } else ""
-                    }
+                compareBy<PolicyItem> { it.policy.policy < SuPolicy.ALLOW }
                     .thenBy { it.appName.lowercase() },
             )
             .toList()
@@ -384,7 +399,7 @@ fun AppsSection(
                         }
                     } else {
                         itemsIndexed(authorized) { index, item ->
-                            MetroFlipItem(index = index, visible = visible) { PolicyRow(item, accent) }
+                            MetroFlipItem(index = index, visible = visible) { PolicyRow(vm, item, accent) }
                         }
                     }
                 }
@@ -398,21 +413,40 @@ fun AppsSection(
 @Composable
 private fun DenyListSection(
     vm: DenyListViewModel,
-    items: List<DenyListRvItem>,
+    items: List<DenyAppState>,
     loading: Boolean,
     accent: MetroAccent,
     visible: Boolean,
 ) {
-    var query by remember { mutableStateOf(vm.query) }
+    val query by vm.query.collectAsStateWithLifecycle()
+    val showSystem by vm.showSystem.collectAsStateWithLifecycle()
+    val showOS by vm.showOS.collectAsStateWithLifecycle()
+    val sortBy by vm.sortBy.collectAsStateWithLifecycle()
     Column(modifier = Modifier.fillMaxSize()) {
         AppSearchAndFilters(
             query = query,
-            appFilter = vm.appFilter,
-            sortOrder = vm.sortOrder,
+            appFilter = when {
+                showOS -> AppFilter.SYSTEM
+                showSystem -> AppFilter.SYSTEM
+                else -> AppFilter.USER
+            },
+            sortOrder = if (sortBy == SortBy.INSTALL_TIME)
+                SortOrder.INSTALL_TIME else SortOrder.ALPHABETICAL,
             accent = accent,
-            onQueryChange = { query = it; vm.query = it },
-            onAppFilterChange = { vm.appFilter = it },
-            onSortOrderChange = { vm.sortOrder = it },
+            onQueryChange = { vm.setQuery(it) },
+            onAppFilterChange = {
+                when (it) {
+                    AppFilter.USER -> { vm.setShowSystem(false); vm.setShowOS(false) }
+                    AppFilter.SYSTEM -> { vm.setShowSystem(true); vm.setShowOS(false) }
+                }
+            },
+            onSortOrderChange = {
+                vm.setSortBy(
+                    if (it == SortOrder.INSTALL_TIME)
+                        SortBy.INSTALL_TIME
+                    else SortBy.NAME
+                )
+            },
         )
         if (loading) {
             MetroCentered(stringResource(R.string.metro_loading))
@@ -421,22 +455,25 @@ private fun DenyListSection(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(items) { index, item ->
-                    MetroFlipItem(index = index, visible = visible) { DenyListRow(item, accent) }
+                    MetroFlipItem(index = index, visible = visible) { DenyListRow(vm, item, accent) }
                 }
             }
         }
     }
 }
 
+private enum class AppFilter { USER, SYSTEM }
+private enum class SortOrder { INSTALL_TIME, ALPHABETICAL }
+
 @Composable
 private fun AppSearchAndFilters(
     query: String,
-    appFilter: DenyListViewModel.AppFilter,
-    sortOrder: DenyListViewModel.SortOrder,
+    appFilter: AppFilter,
+    sortOrder: SortOrder,
     accent: MetroAccent,
     onQueryChange: (String) -> Unit,
-    onAppFilterChange: (DenyListViewModel.AppFilter) -> Unit,
-    onSortOrderChange: (DenyListViewModel.SortOrder) -> Unit,
+    onAppFilterChange: (AppFilter) -> Unit,
+    onSortOrderChange: (SortOrder) -> Unit,
 ) {
     OutlinedTextField(
         value = query,
@@ -453,57 +490,54 @@ private fun AppSearchAndFilters(
             MetroTextButton(
                 text = stringResource(R.string.show_user_app),
                 accent = accent,
-                selected = appFilter == DenyListViewModel.AppFilter.USER,
+                selected = appFilter == AppFilter.USER,
                 compact = true,
-            ) { onAppFilterChange(DenyListViewModel.AppFilter.USER) }
+            ) { onAppFilterChange(AppFilter.USER) }
         }
         item {
             MetroTextButton(
                 text = stringResource(CoreR.string.show_system_app),
                 accent = accent,
-                selected = appFilter == DenyListViewModel.AppFilter.SYSTEM,
+                selected = appFilter == AppFilter.SYSTEM,
                 compact = true,
-            ) { onAppFilterChange(DenyListViewModel.AppFilter.SYSTEM) }
+            ) { onAppFilterChange(AppFilter.SYSTEM) }
         }
         item {
             MetroTextButton(
                 text = stringResource(R.string.sort_by_install_time),
                 accent = accent,
-                selected = sortOrder == DenyListViewModel.SortOrder.INSTALL_TIME,
+                selected = sortOrder == SortOrder.INSTALL_TIME,
                 compact = true,
-            ) { onSortOrderChange(DenyListViewModel.SortOrder.INSTALL_TIME) }
+            ) { onSortOrderChange(SortOrder.INSTALL_TIME) }
         }
         item {
             MetroTextButton(
                 text = stringResource(R.string.sort_by_alphabetical),
                 accent = accent,
-                selected = sortOrder == DenyListViewModel.SortOrder.ALPHABETICAL,
+                selected = sortOrder == SortOrder.ALPHABETICAL,
                 compact = true,
-            ) { onSortOrderChange(DenyListViewModel.SortOrder.ALPHABETICAL) }
+            ) { onSortOrderChange(SortOrder.ALPHABETICAL) }
         }
     }
 }
 
 @Composable
-private fun DenyListRow(item: DenyListRvItem, accent: MetroAccent) {
-    val tick = item.observeAsTick()
-    key(tick) {
-        Column(
-            modifier = Modifier.fillMaxWidth().clickable { item.isExpanded = !item.isExpanded }.padding(SectionPadding),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(item.info.label, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(item.info.packageName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Switch(checked = item.state == true, onCheckedChange = { item.state = it }, colors = metroSwitchColors(accent))
+private fun DenyListRow(vm: DenyListViewModel, item: DenyAppState, accent: MetroAccent) {
+    Column(
+        modifier = Modifier.fillMaxWidth().clickable { vm.toggleExpanded(item) }.padding(SectionPadding),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.info.label, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.info.packageName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (item.isExpanded) {
-                item.processes.forEach { process ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(process.displayName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Switch(checked = process.isEnabled, onCheckedChange = { process.isEnabled = it }, colors = metroSwitchColors(accent))
-                    }
+            Switch(checked = item.isChecked, onCheckedChange = { vm.toggleAll(item) }, colors = metroSwitchColors(accent))
+        }
+        if (item.isExpanded) {
+            item.processes.forEach { process ->
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(process.displayName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Switch(checked = process.isEnabled, onCheckedChange = { vm.toggleProcess(item, process) }, colors = metroSwitchColors(accent))
                 }
             }
         }
@@ -511,74 +545,69 @@ private fun DenyListRow(item: DenyListRvItem, accent: MetroAccent) {
 }
 
 @Composable
-private fun PolicyRow(item: PolicyRvItem, accent: MetroAccent) {
-    val tick = item.observeAsTick()
-    key(tick) {
-        val enabled = item.isEnabled
-        val expanded = item.isExpanded
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { item.toggleExpand() }
-                .padding(SectionPadding),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.title,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (item.item.policy == SuPolicy.ZERO)
-                            "${item.packageName} · " + stringResource(R.string.metro_su_policy_zero)
-                        else item.packageName,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { item.isEnabled = it },
-                    colors = metroSwitchColors(accent),
+private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAccent) {
+    var expanded by remember { mutableStateOf(false) }
+    val enabled = item.isEnabled
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(SectionPadding),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (item.policy.policy == SuPolicy.ZERO)
+                        "${item.packageName} · " + stringResource(R.string.metro_su_policy_zero)
+                    else item.packageName,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (expanded) {
-                Spacer(Modifier.width(0.dp))
-                if (item.showSlider) {
-                    Row(
-                        modifier = Modifier.padding(top = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        MetroTextButton(stringResource(CoreR.string.deny), accent) {
-                            item.sliderValue = SuPolicy.DENY
-                        }
-                        MetroTextButton(stringResource(CoreR.string.restrict), accent) {
-                            item.sliderValue = SuPolicy.RESTRICT
-                        }
-                        MetroTextButton(stringResource(CoreR.string.grant), accent) {
-                            item.sliderValue = SuPolicy.ALLOW
-                        }
-                    }
+            Switch(
+                checked = enabled,
+                onCheckedChange = { vm.togglePolicy(item) },
+                colors = metroSwitchColors(accent),
+            )
+        }
+        if (expanded) {
+            Spacer(Modifier.width(0.dp))
+            Row(
+                modifier = Modifier.padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MetroTextButton(stringResource(CoreR.string.deny), accent) {
+                    vm.updatePolicy(item, SuPolicy.DENY)
                 }
-                MetroToggleLine(
-                    label = stringResource(R.string.metro_notifications),
-                    checked = item.shouldNotify,
-                    accent = accent,
-                ) { item.toggleNotify() }
-                MetroToggleLine(
-                    label = stringResource(R.string.metro_logging),
-                    checked = item.shouldLog,
-                    accent = accent,
-                ) { item.toggleLog() }
-                Row(modifier = Modifier.padding(top = 8.dp)) {
-                    MetroTextButton(stringResource(R.string.metro_revoke), accent) { item.revoke() }
+                MetroTextButton(stringResource(CoreR.string.restrict), accent) {
+                    vm.updatePolicy(item, SuPolicy.RESTRICT)
                 }
+                MetroTextButton(stringResource(CoreR.string.grant), accent) {
+                    vm.updatePolicy(item, SuPolicy.ALLOW)
+                }
+            }
+            MetroToggleLine(
+                label = stringResource(R.string.metro_notifications),
+                checked = item.notification,
+                accent = accent,
+            ) { vm.updateNotify(item) }
+            MetroToggleLine(
+                label = stringResource(R.string.metro_logging),
+                checked = item.logging,
+                accent = accent,
+            ) { vm.updateLogging(item) }
+            Row(modifier = Modifier.padding(top = 8.dp)) {
+                MetroTextButton(stringResource(R.string.metro_revoke), accent) { vm.performDelete(item) }
             }
         }
     }
@@ -616,12 +645,13 @@ private fun MetroToggleLine(
 @Composable
 fun LogsSection(vm: LogViewModel) {
     val accent = LocalMetroPalette.current.logs
-    val tick = vm.observeAsTick()
-    val loading = remember(tick) { vm.loading }
-    val suItems by vm.items.asComposeState()
-    val magiskItems by vm.logs.asComposeState()
-    val view = LocalView.current
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val loading = uiState.loading
+    val suItems = uiState.suLogs
+    val magiskItems = uiState.magiskLogEntries
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showGhostLog by remember { mutableStateOf(false) }
 
     MetroSubPivot(
         titles = listOf(
@@ -636,27 +666,7 @@ fun LogsSection(vm: LogViewModel) {
             ) {
                 if (page == 0) {
                     MetroTextButton(stringResource(R.string.metro_su_ghost_log), accent) {
-                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val auditText = com.topjohnwu.superuser.Shell.cmd(
-                                "cat /data/adb/metromod/ghost_audit.log 2>/dev/null",
-                            ).exec().out.joinToString("\n").trim()
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                (view.context as? android.app.Activity)?.let { host ->
-                                    com.topjohnwu.magisk.view.MagiskDialog(
-                                        host,
-                                        metroAccentRole = com.topjohnwu.magisk.ui.theme.MetroAccentRole.LOGS,
-                                    ).apply {
-                                        setTitle(R.string.metro_su_ghost_log)
-                                        setMessage(auditText.ifEmpty {
-                                            view.context.getString(R.string.metro_no_logs)
-                                        })
-                                        setButton(com.topjohnwu.magisk.view.MagiskDialog.ButtonType.POSITIVE) {
-                                            text = android.R.string.ok
-                                        }
-                                    }.show()
-                                }
-                            }
-                        }
+                        showGhostLog = true
                     }
                     Spacer(Modifier.width(8.dp))
                 }
@@ -682,7 +692,7 @@ fun LogsSection(vm: LogViewModel) {
                         itemsIndexed(magiskItems) { index, line ->
                             MetroFlipItem(index = index, visible = visible) {
                                 Text(
-                                    text = line.item,
+                                    text = formatMagiskLog(line),
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
@@ -694,24 +704,76 @@ fun LogsSection(vm: LogViewModel) {
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(suItems) { index, log ->
-                        MetroFlipItem(index = index, visible = visible) {
-                            Text(
-                                text = log.info,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                            )
+                        itemsIndexed(suItems) { index, log ->
+                            MetroFlipItem(index = index, visible = visible) {
+                                Text(
+                                    text = formatSuLog(log, context),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                                )
+                            }
                         }
                     }
-                }
                 }
             }
         }
     }
+
+    if (showGhostLog) {
+        val auditText by produceState("", showGhostLog) {
+            value = withContext(Dispatchers.IO) {
+                com.topjohnwu.superuser.Shell.cmd(
+                    "cat ${PersistentModules.GHOST_AUDIT_LOG} 2>/dev/null",
+                ).exec().out.joinToString("\n").trim()
+            }
+        }
+        MagiskDialog(
+            onDismissRequest = { showGhostLog = false },
+            title = stringResource(R.string.metro_su_ghost_log),
+            confirmText = stringResource(android.R.string.ok),
+            onConfirm = { showGhostLog = false },
+        ) {
+            Text(
+                text = auditText.ifEmpty { context.getString(R.string.metro_no_logs) },
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            )
+        }
+    }
+}
+
+private fun formatMagiskLog(entry: MagiskLogEntry): String =
+    if (entry.timestamp.isEmpty()) entry.message
+    else "${entry.timestamp} ${entry.message}"
+
+private fun formatSuLog(log: SuLog, context: android.content.Context): String {
+    val res = context.resources
+    val sb = StringBuilder()
+    val date = log.time.toTime(timeDateFormat)
+    val toUid = res.getString(CoreR.string.target_uid, log.toUid)
+    val fromPid = res.getString(CoreR.string.pid, log.fromPid)
+    sb.append("$date\n$toUid  $fromPid")
+    if (log.target != -1) {
+        val pid = if (log.target == 0) "magiskd" else log.target.toString()
+        val target = res.getString(CoreR.string.target_pid, pid)
+        sb.append("  $target")
+    }
+    if (log.context.isNotEmpty()) {
+        val context = res.getString(CoreR.string.selinux_context, log.context)
+        sb.append("\n$context")
+    }
+    if (log.gids.isNotEmpty()) {
+        val gids = res.getString(CoreR.string.supp_group, log.gids)
+        sb.append("\n$gids")
+    }
+    sb.append("\n${log.command}")
+    return sb.toString()
 }
 
 // ---- Modules -----------------------------------------------------------------
@@ -719,9 +781,10 @@ fun LogsSection(vm: LogViewModel) {
 @Composable
 fun ModulesSection(vm: ModuleViewModel) {
     val accent = LocalMetroPalette.current.modules
-    val tick = vm.observeAsTick()
-    val loading = remember(tick) { vm.loading }
-    val items by vm.items.asComposeState()
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val loading = uiState.loading
+    val items = uiState.modules
+    val context = LocalContext.current
 
     if (loading && items.isEmpty()) {
         MetroCentered(stringResource(R.string.metro_loading))
@@ -731,9 +794,11 @@ fun ModulesSection(vm: ModuleViewModel) {
         MetroCentered(stringResource(R.string.metro_no_modules))
         return
     }
-    val installModule = items.filterIsInstance<InstallModule>().firstOrNull()
-    val modules = items.filterIsInstance<LocalModuleRvItem>()
-    val updates = modules.filter { it.item.updateInfo != null && it.item.outdated }
+    val modules = items
+    val updates = modules.filter { it.showUpdate }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { vm.confirmLocalInstall(it) }
+    }
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_persistent),
@@ -747,12 +812,12 @@ fun ModulesSection(vm: ModuleViewModel) {
             return@MetroSubPivot
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            if (page == 1 && installModule != null) {
+            if (page == 1) {
                 item {
                     MetroFlipItem(index = 0, visible = visible) {
                         Row(modifier = Modifier.padding(SectionPadding)) {
                             MetroTextButton(stringResource(R.string.metro_install_module), accent) {
-                                vm.installPressed()
+                                filePicker.launch("application/zip")
                             }
                         }
                     }
@@ -764,7 +829,7 @@ fun ModulesSection(vm: ModuleViewModel) {
                 }
             } else {
                 itemsIndexed(pageModules) { index, item ->
-                    MetroFlipItem(index = index + if (page == 1 && installModule != null) 1 else 0, visible = visible) {
+                    MetroFlipItem(index = index + if (page == 1) 1 else 0, visible = visible) {
                         ModuleRow(vm, item, accent)
                     }
                 }
@@ -777,11 +842,8 @@ fun ModulesSection(vm: ModuleViewModel) {
 @Composable
 private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
     val context = LocalContext.current
-    val revision = remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(0 to null, revision.intValue) {
-        value = revision.intValue to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.topjohnwu.magisk.core.PersistentModules.fetch()
-        }
+    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(0 to null) {
+        value = 0 to withContext(Dispatchers.IO) { PersistentModules.fetch() }
     }
     val declaration = snapshot.second
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -809,18 +871,15 @@ private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
             MetroFlipItem(index = 1, visible = visible) {
                 Row(modifier = Modifier.padding(SectionPadding)) {
                     MetroTextButton(stringResource(R.string.metro_persistent_apply), accent) {
-                        val host = context as? android.app.Activity ?: return@MetroTextButton
-                        val nav = androidx.navigation.Navigation.findNavController(host, R.id.main_nav_host)
-                        if (!com.topjohnwu.magisk.core.Config.metroPersistentModules) {
+                        if (!PersistentModules.configured()) {
                             // Not configured yet: send the user to Settings · Misc to flip the switch.
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 context,
                                 R.string.metro_persistent_goto_settings,
-                                android.widget.Toast.LENGTH_LONG,
+                                Toast.LENGTH_LONG,
                             ).show()
-                            nav.navigate(com.topjohnwu.magisk.MainDirections.actionSectionPivotFragment("SETTINGS"))
                         } else {
-                            nav.navigate(R.id.action_persistentFragment)
+                            PersistentModules.apply()
                         }
                     }
                 }
@@ -830,211 +889,125 @@ private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
 }
 
 @Composable
-private fun ModuleRow(vm: ModuleViewModel, item: LocalModuleRvItem, accent: MetroAccent) {
-    val tick = item.observeAsTick()
-    key(tick) {
-        val module = item.item
-        val enabled = item.isEnabled
-        val removed = item.isRemoved
-        val inactive = removed || !enabled
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (removed) 0.48f else if (!enabled) 0.68f else 1f)
-                .padding(SectionPadding),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = module.name,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 17.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${module.version} \u00b7 ${module.author}",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = if (removed) null else { checked -> item.isEnabled = checked },
-                    enabled = !removed,
-                    colors = metroSwitchColors(accent),
-                )
-            }
-            if (module.description.isNotEmpty()) {
+private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent) {
+    val context = LocalContext.current
+    val module = item.module
+    val enabled = item.isEnabled
+    val removed = item.isRemoved
+    val inactive = removed || !enabled
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (removed) 0.48f else if (!enabled) 0.68f else 1f)
+            .padding(SectionPadding),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = module.description,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 4.dp),
+                    text = module.name,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (item.showNotice) {
                 Text(
-                    text = item.noticeText.getText(LocalContext.current.resources).toString(),
-                    color = accent.color,
+                    text = "${module.version} \u00b7 ${module.author}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Switch(
+                checked = enabled,
+                onCheckedChange = if (removed) null else ({ vm.toggleEnabled(item) }),
+                enabled = !removed,
+                colors = metroSwitchColors(accent),
+            )
+        }
+        if (module.description.isNotEmpty()) {
+            Text(
+                text = module.description,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        if (item.showNotice) {
+            Text(
+                text = textHolder(item.noticeText).toString(),
+                color = accent.color,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MetroTextButton(
+                if (removed) stringResource(R.string.metro_module_restore)
+                else stringResource(R.string.metro_module_remove),
+                accent,
+            ) { vm.toggleRemove(item) }
+            if (item.showUpdate) {
                 MetroTextButton(
-                    if (removed) stringResource(R.string.metro_module_restore)
-                    else stringResource(R.string.metro_module_remove),
-                    accent,
-                ) { item.delete() }
-                if (item.showUpdate) {
-                    MetroTextButton(
-                        text = stringResource(R.string.metro_module_update),
-                        accent = accent,
-                        enabled = item.updateReady,
-                    ) {
-                        vm.downloadPressed(module.updateInfo)
-                    }
+                    text = stringResource(R.string.metro_module_update),
+                    accent = accent,
+                    enabled = item.updateReady,
+                ) {
+                    val updateInfo = module.updateInfo ?: return@MetroTextButton
+                    val activity = context.findActivity()
+                    com.topjohnwu.magisk.core.download.DownloadEngine.startWithActivity(
+                        activity,
+                        OnlineModuleSubject(updateInfo, true),
+                    )
                 }
-                if (item.showAction) {
-                    MetroTextButton(stringResource(R.string.metro_module_action), accent) {
-                        vm.runAction(module.id, module.name)
-                    }
-                }
-                if (item.showWebUi) {
-                    MetroTextButton(stringResource(R.string.metro_module_webui), accent) {
-                        vm.openWebUi(module.id, module.name)
-                    }
+            }
+            if (item.showAction) {
+                MetroTextButton(stringResource(R.string.metro_module_action), accent) {
+                    vm.runAction(module.id, module.name)
                 }
             }
         }
     }
 }
 
-private data class MetroSettingsGroup(
-    val header: BaseSettingsItem.Section?,
-    val items: List<BaseSettingsItem>,
-)
+private fun android.content.Context.findActivity(): com.topjohnwu.magisk.ui.MainActivity {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is com.topjohnwu.magisk.ui.MainActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    error("Activity not found in context chain")
+}
+
+// ---- Settings ----------------------------------------------------------------
 
 @Composable
 fun SettingsSection(vm: SettingsViewModel) {
     val accent = LocalMetroPalette.current.settings
-    val items = remember { vm.items }
-    if (items.isEmpty()) {
-        MetroCentered(stringResource(R.string.metro_no_settings))
-        return
-    }
-
-    val groups = remember(items) {
-        val result = mutableListOf<MetroSettingsGroup>()
-        var header: BaseSettingsItem.Section? = null
-        var sectionItems = mutableListOf<BaseSettingsItem>()
-        fun addGroup() {
-            if (header != null || sectionItems.isNotEmpty()) {
-                result += MetroSettingsGroup(header, sectionItems)
-            }
-        }
-        items.forEach { item ->
-            if (item is BaseSettingsItem.Section) {
-                addGroup()
-                header = item
-                sectionItems = mutableListOf()
-            } else {
-                sectionItems += item
-            }
-        }
-        addGroup()
-        result
-    }
-    val resources = LocalContext.current.resources
     MetroSubPivot(
-        titles = groups.map { group ->
-            group.header?.title?.getText(resources)?.toString()
-                ?: stringResource(R.string.metro_settings)
-        },
-    ) { page, visible ->
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(groups[page].items) { index, item ->
-                MetroFlipItem(index = index, visible = visible) {
-                    when (item) {
-                        is BaseSettingsItem.Toggle -> SettingsToggleRow(vm, item, accent)
-                        else -> SettingsClickRow(vm, item)
-                    }
-                }
+        titles = listOf(
+            stringResource(CoreR.string.settings_customization),
+            stringResource(CoreR.string.home_app_title),
+            stringResource(CoreR.string.magisk),
+            stringResource(CoreR.string.superuser),
+        ),
+    ) { page, _ ->
+        val scrollState = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            when (page) {
+                0 -> CustomizationSection(vm)
+                1 -> AppSettingsSection(vm)
+                2 -> if (Info.env.isActive) SettingsMagiskSection(vm)
+                3 -> if (Info.showSuperUser) SuperuserSection(vm)
             }
-        }
-    }
-}
-
-@Composable
-private fun SettingsToggleRow(vm: SettingsViewModel, item: BaseSettingsItem, accent: MetroAccent) {
-    val view = LocalView.current
-    val res = LocalContext.current.resources
-    val tick = item.observeAsTick()
-    key(tick) {
-        val enabled = item.isEnabled
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = enabled) { item.onToggle(view, vm, !item.isChecked) }
-                .padding(SectionPadding),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SettingsTitleAndDesc(item, res, Modifier.weight(1f))
-            Switch(
-                checked = item.isChecked,
-                onCheckedChange = { item.onToggle(view, vm, it) },
-                enabled = enabled,
-                colors = metroSwitchColors(accent),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsClickRow(vm: SettingsViewModel, item: BaseSettingsItem) {
-    val view = LocalView.current
-    val res = LocalContext.current.resources
-    val tick = item.observeAsTick()
-    key(tick) {
-        val enabled = item.isEnabled
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = enabled) { item.onPressed(view, vm) }
-                .padding(SectionPadding),
-        ) {
-            SettingsTitleAndDesc(item, res, Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun SettingsTitleAndDesc(
-    item: BaseSettingsItem,
-    res: android.content.res.Resources,
-    modifier: Modifier,
-) {
-    val enabled = item.isEnabled
-    Column(modifier = modifier) {
-        Text(
-            text = item.title.getText(res).toString(),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.4f),
-            fontSize = 17.sp,
-        )
-        val desc = item.description
-        if (!desc.isEmpty) {
-            Text(
-                text = desc.getText(res).toString(),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.6f else 0.3f),
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 2.dp),
-            )
         }
     }
 }

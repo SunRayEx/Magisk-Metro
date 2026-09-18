@@ -1,16 +1,7 @@
 package com.topjohnwu.magisk.ui.flash
 
-<<<<<<< HEAD
-import android.view.MenuItem
-import androidx.databinding.Bindable
-import androidx.databinding.ObservableArrayList
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.map
-=======
 import android.net.Uri
 import androidx.core.net.toFile
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.AppContext
@@ -115,18 +106,12 @@ class FlashViewModel : BaseViewModel() {
                         MagiskInstaller.Patch(uri, outItems, logItems).exec()
                     })
                 }
-<<<<<<< HEAD
-                else -> {
-                    back()
-                    return@launch
-=======
                 Const.Value.DOWNLOAD -> {
                     uri ?: return@launch
                     _showReboot.value = false
                     onResult(withContext(Dispatchers.IO) {
                         MagiskInstaller.Download(uri.toString(), outItems, logItems).exec()
                     })
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
                 }
             }
         }

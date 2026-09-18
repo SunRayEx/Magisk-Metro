@@ -26,14 +26,8 @@ import com.topjohnwu.magisk.core.base.ActivityExtension
 import com.topjohnwu.magisk.core.base.UntrackedActivity
 import com.topjohnwu.magisk.core.su.SuCallbackHandler
 import com.topjohnwu.magisk.core.su.SuCallbackHandler.REQUEST
-<<<<<<< HEAD
-import com.topjohnwu.magisk.databinding.ActivityRequestBinding
-import com.topjohnwu.magisk.ui.theme.Theme
-import com.topjohnwu.magisk.ui.anim.MetroViewAnimations
-=======
 import com.topjohnwu.magisk.core.wrap
 import com.topjohnwu.magisk.ui.MagiskTheme
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,9 +54,6 @@ class SuRequestActivity : ComponentActivity(), UntrackedActivity {
         }
         setTheme(R.style.Floating)
         super.onCreate(savedInstanceState)
-<<<<<<< HEAD
-        binding.suPopup.post { MetroViewAnimations.flipIn(binding.suPopup) }
-=======
         setFinishOnTouchOutside(false)
 
         onBackPressedDispatcher.addCallback(this) { viewModel.denyPressed() }
@@ -70,7 +61,6 @@ class SuRequestActivity : ComponentActivity(), UntrackedActivity {
         viewModel.authenticate = { onSuccess ->
             extension.withAuthentication { if (it) onSuccess() }
         }
->>>>>>> 37063225d4f344a8f41de8201f679e57098cb7e6
 
         if (intent.action == Intent.ACTION_VIEW) {
             val action = intent.getStringExtra("action")

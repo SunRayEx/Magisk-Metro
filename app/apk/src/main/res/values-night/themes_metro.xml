@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Dark variants of the Metro theme palette. See values/themes_metro.xml. -->
+
+    <style name="ThemeFoundationMD2" parent="Theme.Material3.DayNight" />
+
+    <style name="ThemeFoundationMD2.Default" parent="ThemeFoundationMD2.Piplup" />
+
+    <style name="ThemeFoundationMD2.Piplup">
+        <item name="colorPrimary">#4EAFF5</item>
+        <item name="colorOnPrimary">#F9F9F9</item>
+        <item name="colorSecondary">#3E78AF</item>
+        <item name="colorOnSecondary">#F9F9F9</item>
+        <item name="colorSurface">#0D0D0D</item>
+        <item name="colorSurfaceVariant">#171717</item>
+        <item name="colorOnSurface">#D8D8D8</item>
+        <item name="colorOnSurfaceVariant">#CCBABABA</item>
+        <item name="colorError">#EF8282</item>
+        <item name="colorOnError">#0D0D0D</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Amoled" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorSurface">#000000</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="colorOnError">#FFFFFF</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Rayquaza" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorPrimary">#68A17F</item>
+        <item name="colorOnPrimary">#F9F9F9</item>
+        <item name="colorSecondary">#2F6D43</item>
+        <item name="colorOnSecondary">#F9F9F9</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Zapdos.Base" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorSecondary">#B29667</item>
+        <item name="colorOnSecondary">#000000</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Zapdos" parent="ThemeFoundationMD2.Zapdos.Base">
+        <item name="colorPrimary">#FBD179</item>
+        <item name="colorOnPrimary">#000000</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Charmeleon" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorPrimary">#DB7366</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#B65247</item>
+        <item name="colorOnSecondary">#000000</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Mew.Base" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorSecondary">#B5889B</item>
+        <item name="colorOnSecondary">#F9F9F9</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Mew" parent="ThemeFoundationMD2.Mew.Base">
+        <item name="colorPrimary">#D9ADB7</item>
+        <item name="colorOnPrimary">#000000</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Salamence" parent="ThemeFoundationMD2.Piplup">
+        <item name="colorPrimary">#70B2C6</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#C06A75</item>
+        <item name="colorOnSecondary">#000000</item>
+    </style>
+
+    <style name="ThemeFoundationMD2.Fraxure" parent="ThemeFoundationMD2.Amoled">
+        <item name="colorPrimary">#009688</item>
+        <item name="colorOnPrimary">#F9F9F9</item>
+        <item name="colorSecondary">#CC0047</item>
+        <item name="colorOnSecondary">#F9F9F9</item>
+    </style>
+
+</resources>
