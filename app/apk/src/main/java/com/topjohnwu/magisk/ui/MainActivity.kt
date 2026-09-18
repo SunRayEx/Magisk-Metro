@@ -61,6 +61,7 @@ import com.topjohnwu.magisk.ui.log.LogViewModel
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.module.ActionScreen
 import com.topjohnwu.magisk.ui.module.ActionViewModel
+import com.topjohnwu.magisk.ui.module.WebUiScreen
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import com.topjohnwu.magisk.ui.navigation.Navigator
 import com.topjohnwu.magisk.ui.navigation.Route
@@ -309,6 +310,11 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                                         }
                                     }
                                     ActionScreen(vm, actionName = key.name, onBack = { navigator.pop() })
+                                }
+                                entry<Route.WebUi> { key ->
+                                    MagisKubeTheme {
+                                        WebUiScreen(moduleId = key.id, moduleName = key.name)
+                                    }
                                 }
                             }
                         )

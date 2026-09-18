@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -229,6 +230,14 @@ fun MagiskSection(vm: HomeViewModel) {
     val accent = LocalMetroPalette.current.magisk
     val installVm: InstallViewModel = viewModel(factory = VMFactory)
     var showInstallDialog by remember { mutableStateOf(false) }
+
+    // Install pushes the Flash destination through the shared Navigator. This VM is created here
+    // rather than passed in, so its events have to be collected locally or the install buttons
+    // would do nothing.
+    val navigator = LocalNavigator.current
+    LaunchedEffect(installVm) {
+        installVm.navEvents.collect { navigator.push(it) }
+    }
 
     MetroSubPivot(
         titles = listOf(
@@ -942,7 +951,9 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
             )
         }
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             MetroTextButton(
@@ -954,7 +965,11 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
                 MetroTextButton(
                     text = stringResource(R.string.metro_module_update),
                     accent = accent,
+                    // Mirror the upstream screen: the button is only meaningful when an update is
+                    // actually pending. Showing it greyed out for a module that is already current
+                    // reads as a broken control.
                     enabled = item.updateReady,
+                    selected = item.updateReady,
                 ) {
                     val updateInfo = module.updateInfo ?: return@MetroTextButton
                     val activity = context.findActivity()
@@ -967,6 +982,11 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
             if (item.showAction) {
                 MetroTextButton(stringResource(R.string.metro_module_action), accent) {
                     vm.runAction(module.id, module.name)
+                }
+            }
+            if (item.showWebUi) {
+                MetroTextButton(stringResource(R.string.metro_module_webui), accent) {
+                    vm.openWebUi(module.base.name, module.name)
                 }
             }
         }

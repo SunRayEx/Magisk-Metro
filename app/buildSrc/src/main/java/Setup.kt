@@ -21,6 +21,7 @@ import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.File
+import java.io.IOException
 import java.net.URI
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -106,11 +107,28 @@ private fun Project.downloadFile(url: String, checksum: String): File {
     }
     if (!file.exists()) {
         file.parentFile.mkdirs()
-        URI(url).toURL().openStream().use { dl ->
-            file.outputStream().use {
-                dl.copyTo(it)
+        // GitHub release assets are large and the connection is regularly reset mid-transfer;
+        // a single dropped read used to fail the whole build. Retry with backoff and only
+        // accept the result when the SHA-256 matches the expected checksum.
+        var lastError: IOException? = null
+        for (attempt in 1..DOWNLOAD_MAX_ATTEMPTS) {
+            try {
+                URI(url).toURL().openStream().use { dl ->
+                    file.outputStream().use {
+                        dl.copyTo(it)
+                    }
+                }
+                lastError = null
+                break
+            } catch (e: IOException) {
+                lastError = e
+                file.delete()
+                if (attempt < DOWNLOAD_MAX_ATTEMPTS) {
+                    Thread.sleep(DOWNLOAD_BACKOFF_MS * attempt)
+                }
             }
         }
+        lastError?.let { throw it }
     }
     return file
 }
@@ -124,6 +142,9 @@ const val BOOTCTL_DOWNLOAD_URL =
     "https://github.com/topjohnwu/magisk-files/releases/download/files/bootctl-android-14.0.0_r1.zip"
 const val BOOTCTL_ZIP_CHECKSUM =
     "2cf515aeb17259e88393a1322671ebab1968925864bc04ae57dad54e53ccf15b"
+
+private const val DOWNLOAD_MAX_ATTEMPTS = 4
+private const val DOWNLOAD_BACKOFF_MS = 2000L
 
 private abstract class SyncWithDir : Sync() {
     @get:OutputDirectory
