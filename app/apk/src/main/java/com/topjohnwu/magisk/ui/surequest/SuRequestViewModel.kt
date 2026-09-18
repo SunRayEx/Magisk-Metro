@@ -162,9 +162,16 @@ class SuRequestViewModel(
             responded = true
             val pos = _uiState.value.selectedItemPosition
             runBlocking(Dispatchers.IO) {
-                handler.respond(DENY, Config.Value.TIMEOUT_LIST[pos])
+                handler.respond(DENY, timeoutAt(pos))
             }
         }
+    }
+
+    /** Resolves a slider position to a timeout, tolerating the level-0 sentinel: that slot has
+     * no timeout of its own, so fall back to the default rather than indexing out of bounds. */
+    private fun timeoutAt(pos: Int): Long {
+        val list = Config.Value.TIMEOUT_LIST
+        return if (pos in list.indices) list[pos] else 0
     }
 
     private fun respond(action: Int) {
@@ -177,7 +184,7 @@ class SuRequestViewModel(
         timeoutPrefs.edit { putInt(pkg, pos) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            handler.respond(action, Config.Value.TIMEOUT_LIST[pos])
+            handler.respond(action, timeoutAt(pos))
             withContext(Dispatchers.Main) {
                 finishActivity()
             }
@@ -185,14 +192,22 @@ class SuRequestViewModel(
     }
 
     private fun respondZero() {
-        if (!initialized) {
+        if (!initialized || responded) {
             return
         }
-
+        responded = true
         timer.cancel()
-        viewModelScope.launch {
+
+        // Remember the choice the same way a normal grant remembers its timeout.
+        val pkg = _uiState.value.packageName
+        val pos = _uiState.value.selectedItemPosition
+        timeoutPrefs.edit { putInt(pkg, pos) }
+
+        viewModelScope.launch(Dispatchers.IO) {
             handler.respond(ZERO, 0)
-            finishActivity()
+            withContext(Dispatchers.Main) {
+                finishActivity()
+            }
         }
     }
 
