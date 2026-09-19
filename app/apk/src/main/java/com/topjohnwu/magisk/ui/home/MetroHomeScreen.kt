@@ -260,49 +260,52 @@ private fun MetroGrid(
     onMagiskClick: () -> Unit,
 ) {
     val gap = 3.dp
-    val customizing = Config.metroTileCustomization
+    // The scroll must NOT sit on this BoxWithConstraints: a scrollable container measures
+    // its content with an unbounded free axis, which would make maxHeight/maxWidth report
+    // Infinity and blow up the board size below. The viewport is measured here and the
+    // scroll is applied to the board wrapper instead.
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
-            .navigationBarsPadding()
-            // The board only scrolls while it is being customized; otherwise the tiles are
-            // packed into exactly the visible free-axis extent, so the whole start screen
-            // is always on screen.
-            .then(
-                if (!customizing) Modifier
-                else if (isLandscape) Modifier.horizontalScroll(rememberScrollState())
-                else Modifier.verticalScroll(rememberScrollState()),
-            ),
+            .navigationBarsPadding(),
     ) {
         val cap = MetroTileLayout.fixedSpan(isLandscape)
         val constrainedMax = if (isLandscape) maxHeight else maxWidth
         val tileSize = (constrainedMax - gap * (cap + 1)) / cap
         val freeViewport = if (isLandscape) maxWidth else maxHeight
-        // Whole cells that fit on the free axis; used as the packing bound when not scrolling.
+        // Whole cells that fit on the free axis. The board is padded to at least this many
+        // cells so a short board still fills the screen, and is free to grow past it once a
+        // tile is added or dragged beyond the edge.
         val visibleFreeExtent = ((freeViewport - gap) / (tileSize + gap)).toInt().coerceAtLeast(1)
         val customIds = customTiles.map { it.id }
         val customWidths = customTiles.associate { it.id to (if (it.groupMembers.size > 1) 2 else 1) }
-        var placements by remember(cap, isLandscape, MetroUiState.version, customIds, customWidths, customizing, visibleFreeExtent) {
-            mutableStateOf(
-                MetroTileLayout.load(
-                    isLandscape, customIds, customWidths,
-                    freeBound = if (customizing) Int.MAX_VALUE else visibleFreeExtent,
-                ),
-            )
+        // Tile positions are kept exactly as the user left them in every mode; nothing is
+        // squeezed back into the visible rows when customization ends.
+        var placements by remember(cap, isLandscape, MetroUiState.version, customIds, customWidths) {
+            mutableStateOf(MetroTileLayout.load(isLandscape, customIds, customWidths))
         }
-        // The board is only as long as the last tile, so the page never scrolls past it.
-        // Without scrolling the board is pinned to the visible extent.
+        // The board is exactly as long as its last tile and never shorter than the viewport,
+        // so the page can scroll to a newly added tile and stops there.
         val freeExtent = MetroTileLayout.usedFreeExtent(placements, isLandscape)
-            .let { if (customizing) it else it.coerceAtMost(visibleFreeExtent) }.coerceAtLeast(1)
+            .coerceAtLeast(visibleFreeExtent)
         fun persist(next: List<MetroTilePlacement>) {
             placements = MetroTileLayout.save(next, isLandscape)
         }
         val boardWidth = if (isLandscape) tileSize * freeExtent + gap * (freeExtent - 1) else tileSize * cap + gap * (cap - 1)
         val boardHeight = if (isLandscape) tileSize * cap + gap * (cap - 1) else tileSize * freeExtent + gap * (freeExtent - 1)
-        Box(modifier = Modifier.padding(gap).size(boardWidth, boardHeight)) {
-            MetroBoard(
+        // The board is the scroll content: it is sized to exactly the tiles it holds, so the
+        // scroll range covers every tile and stops at the last one instead of coasting on.
+        val scrollState = rememberScrollState()
+        Box(
+            modifier = Modifier.then(
+                if (isLandscape) Modifier.horizontalScroll(scrollState)
+                else Modifier.verticalScroll(scrollState),
+            ),
+        ) {
+            Box(modifier = Modifier.padding(gap).size(boardWidth, boardHeight)) {
+                MetroBoard(
                 viewModel = viewModel,
                 placements = placements,
                 onPlacementsChange = ::persist,
@@ -321,6 +324,7 @@ private fun MetroGrid(
                 onContributorsClick = onContributorsClick,
                 onMagiskClick = onMagiskClick,
             )
+            }
         }
     }
 }
@@ -533,7 +537,8 @@ private fun MetroBoard(
             }
         }
         customTiles.forEachIndexed { index, tile ->
-            val placement = placements.firstOrNull { it.id == tile.id } ?: return@forEachIndexed
+            val placement = resizePreview?.takeIf { it.id == tile.id }
+                ?: placements.firstOrNull { it.id == tile.id } ?: return@forEachIndexed
             // Custom tiles are theme citizens: they ride the Apps role accent and change with
             // the theme, exactly like built-in tiles. Only the custom-theme palette can
             // recolor them (through the per-role custom colors).
@@ -612,7 +617,7 @@ private fun CustomTile(
                 AutoRollingList(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
                     items = tile.ticker.split('\n', '|').map(String::trim).filter(String::isNotBlank),
-                    visibleItems = 2,
+                    rowHeight = ListRowCompact,
                     emptyText = "",
                     textColor = foreground,
                 )
@@ -782,7 +787,7 @@ private fun ModuleTile(
                     .fillMaxWidth()
                     .padding(top = 2.dp),
                 items = modules.map { it.name },
-                visibleItems = 2,
+                rowHeight = ListRowCompact,
                 textAlign = TextAlign.Start,
                 emptyText = stringResource(R.string.metro_no_modules),
                 textColor = accent.onColor,
@@ -821,7 +826,7 @@ private fun AppTile(
                     .fillMaxWidth()
                     .padding(top = 2.dp),
                 items = apps,
-                visibleItems = 2,
+                rowHeight = ListRowCompact,
                 textAlign = TextAlign.Start,
                 emptyText = stringResource(R.string.metro_no_rooted_apps),
                 textColor = accent.onColor,
@@ -895,7 +900,7 @@ private fun LogTile(modifier: Modifier, navigationIndex: Int, logs: List<String>
                     .fillMaxWidth()
                     .padding(top = 2.dp),
                 items = logs,
-                visibleItems = 10,
+                rowHeight = ListRowDense,
                 textAlign = TextAlign.Start,
                 emptyText = stringResource(R.string.metro_no_warnings),
                 textColor = accent.onColor,
@@ -904,40 +909,54 @@ private fun LogTile(modifier: Modifier, navigationIndex: Int, logs: List<String>
     }
 }
 
+/** Compact row heights for the rolling lists. Rows never stretch: whatever height the tile
+ * has, the list packs in as many of these fixed-height rows as fit, so a tile that is pulled
+ * taller fills the extra space with more items instead of just spreading the same few out.
+ * The logs tile is denser because it has no big count number to make room for. */
+private val ListRowCompact = 34.dp
+private val ListRowDense = 22.dp
+private const val ListMinRows = 2
+private const val ListMaxRows = 32
+
 @Composable
 private fun AutoRollingList(
     modifier: Modifier,
     items: List<String>,
-    visibleItems: Int,
+    rowHeight: Dp,
     textAlign: TextAlign = TextAlign.Start,
     emptyText: String,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    val canRoll = items.size > visibleItems
-    val rollingItems = remember(items, visibleItems) {
-        if (canRoll) List(items.size * 3) { items[it % items.size] } else items
-    }
     val listState = rememberLazyListState()
-
-    LaunchedEffect(items, visibleItems) {
-        if (canRoll) {
-            var index = items.size
-            listState.scrollToItem(index)
-            while (true) {
-                delay(2600L)
-                index += 1
-                listState.animateScrollToItem(index)
-                if (index >= items.size * 2) {
-                    index = items.size
-                    listState.scrollToItem(index)
-                }
-            }
-        } else {
-            listState.scrollToItem(0)
-        }
-    }
-
     BoxWithConstraints(modifier = modifier) {
+        // The capacity is derived from the height this list actually has, so it grows in real
+        // time while the tile is being resized. Rows shrink only when even the minimum would
+        // not fit, so a small tile still shows a couple of items.
+        val rowH = rowHeight.coerceAtMost(maxHeight / ListMinRows)
+        val visibleItems = (maxHeight / rowH).toInt().coerceIn(ListMinRows, ListMaxRows)
+        val canRoll = items.size > visibleItems
+        val rollingItems = remember(items, visibleItems) {
+            if (canRoll) List(items.size * 3) { items[it % items.size] } else items
+        }
+
+        LaunchedEffect(items, visibleItems) {
+            if (canRoll) {
+                var index = items.size
+                listState.scrollToItem(index)
+                while (true) {
+                    delay(2600L)
+                    index += 1
+                    listState.animateScrollToItem(index)
+                    if (index >= items.size * 2) {
+                        index = items.size
+                        listState.scrollToItem(index)
+                    }
+                }
+            } else {
+                listState.scrollToItem(0)
+            }
+        }
+
         if (items.isEmpty()) {
             Text(
                 text = emptyText,
@@ -949,12 +968,10 @@ private fun AutoRollingList(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            val rowHeight = maxHeight / visibleItems
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
                 userScrollEnabled = false,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 1.dp),
             ) {
                 itemsIndexed(rollingItems) { index, value ->
                     val offset = kotlin.math.abs(index - listState.firstVisibleItemIndex)
@@ -966,7 +983,7 @@ private fun AutoRollingList(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(rowHeight)
+                            .height(rowH)
                             .padding(horizontal = 2.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
