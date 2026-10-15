@@ -153,9 +153,8 @@ impl MagiskD {
                 req.drop_cap = true;
             }
 
-            // Level 0: a deceptive grant. The shell shows uid 0 but runs inside a sandboxed
-            // user-space hiding environment where every high-risk syscall is intercepted
-            // and ghost-audited.
+            // Level 0: the shell keeps the uid 0 identity but runs with reduced capabilities
+            // and an isolated mount namespace.
             if access.settings.policy == SuPolicy::Zero {
                 req.zero = true;
                 req.drop_cap = true;

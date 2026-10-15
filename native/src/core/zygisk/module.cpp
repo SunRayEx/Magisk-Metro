@@ -1,4 +1,5 @@
 #include <sys/mman.h>
+#include <unistd.h>
 #include <android/dlext.h>
 #include <dlfcn.h>
 
@@ -412,6 +413,7 @@ void ZygiskContext::app_specialize_pre() {
 
 void ZygiskContext::app_specialize_post() {
     run_modules_post();
+
     if (info_flags & +ZygiskStateFlags::ProcessIsMagiskApp) {
         setenv("ZYGISK_ENABLED", "1", 1);
     }

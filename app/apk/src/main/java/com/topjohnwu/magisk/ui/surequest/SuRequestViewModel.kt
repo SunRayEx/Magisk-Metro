@@ -81,7 +81,7 @@ class SuRequestViewModel(
         }
     }
 
-    /** Deceptive grant: uid 0 in name only; the daemon sandboxes and ghost-audits the shell. */
+    /** Level 0 grant: uid 0 identity with reduced capabilities and an isolated mount namespace. */
     fun zeroPressed() {
         cancelTimer()
         if (Config.suAuth) {

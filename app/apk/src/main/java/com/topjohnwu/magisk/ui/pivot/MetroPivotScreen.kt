@@ -97,10 +97,15 @@ fun MetroPivotScreen(
     }
 
     // Settings pushes secondary destinations (persistent modules, deny list config, theme)
-    // through the shared Navigator instead of Fragment directions.
+    // through the shared Navigator instead of Fragment directions. Modules does the same for
+    // the module action screen, so its events must be collected too or the action button stays
+    // dead.
     val navigator = LocalNavigator.current
     LaunchedEffect(settingsVM) {
         settingsVM.navEvents.collect { navigator.push(it) }
+    }
+    LaunchedEffect(moduleVM) {
+        moduleVM.navEvents.collect { navigator.push(it) }
     }
 
     // The top-level pager is the single source of truth. This keeps a tap, header drag, and a

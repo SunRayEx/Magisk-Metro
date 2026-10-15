@@ -1,6 +1,7 @@
 package com.topjohnwu.magisk.ui.settings
 
 import android.os.Build
+import android.app.Activity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -40,10 +41,8 @@ import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.isRunningAsStub
-import com.topjohnwu.magisk.core.model.ColorMode
 import com.topjohnwu.magisk.core.utils.LocaleSetting
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils
-import com.topjohnwu.magisk.ui.ThemeState
 import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.component.SettingsArrow
 import com.topjohnwu.magisk.ui.component.SettingsDropdown
@@ -153,31 +152,34 @@ internal fun CustomizationSection(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
 
-        // Color Mode
-        val isDynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        // 主题颜色 (Color mode). The upstream ThemeState/ColorMode machinery is not wired into
+        // MagisKubeTheme, so a Metro-specific preference drives the night mode instead: the
+        // selected mode is forced onto the activity configuration, which both the XML night
+        // resources and Compose's isSystemInDarkTheme() follow. The configuration is resolved
+        // in attachBaseContext, so the activity is recreated for the change to take effect.
         val resources = LocalResources.current
-        val rawColorModeEntries = remember {
-            resources.getStringArray(CoreR.array.color_mode).toList()
+        val nightModeEntries = remember {
+            resources.getStringArray(R.array.metro_night_mode).toList()
         }
-        val colorModeEntries = remember(isDynamicColorSupported) {
-            if (isDynamicColorSupported) {
-                rawColorModeEntries
-            } else {
-                rawColorModeEntries.drop(3)
+        val nightModeIndex = remember {
+            when (Config.metroNightMode) {
+                1 -> 0   // Dark mode
+                0 -> 1   // Light mode
+                else -> 2 // Follow system
             }
         }
-        var colorMode by remember { mutableIntStateOf(Config.colorMode) }
-        val selectedIndex = ColorMode.fromValue(colorMode).toUiIndex(isDynamicColorSupported)
 
         SettingsDropdown(
             title = stringResource(CoreR.string.settings_color_mode),
-            items = colorModeEntries,
-            selectedIndex = selectedIndex,
+            items = nightModeEntries,
+            selectedIndex = nightModeIndex,
             onSelectedIndexChange = { index ->
-                val newMode = ColorMode.fromUiIndex(index, isDynamicColorSupported)
-                colorMode = newMode.value
-                Config.colorMode = newMode.value
-                ThemeState.colorMode = newMode.value
+                Config.metroNightMode = when (index) {
+                    0 -> 1   // Dark mode
+                    1 -> 0   // Light mode
+                    else -> -1 // Follow system
+                }
+                (context as? Activity)?.recreate()
             }
         )
 
@@ -454,20 +456,6 @@ internal fun MagiskSection(
                 onClick = { viewModel.navigateToDenyList() }
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            )
-
-            // Ghost sandbox: seccomp BPF hardening for deny-listed apps
-            val ghostSandbox by viewModel.ghostSandbox.collectAsStateWithLifecycle()
-            SettingsSwitch(
-                title = stringResource(R.string.metro_denylist_sandbox),
-                summary = stringResource(R.string.metro_denylist_sandbox_summary),
-                checked = ghostSandbox,
-                enabled = Info.env.isActive,
-                onCheckedChange = { viewModel.toggleGhostSandbox(it) }
-            )
         }
     }
 }

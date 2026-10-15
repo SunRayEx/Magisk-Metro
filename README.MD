@@ -4,7 +4,7 @@
 
 # MagisKube · Magisk Metro
 
-**Magisk 的 Metro 重制版。** 管理器 UI 重写为 Windows 8 / Windows Phone 设计语言(磁贴开始屏幕、Pivot 导航、七色角色强调色系统),并在此基础上扩展了原生功能:**常驻模块**(声明式模块管理,Rust + Zig + C 原生栈)与**动态授权**(单次授权 / 0 级授权 / DenyList 沙箱加强)。
+**Magisk 的 Metro 重制版。** 管理器 UI 重写为 Windows 8 / Windows Phone 设计语言(磁贴开始屏幕、Pivot 导航、七色角色强调色系统),并在此基础上扩展了原生功能:**常驻模块**(nix 式声明式模块管理,Rust + Zig + C 原生栈)与**动态授权**(单次授权 / 0 级授权 / DenyList 挂载隔离弱防护)。
 
 上游的全部核心能力原样保留:**MagiskSU** root 授权、**Magisk Modules** 无系统分区修改、**MagiskBoot** 镜像解包重打包、**Zygisk** 进程注入。
 
@@ -71,11 +71,10 @@ Metro 的灵魂是扁平的大色块。本项目建立了一套**七角色强调
 ## 动态授权(实验性)
 
 - **单次授权**:su 弹窗中的"仅本次"——授权只对当次请求生效,不写入策略数据库,永不出现授权列表;
-- **0 级授权**:欺骗性授予——shell 显示 uid 0,但运行在独立挂载命名空间 + 用户空间隐藏 + 全能力清除 + **Seccomp BPF** 拦截之下,高危系统调用(mount / ptrace / bpf / kexec…)一律失败;
-- **幽灵审计**:被拦截的系统调用以目标进程完全不可见的方式记录到 `/data/adb/metromod/ghost_audit.log`,su 日志页可查看;
-- **DenyList 沙箱**:可为排除列表应用套用同一 Seccomp 沙箱,拦截事件同样进入幽灵审计。
+- **0 级授权**:shell 保留 uid 0 身份,同时降低 capabilities 并隔离挂载命名空间;
+- **DenyList 弱防护**:使用 Magisk 原有的挂载命名空间隔离与模块卸载恢复逻辑,由 UI 开关和进程列表配置目标,不安装额外的 syscall 过滤器。
 
-> 0 级授权与 DenyList 沙箱触及 magiskd / zygisk 核心路径,属于实验性功能,欢迎在真机上反馈实验结果。
+> 0 级授权与 DenyList 触及 magiskd / zygisk 核心路径,属于实验性功能,欢迎在真机上反馈实验结果。
 
 ---
 
@@ -104,7 +103,6 @@ app/apk/.../ui/theme/      七角色强调色系统、主题、取色管线
 app/core/.../PersistentModules.kt   常驻模块应用侧桥接
 native/src/metroconf/      Rust 清单解析器(单元测试)
 native/src/metro/link/     Zig 调度 + C 文件层(metrolink)
-native/src/core/su/ghost.cpp  Seccomp BPF 幽灵沙箱
 ```
 
 ## 支持与反馈
@@ -114,7 +112,21 @@ native/src/core/su/ghost.cpp  Seccomp BPF 幽灵沙箱
 
 ## 致谢与许可
 
-基于 [topjohnwu/Magisk](https://github.com/topjohnwu/Magisk) 构建,感谢上游与所有模块开发者。Metro UI 重写、常驻模块与动态授权部分由 SunRayEx 编写。
+本项目基于 [topjohnwu/Magisk](https://github.com/topjohnwu/Magisk) 构建,感谢 Magisk 上游、所有模块开发者以及为 Android root 生态作出贡献的开发者。Metro UI 重写、常驻模块与动态授权部分由 SunRayEx 编写。
+
+### WebUI 参考
+
+模块 WebUI 的 `webroot` 约定、本地 `module.local` 加载方式以及 `ksu` JavaScript bridge 接口参考了 [tiann/KernelSU](https://github.com/tiann/KernelSU) 的 WebUI 规范与实现。当前项目对其进行了适配,以便在 Metro Compose 界面中兼容现有 KernelSU WebUI 模块;这不表示 KernelSU 项目参与了本项目开发。
+
+### 使用与借鉴的项目
+
+- [topjohnwu/Magisk](https://github.com/topjohnwu/Magisk): MagiskSU、模块系统、MagiskBoot、Zygisk 以及上游应用和原生代码。
+- [tiann/KernelSU](https://github.com/tiann/KernelSU): WebUI 模块约定和 `ksu` bridge 兼容接口的参考来源。
+- [RikkaApps/libsu](https://github.com/RikkaApps/libsu): Android 端 root shell、文件系统访问和相关工具库。
+- [LSPosed/LSPlant](https://github.com/LSPosed/LSPlant): 随 Magisk 上游集成的 Zygisk/注入相关原生组件。
+- [AndroidX](https://developer.android.com/jetpack/androidx)、[Jetpack Compose](https://developer.android.com/jetpack/compose) 与 [Material 3](https://m3.material.io/): Android 应用基础框架和 UI 组件。
+
+以上项目的名称、代码和资源分别归其原作者或维护组织所有,使用和再分发时应遵守各自仓库附带的许可证与版权声明。本项目新增代码仍按本仓库许可证发布。
 
     Magisk, including all git submodules are free software:
     you can redistribute it and/or modify it under the terms of the

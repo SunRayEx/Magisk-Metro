@@ -1,6 +1,7 @@
 package com.topjohnwu.magisk.ui.pivot
 
 import android.widget.Toast
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -38,11 +39,14 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import com.topjohnwu.magisk.ui.navigation.LocalNavigator
+import com.topjohnwu.magisk.ui.navigation.Route
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -52,20 +56,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.ui.MainActivity
 import com.topjohnwu.magisk.arch.VMFactory
+import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
+import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.PersistentModules
+import com.topjohnwu.magisk.core.download.DownloadEngine
+import com.topjohnwu.magisk.core.download.Subject
 import com.topjohnwu.magisk.core.ktx.timeDateFormat
 import com.topjohnwu.magisk.core.ktx.toTime
+import com.topjohnwu.magisk.core.tasks.MagiskInstaller
 import com.topjohnwu.magisk.core.model.su.SuLog
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
 import com.topjohnwu.magisk.ui.component.MagiskDialog
+import com.topjohnwu.magisk.ui.component.rememberLoadingDialog
 import com.topjohnwu.magisk.ui.deny.DenyAppState
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.deny.SortBy
 import com.topjohnwu.magisk.ui.deny.DenyProcessState
+import com.topjohnwu.magisk.ui.flash.FlashUtils
 import com.topjohnwu.magisk.ui.home.HomeViewModel
+import com.topjohnwu.magisk.ui.home.UninstallComposableDialog
+import com.topjohnwu.magisk.ui.home.ManagerInstallComposableDialog
 import com.topjohnwu.magisk.ui.install.InstallDialog
 import com.topjohnwu.magisk.ui.install.InstallViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
@@ -230,6 +244,36 @@ fun MagiskSection(vm: HomeViewModel) {
     val installVm: InstallViewModel = viewModel(factory = VMFactory)
     var showInstallDialog by remember { mutableStateOf(false) }
 
+    // The uninstall / update-manager rows just flip flags in the ViewModel state; the actual
+    // dialogs have to be hosted here or the buttons would do nothing.
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val loadingDialog = rememberLoadingDialog()
+    var showUninstallDialog by rememberSaveable { mutableStateOf(false) }
+    var showManagerDialog by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.showUninstall) {
+        if (uiState.showUninstall) {
+            showUninstallDialog = true
+            vm.onUninstallConsumed()
+        }
+    }
+    LaunchedEffect(uiState.showManagerInstall) {
+        if (uiState.showManagerInstall) {
+            showManagerDialog = true
+            vm.onManagerInstallConsumed()
+        }
+    }
+
+    // Install pushes the Flash destination through the shared Navigator. This VM is created here
+    // rather than passed in, so its events have to be collected locally or the install buttons
+    // would do nothing.
+    val navigator = LocalNavigator.current
+    LaunchedEffect(installVm) {
+        installVm.navEvents.collect { navigator.push(it) }
+    }
+
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_actions),
@@ -289,6 +333,48 @@ fun MagiskSection(vm: HomeViewModel) {
         onDismiss = { showInstallDialog = false },
         installVm = installVm,
     )
+
+    if (showUninstallDialog) {
+        UninstallComposableDialog(
+            onDismiss = { showUninstallDialog = false },
+            onCompleteUninstall = {
+                showUninstallDialog = false
+                val intent = Intent(context, context.javaClass).apply {
+                    action = FlashUtils.INTENT_FLASH
+                    putExtra(FlashUtils.EXTRA_FLASH_ACTION, Const.Value.UNINSTALL)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+                context.startActivity(intent)
+            },
+            onRestoreImage = {
+                showUninstallDialog = false
+                scope.launch {
+                    val success = loadingDialog.withLoading {
+                        MagiskInstaller.Restore().exec()
+                    }
+                    context.toast(
+                        if (success) CoreR.string.restore_done else CoreR.string.restore_fail,
+                        Toast.LENGTH_SHORT
+                    )
+                }
+            }
+        )
+    }
+
+    if (showManagerDialog) {
+        ManagerInstallComposableDialog(
+            cacheDir = context.cacheDir,
+            onDismiss = { showManagerDialog = false },
+            onInstall = {
+                showManagerDialog = false
+                (context as? MainActivity)?.let {
+                    DownloadEngine.startWithActivity(it, Subject.App())
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -651,7 +737,6 @@ fun LogsSection(vm: LogViewModel) {
     val magiskItems = uiState.magiskLogEntries
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showGhostLog by remember { mutableStateOf(false) }
 
     MetroSubPivot(
         titles = listOf(
@@ -664,12 +749,6 @@ fun LogsSection(vm: LogViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                if (page == 0) {
-                    MetroTextButton(stringResource(R.string.metro_su_ghost_log), accent) {
-                        showGhostLog = true
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
                 if (page == 1) {
                     MetroTextButton(stringResource(R.string.metro_save), accent) { vm.saveMagiskLog() }
                     Spacer(Modifier.width(8.dp))
@@ -723,29 +802,6 @@ fun LogsSection(vm: LogViewModel) {
         }
     }
 
-    if (showGhostLog) {
-        val auditText by produceState("", showGhostLog) {
-            value = withContext(Dispatchers.IO) {
-                com.topjohnwu.superuser.Shell.cmd(
-                    "cat ${PersistentModules.GHOST_AUDIT_LOG} 2>/dev/null",
-                ).exec().out.joinToString("\n").trim()
-            }
-        }
-        MagiskDialog(
-            onDismissRequest = { showGhostLog = false },
-            title = stringResource(R.string.metro_su_ghost_log),
-            confirmText = stringResource(android.R.string.ok),
-            onConfirm = { showGhostLog = false },
-        ) {
-            Text(
-                text = auditText.ifEmpty { context.getString(R.string.metro_no_logs) },
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-            )
-        }
-    }
 }
 
 private fun formatMagiskLog(entry: MagiskLogEntry): String =
@@ -786,19 +842,24 @@ fun ModulesSection(vm: ModuleViewModel) {
     val items = uiState.modules
     val context = LocalContext.current
 
+    // Declared before any early return: a launcher must be created on every recomposition path,
+    // and the empty state below needs it too.
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { vm.confirmLocalInstall(it) }
+    }
+
     if (loading && items.isEmpty()) {
         MetroCentered(stringResource(R.string.metro_loading))
         return
     }
     if (items.isEmpty()) {
-        MetroCentered(stringResource(R.string.metro_no_modules))
+        // No modules installed yet: offer the install action straight from the empty state instead
+        // of leaving the page with only a dead-end label.
+        MetroEmptyModules(accent) { filePicker.launch("application/zip") }
         return
     }
     val modules = items
     val updates = modules.filter { it.showUpdate }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { vm.confirmLocalInstall(it) }
-    }
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_persistent),
@@ -838,12 +899,47 @@ fun ModulesSection(vm: ModuleViewModel) {
     }
 }
 
+/** Empty-state for the installed-modules page: explains there is nothing installed yet and
+ * offers the same local-install action the populated page has. */
+@Composable
+private fun MetroEmptyModules(accent: MetroAccent, onInstall: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.metro_no_modules),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Light,
+            )
+            MetroTextButton(
+                text = stringResource(R.string.metro_install_module),
+                accent = accent,
+            ) {
+                onInstall()
+            }
+        }
+    }
+}
+
 /** Read-only mirror of the persistent declaration with a jump into the management page. */
 @Composable
 private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
     val context = LocalContext.current
-    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(0 to null) {
-        value = 0 to withContext(Dispatchers.IO) { PersistentModules.fetch() }
+    val navigator = LocalNavigator.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var revision by remember { mutableStateOf(0) }
+
+    // Keyed on [revision] so the declaration re-loads after an apply instead of showing the
+    // pre-apply snapshot forever.
+    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(
+        initialValue = revision to null,
+        revision,
+    ) {
+        value = revision to withContext(Dispatchers.IO) { PersistentModules.fetch() }
     }
     val declaration = snapshot.second
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -869,23 +965,63 @@ private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
         }
         item {
             MetroFlipItem(index = 1, visible = visible) {
-                Row(modifier = Modifier.padding(SectionPadding)) {
-                    MetroTextButton(stringResource(R.string.metro_persistent_apply), accent) {
+                Row(
+                    modifier = Modifier
+                        .padding(SectionPadding)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // apply() shells out to a root binary (it can copy a multi-MB .so and relabel
+                    // the store), so it must never run on the main thread: doing so froze the UI
+                    // and looked exactly like a dead button.
+                    MetroTextButton(
+                        text = stringResource(R.string.metro_persistent_apply),
+                        accent = accent,
+                        enabled = !busy,
+                    ) {
                         if (!PersistentModules.configured()) {
-                            // Not configured yet: send the user to Settings · Misc to flip the switch.
+                            // Not configured yet: send the user to Settings to flip the switch.
                             Toast.makeText(
                                 context,
                                 R.string.metro_persistent_goto_settings,
                                 Toast.LENGTH_LONG,
                             ).show()
-                        } else {
-                            PersistentModules.apply()
+                            return@MetroTextButton
                         }
+                        busy = true
+                        scope.launch(Dispatchers.IO) {
+                            val result = PersistentModules.apply()
+                            withContext(Dispatchers.Main) {
+                                if (result.ok) {
+                                    Toast.makeText(
+                                        context,
+                                        R.string.metro_persistent_applied,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    reportPersistentFailure(context, result)
+                                }
+                                busy = false
+                                revision++
+                            }
+                        }
+                    }
+                    MetroTextButton(stringResource(R.string.metro_persistent_manage), accent) {
+                        navigator.push(Route.PersistentModules)
                     }
                 }
             }
         }
     }
+}
+
+private fun reportPersistentFailure(
+    context: android.content.Context,
+    result: com.topjohnwu.magisk.core.PersistentResult,
+) {
+    val text = context.getString(R.string.metro_persistent_failed) +
+        (result.message?.let { ": $it" } ?: "")
+    Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 }
 
 @Composable
@@ -942,7 +1078,9 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
             )
         }
         Row(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             MetroTextButton(
@@ -954,7 +1092,11 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
                 MetroTextButton(
                     text = stringResource(R.string.metro_module_update),
                     accent = accent,
+                    // Mirror the upstream screen: the button is only meaningful when an update is
+                    // actually pending. Showing it greyed out for a module that is already current
+                    // reads as a broken control.
                     enabled = item.updateReady,
+                    selected = item.updateReady,
                 ) {
                     val updateInfo = module.updateInfo ?: return@MetroTextButton
                     val activity = context.findActivity()
@@ -967,6 +1109,11 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
             if (item.showAction) {
                 MetroTextButton(stringResource(R.string.metro_module_action), accent) {
                     vm.runAction(module.id, module.name)
+                }
+            }
+            if (item.showWebUi) {
+                MetroTextButton(stringResource(R.string.metro_module_webui), accent) {
+                    vm.openWebUi(module.base.name, module.name)
                 }
             }
         }

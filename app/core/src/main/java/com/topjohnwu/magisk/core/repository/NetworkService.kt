@@ -21,22 +21,55 @@ class NetworkService(
         fetchMetroUpdate().takeIf { it.versionCode == version } ?: UpdateInfo()
     }
 
-    /** The Metro manager is distributed from the stable `release` tag, not GitHub's latest tag. */
-    private suspend fun fetchMetroUpdate(): UpdateInfo = api.fetchReleaseByTag("release").asMetroInfo()
+    /**
+     * The Metro manager is published under the project's own rolling `release` tag.
+     *
+     * The published APK carries no version in its file name, so [asMetroInfo] falls back to the
+     * release's last update time to detect a re-uploaded build. If the tag is ever missing we
+     * fall back to the newest published release.
+     */
+    private suspend fun fetchMetroUpdate(): UpdateInfo {
+        val release = runCatching { api.fetchReleaseByTag("release") }
+            .recoverCatching { api.fetchLatestRelease() }
+            .getOrNull()
+            ?: return UpdateInfo()
+        return release.asMetroInfo()
+    }
 
     private fun Release.asMetroInfo(): UpdateInfo {
-        val asset = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+        // Prefer a release-flavoured APK; debug builds are only published for ad-hoc testing.
+        val asset = assets.firstOrNull {
+            it.name.endsWith(".apk", ignoreCase = true) &&
+                !it.name.contains("debug", ignoreCase = true)
+        } ?: assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
             ?: return UpdateInfo()
-        val versionCode = asset.name.substringBeforeLast('.')
-            .takeLastWhile(Char::isDigit)
-            .toIntOrNull()
-            ?: return UpdateInfo()
+
+        // Resolve a version code in priority order: a versioned tag (v31.0 -> 31000), trailing
+        // digits in the asset name (Magisk-Metro-31001.apk), and finally the release's last
+        // update time as epoch seconds. The rolling release re-uploads the APK, which bumps
+        // `updated_at`, so a newer build always reads as newer than the installed one.
+        val code = tag.versionCodeOrNull()
+            ?: asset.name.substringBeforeLast('.').takeLastWhile(Char::isDigit).toIntOrNull()
+            ?: updatedTime.epochSecond.toInt()
+
         return UpdateInfo(
-            version = name.ifBlank { asset.name.substringBeforeLast('.') },
-            versionCode = versionCode,
+            version = name.ifBlank { tag },
+            versionCode = code,
             link = asset.url,
             note = "## $name\n\n$body"
         )
+    }
+
+    /** "v31.0" -> 31000, "31001" -> 31001, anything else -> null. */
+    private fun String.versionCodeOrNull(): Int? {
+        val trimmed = trimStart('v', 'V')
+        trimmed.toIntOrNull()?.let { return it }
+        if ('.' !in trimmed) return null
+        val major = trimmed.substringBefore('.').toIntOrNull() ?: return null
+        val minor = trimmed.substringAfter('.')
+            .takeWhile(Char::isDigit)
+            .toIntOrNull() ?: 0
+        return major * 1000 + minor
     }
 
     private suspend inline fun <T> safe(factory: suspend () -> T): T? {

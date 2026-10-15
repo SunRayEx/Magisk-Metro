@@ -871,7 +871,7 @@ private fun DevelopersCard(
 }
 
 @Composable
-private fun UninstallComposableDialog(
+fun UninstallComposableDialog(
     onDismiss: () -> Unit,
     onCompleteUninstall: () -> Unit,
     onRestoreImage: () -> Unit,
@@ -891,7 +891,7 @@ private fun UninstallComposableDialog(
 }
 
 @Composable
-private fun ManagerInstallComposableDialog(
+fun ManagerInstallComposableDialog(
     cacheDir: File,
     onDismiss: () -> Unit,
     onInstall: () -> Unit,

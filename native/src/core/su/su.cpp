@@ -23,7 +23,6 @@
 #include <base.hpp>
 #include <flags.h>
 #include <core.hpp>
-#include "ghost.hpp" 
 
 using namespace std;
 
@@ -438,17 +437,13 @@ void exec_root_shell(int client, int pid, SuRequest &req, MntNsMode mode) {
             break;
     }
 
-    // Level 0 sandbox: hide Magisk's user-space footprint, wipe every capability, then wall
-    // off the kernel with seccomp while silently auditing intercepted attempts. The audit log
-    // is opened while still root and inherited by the shell.
+    // Level 0 keeps the root identity while isolating mounts and dropping capabilities.
     if (req.zero) {
-        LOGD("su: level 0 sandbox\n");
+        LOGD("su: level 0 isolation\n");
         xunshare(CLONE_NEWNS);
         xmount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr);
         revert_unmount();
-        ghost_open_audit(GHOST_AUDIT_LOG);
         drop_caps_zero();
-        ghost_install();
     }
 
     const char *argv[4] = { nullptr };

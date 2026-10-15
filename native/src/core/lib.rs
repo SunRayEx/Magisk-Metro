@@ -122,7 +122,6 @@ pub mod ffi {
     enum ZygiskStateFlags {
         ProcessGrantedRoot = 0x00000001,
         ProcessOnDenyList = 0x00000002,
-        GhostSandbox = 0x00000004,
         DenyListEnforced = 0x40000000,
         ProcessIsMagiskApp = 0x80000000,
     }

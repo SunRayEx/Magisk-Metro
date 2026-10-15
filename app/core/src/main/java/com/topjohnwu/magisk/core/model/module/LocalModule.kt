@@ -6,7 +6,9 @@ import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.utils.RootUtils
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.nio.ExtendedFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.IOException
@@ -123,15 +125,46 @@ data class LocalModule(
 
     companion object {
 
+        // The module filesystem is served through a root service that shares the lifetime of
+        // the idle-timeout root shell, so a listing racing with that recycle can hit a dying
+        // binder and come back empty even though /data/adb/modules is completely untouched.
+        // Restoring the stock image only re-flashes the boot partition, but it churns the shell
+        // exactly like this; without a retry it looks as if the restore deleted every module.
+        private const val LIST_RETRY_MAX = 4
+        private const val LIST_RETRY_BACKOFF_MS = 250L
+
         fun loaded() = RootUtils.fs.getFile(Const.MODULE_PATH).exists()
 
-        suspend fun installed() = withContext(Dispatchers.IO) {
+        suspend fun installed(): List<LocalModule> = withContext(Dispatchers.IO) {
+            var modules: List<LocalModule> = emptyList()
+            var attempt = 0
+            while (modules.isEmpty() && attempt < LIST_RETRY_MAX) {
+                modules = try {
+                    listModulesInternal()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // The root service is recycling; let it settle and try again.
+                    Timber.e(e)
+                    emptyList()
+                }
+                attempt++
+                // An empty listing is either genuine (nothing installed / Magisk inactive) or a
+                // transient failure reaching the recycled root service. Only the genuine cases
+                // stay empty across retries, so confirm before reporting every module gone.
+                if (modules.isEmpty() && attempt < LIST_RETRY_MAX && loaded()) {
+                    delay(LIST_RETRY_BACKOFF_MS)
+                }
+            }
+            modules
+        }
+
+        private fun listModulesInternal(): List<LocalModule> =
             RootUtils.fs.getFile(Const.MODULE_PATH)
                 .listFiles()
                 .orEmpty()
                 .filter { !it.isFile && !it.isHidden }
                 .map { LocalModule(it) }
                 .sortedBy { it.name.lowercase(Locale.ROOT) }
-        }
     }
 }

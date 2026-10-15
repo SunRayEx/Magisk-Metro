@@ -339,21 +339,6 @@ object DenyListConfig : BaseSettingsItem.Blank() {
     override val description = CoreR.string.settings_denylist_config_summary.asText()
 }
 
-/** Ghost sandbox: seccomp BPF hardening with invisible auditing for deny-listed apps. */
-object GhostSandbox : BaseSettingsItem.Toggle() {
-    override val title = R.string.metro_denylist_sandbox.asText()
-    override val description = R.string.metro_denylist_sandbox_summary.asText()
-    override var value
-        get() = Config.metroGhostSandbox
-        set(value) {
-            Config.metroGhostSandbox = value
-        }
-
-    override fun refresh() {
-        isEnabled = Info.env.isActive
-    }
-}
-
 // --- Superuser
 
 object Tapjack : BaseSettingsItem.Toggle() {

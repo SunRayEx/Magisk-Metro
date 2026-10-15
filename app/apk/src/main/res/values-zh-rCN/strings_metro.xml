@@ -8,6 +8,13 @@
     <string name="metro_custom_colors">客制化磁贴颜色</string>
     <string name="metro_custom_colors_summary">为每个开始屏幕磁贴及其二级页面设置 HEX 颜色</string>
     <string name="metro_invalid_hex">请输入有效的 HEX 颜色，例如 #4EAFF5</string>
+
+    <!-- 主题颜色 -->
+    <string-array name="metro_night_mode">
+        <item>深色模式</item>
+        <item>浅色模式</item>
+        <item>跟随系统</item>
+    </string-array>
     <string name="metro_tile_content">更改磁贴内容</string>
     <string name="metro_tile_content_summary">从开始屏幕添加或删除 Root 应用与磁贴组</string>
     <string name="metro_tile_add">增加磁贴</string>
@@ -139,6 +146,7 @@
     <string name="metro_persistent_last_apply">上次应用：%1$s</string>
     <string name="metro_persistent_never">从未</string>
     <string name="metro_persistent_applied">常驻清单已应用</string>
+    <string name="metro_persistent_manage">管理</string>
     <string name="metro_persistent_failed">应用常驻清单失败</string>
     <string name="metro_persistent_unavailable">常驻模块功能需要 Root 和原生工具支持</string>
     <string name="metro_persistent_version">版本 %1$s (%2$d)</string>
@@ -150,12 +158,8 @@
     <!-- 动态授权 -->
     <string name="metro_su_once">仅本次</string>
     <string name="metro_su_zero">授予 0 级授权</string>
-    <string name="metro_su_zero_hint">0 级授权提供 root 的 shell 身份但不具备任何真实权限——所有高危系统调用都会被拦截并审计。</string>
+    <string name="metro_su_zero_hint">0 级授权保留 root shell 身份，同时降低能力并隔离挂载。</string>
     <string name="metro_su_zero_title">0 级授权</string>
     <string name="metro_su_once_hint">单次授权不会出现在“授权”列表中，本次请求结束后立即失效。</string>
     <string name="metro_su_policy_zero">0 级（欺骗性）</string>
-    <string name="metro_su_ghost_log">幽灵审计</string>
-    <string name="metro_denylist_sandbox">排除列表沙箱（Seccomp）</string>
-    <string name="metro_denylist_sandbox_summary">让排除列表中的应用运行在强化的用户空间隐藏环境中，并用 Seccomp BPF 拦截高危系统调用</string>
-    <string name="metro_denylist_ghost_summary">以目标应用不可见的方式记录每一次被拦截的系统调用</string>
 </resources>

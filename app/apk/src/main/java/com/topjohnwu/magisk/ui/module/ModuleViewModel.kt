@@ -33,6 +33,7 @@ data class ModuleItem(
 ) {
     val showNotice: Boolean
     val showAction: Boolean
+    val showWebUi: Boolean = module.hasWebUi
     val noticeText: TextHolder
     val isUpdated = module.updated
     val updateReady get() = module.outdated && !isRemoved && isEnabled
@@ -119,6 +120,10 @@ class ModuleViewModel : AsyncLoadViewModel() {
 
     fun runAction(id: String, name: String) {
         navigateTo(Route.Action(id, name))
+    }
+
+    fun openWebUi(id: String, name: String) {
+        navigateTo(Route.WebUi(id, name))
     }
 
     fun toggleEnabled(item: ModuleItem) {

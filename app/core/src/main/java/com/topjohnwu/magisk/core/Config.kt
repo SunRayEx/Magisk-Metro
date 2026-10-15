@@ -55,7 +55,7 @@ object Config : PreferenceConfig, DBConfig {
         const val METRO_CUSTOM_TILES = "metro_custom_tiles"
         const val METRO_HIDDEN_TILES = "metro_hidden_tiles"
         const val METRO_PERSISTENT_MODULES = "metro_persistent_modules"
-        const val METRO_GHOST_SANDBOX = "metro_ghost_sandbox"
+        const val METRO_NIGHT_MODE = "metro_night_mode"
 
         val NO_MIGRATION = setOf(ASKED_HOME, SU_REQUEST_TIMEOUT,
             SU_AUTO_RESPONSE, SU_REAUTH, SU_TAPJACK)
@@ -144,7 +144,8 @@ object Config : PreferenceConfig, DBConfig {
     var metroCustomTiles by preference(Key.METRO_CUSTOM_TILES, "")
     var metroHiddenTiles by preference(Key.METRO_HIDDEN_TILES, "")
     var metroPersistentModules by preference(Key.METRO_PERSISTENT_MODULES, false)
-    var metroGhostSandbox by preference(Key.METRO_GHOST_SANDBOX, false)
+    // -1 = follow system, 0 = light, 1 = dark
+    var metroNightMode by preference(Key.METRO_NIGHT_MODE, -1)
     var checkUpdate
         get() = checkUpdatePrefs
         set(value) {

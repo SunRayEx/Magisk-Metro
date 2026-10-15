@@ -1,6 +1,7 @@
 package com.topjohnwu.magisk.ui.home
 
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.core.R as CoreR
 import com.topjohnwu.magisk.ui.navigation.Route
 
 /**
@@ -22,7 +23,7 @@ object MetroMagiskShortcuts {
         Settings("settings", R.string.metro_settings),
         Theme("theme", R.string.metro_custom_theme),
         Persistent("persistent", R.string.metro_persistent_title),
-        DenyList("denylist", R.string.metro_denylist_sandbox),
+        DenyList("denylist", CoreR.string.denylist),
         Contributors("contributors", R.string.metro_contributors),
         ;
 

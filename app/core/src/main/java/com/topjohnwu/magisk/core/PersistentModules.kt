@@ -37,7 +37,6 @@ object PersistentModules {
 
     const val BASE_DIR = "/data/adb/metromod"
     const val BINARY = "$BASE_DIR/metrolink"
-    const val GHOST_AUDIT_LOG = "$BASE_DIR/ghost_audit.log"
     private const val BOOT_SCRIPT = "/data/adb/post-fs-data.d/metromod.sh"
 
     /** Must match METROLINK_VERSION in the Zig source; older binaries are replaced on sight. */

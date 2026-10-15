@@ -168,9 +168,6 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
     if (g_ctx && (flags & CLONE_NEWNS) != 0 && res == 0) {
         if (g_ctx->flags & DO_REVERT_UNMOUNT) {
             revert_unmount();
-            // Do not install the Ghost seccomp filter in app processes. Android 16
-            // performs additional zygote/ART work after specialization; applying a
-            // process-wide seccomp policy here can crash otherwise valid DenyList apps.
         }
         // Restore errno back to 0
         errno = 0;

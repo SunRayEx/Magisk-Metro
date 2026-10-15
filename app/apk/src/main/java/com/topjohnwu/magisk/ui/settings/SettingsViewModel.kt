@@ -33,9 +33,6 @@ class SettingsViewModel : BaseViewModel() {
     private val _persistentModules = MutableStateFlow(Config.metroPersistentModules)
     val persistentModules: StateFlow<Boolean> = _persistentModules.asStateFlow()
 
-    private val _ghostSandbox = MutableStateFlow(Config.metroGhostSandbox)
-    val ghostSandbox: StateFlow<Boolean> = _ghostSandbox.asStateFlow()
-
     val zygiskMismatch get() = Config.zygisk != Info.isZygiskEnabled
 
     private val _tileCustomization = MutableStateFlow(Config.metroTileCustomization)
@@ -124,19 +121,6 @@ class SettingsViewModel : BaseViewModel() {
                     AppContext.toast(AppR.string.metro_persistent_failed, Toast.LENGTH_LONG)
                 }
             }
-        }
-    }
-
-    /** Ghost sandbox: seccomp BPF hardening with invisible auditing for deny-listed apps. */
-    fun toggleGhostSandbox(enabled: Boolean) {
-        _ghostSandbox.value = enabled
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val cmd = if (enabled) {
-                "mkdir -p /data/adb/metromod && touch /data/adb/metromod/ghost_sandbox"
-            } else {
-                "rm -f /data/adb/metromod/ghost_sandbox"
-            }
-            Shell.cmd(cmd).exec()
         }
     }
 }

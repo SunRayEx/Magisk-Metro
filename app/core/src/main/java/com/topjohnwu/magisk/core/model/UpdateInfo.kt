@@ -57,6 +57,7 @@ data class Release(
     val assets: List<ReleaseAssets>,
     val body: String,
     @param:Json(name = "created_at") val createdTime: Instant,
+    @param:Json(name = "updated_at") val updatedTime: Instant = createdTime,
 ) {
     val versionCode: Int get() {
         return if (tag[0] == 'v') {

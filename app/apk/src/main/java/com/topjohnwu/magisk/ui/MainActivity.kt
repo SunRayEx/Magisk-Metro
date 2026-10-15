@@ -104,6 +104,15 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
         val wrapped = base.wrap()
         val config = Configuration(wrapped.resources.configuration)
         config.densityDpi = (config.densityDpi * METRO_DENSITY_SCALE).toInt()
+        // 主题颜色: force light or dark regardless of the system setting. Overriding the UI
+        // mode here makes the XML night resources and Compose's isSystemInDarkTheme() both
+        // follow the user's choice, so the whole UI flips with no per-screen plumbing.
+        // -1 (follow system) leaves the configuration's night bits untouched.
+        val night = Config.metroNightMode
+        if (night == 0 || night == 1) {
+            config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                if (night == 1) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+        }
         super.attachBaseContext(wrapped.createConfigurationContext(config))
     }
 
