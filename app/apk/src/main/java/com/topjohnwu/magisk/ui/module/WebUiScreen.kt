@@ -2,6 +2,8 @@ package com.topjohnwu.magisk.ui.module
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import android.net.Uri
 import android.webkit.JavascriptInterface
 import android.webkit.MimeTypeMap
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +40,8 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.utils.RootUtils
 import timber.log.Timber
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.superuser.nio.ExtendedFile
 import com.topjohnwu.superuser.Shell
 import java.io.File
@@ -56,6 +59,7 @@ import org.json.JSONObject
 @Composable
 internal fun WebUiScreen(moduleId: String, moduleName: String) {
     val context = LocalContext.current
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val accent = LocalMetroPalette.current.modules
 
     var ready by remember { mutableStateOf(false) }
@@ -64,8 +68,8 @@ internal fun WebUiScreen(moduleId: String, moduleName: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
+            .metroScreenBackground()
+            .metroPageShell(),
     ) {
         Text(
             text = moduleName,
@@ -101,7 +105,7 @@ internal fun WebUiScreen(moduleId: String, moduleName: String) {
                             settings.setSupportMultipleWindows(false)
                             webViewClient = ModuleWebViewClient(context.cacheDir, moduleId)
                             addJavascriptInterface(
-                                ModuleWebInterface(this, moduleId, moduleName), JS_BRIDGE_NAME,
+                                ModuleWebInterface(this, moduleId, moduleName, backDispatcher), JS_BRIDGE_NAME,
                             )
                             loadUrl(ENTRY_URL)
                         }
@@ -226,6 +230,7 @@ private class ModuleWebInterface(
     private val webView: WebView,
     private val moduleId: String,
     private val moduleName: String,
+    private val backDispatcher: OnBackPressedDispatcher?,
 ) {
     @JavascriptInterface
     fun exec(command: String): String = Shell.cmd(command).exec().out.joinToString("\n")
@@ -267,7 +272,7 @@ private class ModuleWebInterface(
 
     @JavascriptInterface
     fun exit() {
-        webView.post { (webView.context as? android.app.Activity)?.onBackPressed() }
+        webView.post { backDispatcher?.onBackPressed() }
     }
 
     private fun applyOptions(command: String, optionsJson: String?): String {

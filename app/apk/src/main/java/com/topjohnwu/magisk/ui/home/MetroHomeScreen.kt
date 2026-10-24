@@ -5,15 +5,15 @@ import android.os.Process
 import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.foundation.Image
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -35,15 +35,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -52,16 +54,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,7 +88,15 @@ import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.model.su.SuPolicy
+import com.topjohnwu.magisk.ui.anim.MetroEaseOut
+import com.topjohnwu.magisk.ui.metro.LocalMetroRootSize
+import com.topjohnwu.magisk.ui.metro.LocalMetroTransition
+import com.topjohnwu.magisk.ui.metro.MetroTileSnapshot
+import com.topjohnwu.magisk.ui.metro.metroTilePose
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.theme.MetroWallpaper
+import com.topjohnwu.magisk.ui.theme.MetroTileGlass
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import com.topjohnwu.magisk.ui.navigation.Route
 import kotlinx.coroutines.Dispatchers
@@ -87,19 +104,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
-import androidx.compose.ui.graphics.toArgb
 
 private const val SUPPORT_URL = "https://afdian.com/a/SunRayEx"
 private val ImportantLogPattern = Regex("^\\S+\\s+\\S+\\s+\\d+\\s+\\d+\\s+([EW])\\s*:\\s*(.*)$")
-private const val MetroTileCount = 10
-
-private class MetroTileNavigator(
-    val leaving: Boolean,
-    val entering: Boolean,
-    val navigate: (Int, () -> Unit) -> Unit,
-)
-
-private val LocalMetroTileNavigator = androidx.compose.runtime.staticCompositionLocalOf<MetroTileNavigator?> { null }
 
 private fun importantLogLabel(line: String): String? {
     val match = ImportantLogPattern.find(line) ?: return null
@@ -117,35 +124,19 @@ fun MetroHomeScreen(
     onContributorsClick: () -> Unit,
     onMagiskClick: () -> Unit,
 ) {
-    var leaving by remember { mutableStateOf(false) }
-    var entering by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
     // Ground truth for "the Start screen is on top". The back stack is a SnapshotStateList,
     // so reading its top entry here is reactive and this composable recomposes on every push
     // and pop.
     val navigator = LocalNavigator.current
     val isCurrentRoute = navigator.backStack.lastOrNull() === Route.Main
-    // Tiles are hidden only while another route is actually on top. This is derived on purpose:
-    // the manual leaving flag can get stuck if the composition is disposed mid fly-out or a
-    // route change does not deliver the event the flag relied on, and then coming back to the
-    // Start screen would show nothing and accept no touches (while leaving is true the tiles
-    // are translated off-screen, so their hit areas move away too). When we are the current
-    // route the tiles are always visible no matter what the flag says.
-    val tilesLeaving = leaving || !isCurrentRoute
+    val transition = LocalMetroTransition.current
+
+    // The one-shot cold-start intro; never replays after rotation because the played flag
+    // is rememberSaveable at the activity level.
     LaunchedEffect(isCurrentRoute) {
-        if (isCurrentRoute) {
-            leaving = false
-            entering = true
-        }
+        if (isCurrentRoute) transition?.maybeBeginIntro()
     }
 
-    LaunchedEffect(entering) {
-        if (entering) {
-            delay(10)
-            entering = false
-        }
-    }
     // The pivot tints the status bar with the section accent; returning to the Start screen
     // must clear it again, exactly like returning from the browser (sponsor tile) does.
     val view = LocalView.current
@@ -153,22 +144,10 @@ fun MetroHomeScreen(
     LaunchedEffect(view, boardBackground, isCurrentRoute) {
         if (isCurrentRoute) {
             (view.context as? android.app.Activity)?.window?.let { window ->
+                @Suppress("DEPRECATION")
                 window.statusBarColor = boardBackground.toArgb()
                 WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
                     boardBackground.luminance() > 0.5f
-            }
-        }
-    }
-    val tileNavigator = MetroTileNavigator(tilesLeaving, entering) { index, action ->
-        if (!leaving && !entering) {
-            leaving = true
-            scope.launch {
-                // The bottom-right tile starts first; each predecessor follows toward the top-left.
-                delay((MetroTileCount - 1 - index).coerceAtLeast(0) * 45L + 290L)
-                action()
-                // The pushed route now covers the Start screen, so this flag is free to clear.
-                // !isCurrentRoute keeps the tiles hidden for as long as that route is on top.
-                leaving = false
             }
         }
     }
@@ -231,22 +210,20 @@ fun MetroHomeScreen(
         }
     }
 
-    CompositionLocalProvider(LocalMetroTileNavigator provides tileNavigator) {
-        MetroGrid(
-            viewModel = viewModel,
-            isLandscape = isLandscape,
-            modules = modules,
-            rootApps = rootApps,
-            importantLogs = importantLogs,
-            customTiles = customTiles,
-            onSettingsClick = onSettingsClick,
-            onModulesClick = onModulesClick,
-            onAppsClick = onAppsClick,
-            onLogsClick = onLogsClick,
-            onContributorsClick = onContributorsClick,
-            onMagiskClick = onMagiskClick,
-        )
-    }
+    MetroGrid(
+        viewModel = viewModel,
+        isLandscape = isLandscape,
+        modules = modules,
+        rootApps = rootApps,
+        importantLogs = importantLogs,
+        customTiles = customTiles,
+        onSettingsClick = onSettingsClick,
+        onModulesClick = onModulesClick,
+        onAppsClick = onAppsClick,
+        onLogsClick = onLogsClick,
+        onContributorsClick = onContributorsClick,
+        onMagiskClick = onMagiskClick,
+    )
 }
 
 @Composable
@@ -272,7 +249,7 @@ private fun MetroGrid(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .metroScreenBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -302,7 +279,9 @@ private fun MetroGrid(
         val boardHeight = if (isLandscape) tileSize * cap + gap * (cap - 1) else tileSize * freeExtent + gap * (freeExtent - 1)
         // The board is the scroll content: it is sized to exactly the tiles it holds, so the
         // scroll range covers every tile and stops at the last one instead of coasting on.
-        val scrollState = rememberScrollState()
+        // Saveable: returning from a secondary page must land on the same scroll offset,
+        // or the board visibly reflows to the top under the returning tile.
+        val scrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
         Box(
             modifier = Modifier.then(
                 if (isLandscape) Modifier.horizontalScroll(scrollState)
@@ -513,31 +492,68 @@ private fun MetroBoard(
         }
     /* The layout engine owns every rectangle, making a custom phone grid impossible to overlap. */
     fun placement(id: String) = resizePreview?.takeIf { it.id == id } ?: placements.first { it.id == id }
+    // Reading-order stagger for the cold-start intro; a fraction of the shared progress.
+    fun introDelay(id: String): Float {
+        val item = placements.firstOrNull { it.id == id } ?: return 0f
+        return ((item.row * 4 + item.column) / 24f).coerceIn(0f, 0.45f)
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         if (MetroTileLayout.isVisible(MetroTileLayout.Magisk)) {
-            MagiskTile(modifier = place(placement(MetroTileLayout.Magisk)), navigationIndex = 0, onClick = onMagiskClick)
+            MagiskTile(
+                modifier = place(placement(MetroTileLayout.Magisk)),
+                introDelay = introDelay(MetroTileLayout.Magisk),
+                onClick = onMagiskClick,
+            )
         }
         // Modules 1x1 and Apps 1x1 to the right of Magisk
         if (MetroTileLayout.isVisible(MetroTileLayout.Modules)) {
-            ModuleTile(modifier = place(placement(MetroTileLayout.Modules)), navigationIndex = 2, modules = modules, onClick = onModulesClick)
+            ModuleTile(
+                modifier = place(placement(MetroTileLayout.Modules)),
+                introDelay = introDelay(MetroTileLayout.Modules),
+                modules = modules,
+                onClick = onModulesClick,
+            )
         }
         if (MetroTileLayout.isVisible(MetroTileLayout.Apps)) {
-            AppTile(modifier = place(placement(MetroTileLayout.Apps)), navigationIndex = 3, apps = rootApps, onClick = onAppsClick)
+            AppTile(
+                modifier = place(placement(MetroTileLayout.Apps)),
+                introDelay = introDelay(MetroTileLayout.Apps),
+                apps = rootApps,
+                onClick = onAppsClick,
+            )
         }
         // Settings 2x1
         if (MetroTileLayout.isVisible(MetroTileLayout.Settings)) {
-            SettingsTile(modifier = place(placement(MetroTileLayout.Settings)), navigationIndex = 4, onClick = onSettingsClick)
+            SettingsTile(
+                modifier = place(placement(MetroTileLayout.Settings)),
+                introDelay = introDelay(MetroTileLayout.Settings),
+                onClick = onSettingsClick,
+            )
         }
         // Logs 1x2 (tall, right column)
         if (MetroTileLayout.isVisible(MetroTileLayout.Logs)) {
-            LogTile(modifier = place(placement(MetroTileLayout.Logs)), navigationIndex = 5, logs = importantLogs, onClick = onLogsClick)
+            LogTile(
+                modifier = place(placement(MetroTileLayout.Logs)),
+                introDelay = introDelay(MetroTileLayout.Logs),
+                logs = importantLogs,
+                onClick = onLogsClick,
+            )
         }
         // Contributor 2x1
         if (MetroTileLayout.isVisible(MetroTileLayout.Contributors)) {
-            ContributorTile(modifier = place(placement(MetroTileLayout.Contributors)), navigationIndex = 6, onClick = onContributorsClick)
+            ContributorTile(
+                modifier = place(placement(MetroTileLayout.Contributors)),
+                introDelay = introDelay(MetroTileLayout.Contributors),
+                onClick = onContributorsClick,
+            )
         }
         if (MetroTileLayout.isVisible(MetroTileLayout.Sponsor)) {
-            SponsorTile(modifier = place(placement(MetroTileLayout.Sponsor)), navigationIndex = 7, label = stringResource(R.string.metro_sponsor)) {
+            SponsorTile(
+                modifier = place(placement(MetroTileLayout.Sponsor)),
+                introDelay = introDelay(MetroTileLayout.Sponsor),
+                tileId = MetroTileLayout.Sponsor,
+                label = stringResource(R.string.metro_sponsor),
+            ) {
                 viewModel.onLinkPressed(SUPPORT_URL)
             }
         }
@@ -552,16 +568,26 @@ private fun MetroBoard(
                 modifier = place(placement),
                 tile = tile,
                 accent = accent,
-                navigationIndex = MetroTileCount + index,
+                introDelay = introDelay(tile.id),
             )
         }
         if (MetroTileLayout.isVisible(MetroTileLayout.Support)) {
-            SponsorTile(modifier = place(placement(MetroTileLayout.Support)), navigationIndex = 8, label = stringResource(R.string.metro_support)) {
+            SponsorTile(
+                modifier = place(placement(MetroTileLayout.Support)),
+                introDelay = introDelay(MetroTileLayout.Support),
+                tileId = MetroTileLayout.Support,
+                label = stringResource(R.string.metro_support),
+            ) {
                 viewModel.onLinkPressed(SUPPORT_URL)
             }
         }
         if (MetroTileLayout.isVisible(MetroTileLayout.Donate)) {
-            SponsorTile(modifier = place(placement(MetroTileLayout.Donate)), navigationIndex = 9, label = stringResource(R.string.metro_donate)) {
+            SponsorTile(
+                modifier = place(placement(MetroTileLayout.Donate)),
+                introDelay = introDelay(MetroTileLayout.Donate),
+                tileId = MetroTileLayout.Donate,
+                label = stringResource(R.string.metro_donate),
+            ) {
                 viewModel.onLinkPressed(SUPPORT_URL)
             }
         }
@@ -582,7 +608,7 @@ private fun CustomTile(
     modifier: Modifier,
     tile: MetroCustomTile,
     accent: com.topjohnwu.magisk.ui.theme.MetroAccent,
-    navigationIndex: Int,
+    introDelay: Float,
 ) {
     val context = LocalContext.current
     val navigator = LocalNavigator.current
@@ -590,8 +616,11 @@ private fun CustomTile(
     val foreground = accent.onColor
     MetroTile(
         modifier = modifier,
+        tileId = tile.id,
+        transitionTitle = tile.title,
         color = color,
-        navigationIndex = navigationIndex,
+        onColor = foreground,
+        introDelay = introDelay,
         onClick = {
             val shortcut = MetroMagiskShortcuts.routeFor(tile.packageName)
             when {
@@ -640,71 +669,163 @@ private fun CustomTile(
 
 /** A tile group opens as its own secondary Metro destination listing every member app. */
 
+/**
+ * One Start tile. All transition motion (press lift, fly-out swirl, return swirl, intro
+ * tilt) is derived inside the graphics layer from the shared [MetroTransitionController]
+ * state; taps go through the controller, which locks immediately and only runs the
+ * navigation action once the leave choreography has finished.
+ */
 @Composable
 private fun MetroTile(
     modifier: Modifier = Modifier,
+    tileId: String,
+    transitionTitle: String,
     color: Color,
-    navigationIndex: Int = 0,
+    onColor: Color,
+    introDelay: Float = 0f,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val transition = LocalMetroTransition.current
+    val rootSize = LocalMetroRootSize.current
+    val density = LocalDensity.current
+    val wallpaperOn = MetroWallpaper.active
+    // Live root-space rect of this tile: feeds the fly-out pose math, the glass fill and
+    // the return-target tracking (so the ghost always shrinks onto the real position,
+    // whatever the layout, orientation or scroll happened to be).
+    var tileRect by remember { mutableStateOf<Rect?>(null) }
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val navigator = LocalMetroTileNavigator.current
-    val flyProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (navigator?.leaving == true) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = 280,
-            delayMillis = (MetroTileCount - 1 - navigationIndex).coerceAtLeast(0) * 45,
-        ),
-        label = "metroTileFly",
+    // The tile's own pixels, recorded on demand into a Picture: at tap time the next
+    // draw pass captures the tile as-is (glass, text, lists); a Picture survives the
+    // route swap, so the overlay can replay the tile itself after the push. Placed
+    // OUTERMOST so the capture is untransformed.
+    val tilePicture = remember { android.graphics.Picture() }
+    // Capture generation: each launch bumps the controller's counter, and every visible
+    // tile re-records its pixels on the next draw pass and registers itself for the
+    // full-board playback that covers the instantly-opened page.
+    var recordedGeneration by remember { mutableIntStateOf(-1) }
+    // Instant touch-down feedback: the press-in starts the moment the finger lands (the
+    // controller's Press phase deepens it further once the click dispatches).
+    val pressedNow by interactionSource.collectIsPressedAsState()
+    val instantPress by animateFloatAsState(
+        targetValue = if (pressedNow) 1f else 0f,
+        animationSpec = tween(90, easing = MetroEaseOut),
+        label = "instantPress",
     )
-    // The transform must wrap background/clip too; otherwise only tile content flies while the
-    // colored block remains stationary.
-    val enterProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (navigator?.entering == true) 1f else 0f,
-        animationSpec = tween(280, navigationIndex.coerceAtLeast(0) * 45),
-        label = "metroTileEnter",
-    )
-    val tileModifier = modifier
-        .graphicsLayer {
-            val scale = if (pressed && onClick != null) 0.96f else 1f
-            scaleX = scale
-            scaleY = scale
-            alpha = (if (pressed && onClick != null) 0.88f else 1f) *
-                (1f - flyProgress) * (1f - enterProgress)
-            translationX = -size.width * (flyProgress + enterProgress)
-            translationY = -size.height * (flyProgress + enterProgress)
-            rotationZ = -8f * flyProgress
-        }
-        .clip(RectangleShape)
-        .background(color)
-        .then(
-            if (onClick != null) Modifier.clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = {
-                    if (navigator != null) navigator.navigate(navigationIndex, onClick)
-                    else onClick()
-                },
-            ) else Modifier
-        )
-        .padding(8.dp)
+    // Evaluated in composition every animation frame: the parameter-based graphicsLayer
+    // below then applies it. (The lambda-based layer block does not invalidate per frame
+    // on this device, which made every tile pose invisible.)
+    val pose = metroTilePose(transition, tileId, introDelay, tileRect, rootSize)
+    val pressScale = 1f - 0.07f * instantPress
 
-    Box(modifier = tileModifier, content = content)
+    Box(
+        modifier = modifier
+            .drawWithCache {
+                onDrawWithContent {
+                    val controller = transition
+                    if (controller != null && recordedGeneration != controller.captureGeneration) {
+                        recordedGeneration = controller.captureGeneration
+                        val w = size.width.toInt().coerceAtLeast(1)
+                        val h = size.height.toInt().coerceAtLeast(1)
+                        val recording = tilePicture.beginRecording(w, h)
+                        val previous = drawContext.canvas
+                        drawContext.canvas = androidx.compose.ui.graphics.Canvas(recording)
+                        try {
+                            drawContent()
+                        } finally {
+                            drawContext.canvas = previous
+                            tilePicture.endRecording()
+                        }
+                        val rect = tileRect
+                        if (rect != null) {
+                            controller.registerVisual(tileId, tilePicture, rect, introDelay)
+                        }
+                    }
+                    drawContent()
+                }
+            }
+            .onGloballyPositioned { coordinates ->
+                tileRect = Rect(
+                    offset = coordinates.positionInRoot(),
+                    size = Size(
+                        coordinates.size.width.toFloat(),
+                        coordinates.size.height.toFloat(),
+                    ),
+                )
+            }
+            .graphicsLayer(
+                alpha = pose.alpha,
+                scaleX = pose.scaleX * pressScale,
+                scaleY = pose.scaleY * pressScale,
+                translationX = pose.translationX,
+                translationY = pose.translationY,
+                rotationX = pose.rotationX,
+                rotationY = pose.rotationY,
+                rotationZ = pose.rotationZ,
+                cameraDistance = 13f * density.density,
+                shadowElevation = pose.shadowElevation * density.density,
+                transformOrigin = pose.transformOrigin,
+            )
+            .clip(RectangleShape)
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = {
+                        val action = onClick
+                        val controller = transition
+                        if (controller == null || !controller.canLaunch()) {
+                            // No coordinator (e.g. previews) or a transition is already
+                            // running: never queue a second navigation.
+                            if (controller == null) action()
+                            return@clickable
+                        }
+                        controller.requestLaunch(
+                            MetroTileSnapshot(
+                                id = tileId,
+                                title = transitionTitle,
+                                bounds = tileRect ?: Rect(0f, 0f, 0f, 0f),
+                                picture = tilePicture,
+                            ),
+                        ) { action() }
+                    },
+                ) else Modifier,
+            ),
+    ) {
+        if (wallpaperOn) {
+            // Frosted glass over the shared wallpaper: the tile content reads in WHITE on
+            // top of the photo (the theme palette is overridden locally for legibility;
+            // the tile's own accent survives only as the whisper tint inside the glass).
+            val white = com.topjohnwu.magisk.ui.theme.MetroAccent(Color.White, Color.Black)
+            val glassPalette = com.topjohnwu.magisk.ui.theme.MetroPalette(
+                magisk = white, modules = white, apps = white, settings = white,
+                contributors = white, logs = white, sponsor = white,
+            )
+            MetroTileGlass(color = color, tileRect = tileRect)
+            CompositionLocalProvider(LocalMetroPalette provides glassPalette) {
+                Box(modifier = Modifier.fillMaxSize().padding(8.dp), content = content)
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxSize().background(color))
+            Box(modifier = Modifier.fillMaxSize().padding(8.dp), content = content)
+        }
+    }
 }
 
 @Composable
 private fun MagiskTile(
     modifier: Modifier,
-    navigationIndex: Int,
+    introDelay: Float,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.magisk
     MetroTile(
         modifier = modifier,
+        tileId = MetroTileLayout.Magisk,
+        transitionTitle = stringResource(R.string.metro_install),
         color = accent.color,
-        navigationIndex = navigationIndex,
+        onColor = accent.onColor,
+        introDelay = introDelay,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -772,12 +893,20 @@ private fun StatusRow(label: Int, enabled: Boolean, textColor: Color) {
 @Composable
 private fun ModuleTile(
     modifier: Modifier,
-    navigationIndex: Int,
+    introDelay: Float,
     modules: List<LocalModule>,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.modules
-    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
+    MetroTile(
+        modifier = modifier,
+        tileId = MetroTileLayout.Modules,
+        transitionTitle = stringResource(R.string.metro_modules),
+        color = accent.color,
+        onColor = accent.onColor,
+        introDelay = introDelay,
+        onClick = onClick,
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_modules),
@@ -811,12 +940,20 @@ private fun ModuleTile(
 @Composable
 private fun AppTile(
     modifier: Modifier,
-    navigationIndex: Int,
+    introDelay: Float,
     apps: List<String>,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.apps
-    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
+    MetroTile(
+        modifier = modifier,
+        tileId = MetroTileLayout.Apps,
+        transitionTitle = stringResource(R.string.metro_apps),
+        color = accent.color,
+        onColor = accent.onColor,
+        introDelay = introDelay,
+        onClick = onClick,
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_apps),
@@ -848,9 +985,17 @@ private fun AppTile(
 }
 
 @Composable
-private fun SettingsTile(modifier: Modifier, navigationIndex: Int, onClick: () -> Unit) {
+private fun SettingsTile(modifier: Modifier, introDelay: Float, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.settings
-    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
+    MetroTile(
+        modifier = modifier,
+        tileId = MetroTileLayout.Settings,
+        transitionTitle = stringResource(R.string.metro_settings),
+        color = accent.color,
+        onColor = accent.onColor,
+        introDelay = introDelay,
+        onClick = onClick,
+    ) {
         Text(
             text = stringResource(R.string.metro_settings),
             color = accent.onColor,
@@ -862,12 +1007,15 @@ private fun SettingsTile(modifier: Modifier, navigationIndex: Int, onClick: () -
 }
 
 @Composable
-private fun ContributorTile(modifier: Modifier, navigationIndex: Int, onClick: () -> Unit) {
+private fun ContributorTile(modifier: Modifier, introDelay: Float, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.contributors
     MetroTile(
         modifier = modifier,
+        tileId = MetroTileLayout.Contributors,
+        transitionTitle = stringResource(R.string.metro_contributor),
         color = accent.color,
-        navigationIndex = navigationIndex,
+        onColor = accent.onColor,
+        introDelay = introDelay,
         onClick = onClick,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -889,9 +1037,17 @@ private fun ContributorTile(modifier: Modifier, navigationIndex: Int, onClick: (
 }
 
 @Composable
-private fun LogTile(modifier: Modifier, navigationIndex: Int, logs: List<String>, onClick: () -> Unit) {
+private fun LogTile(modifier: Modifier, introDelay: Float, logs: List<String>, onClick: () -> Unit) {
     val accent = LocalMetroPalette.current.logs
-    MetroTile(modifier = modifier, color = accent.color, navigationIndex = navigationIndex, onClick = onClick) {
+    MetroTile(
+        modifier = modifier,
+        tileId = MetroTileLayout.Logs,
+        transitionTitle = stringResource(R.string.metro_logs),
+        color = accent.color,
+        onColor = accent.onColor,
+        introDelay = introDelay,
+        onClick = onClick,
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.metro_logs),
@@ -1010,12 +1166,21 @@ private fun AutoRollingList(
 }
 
 @Composable
-private fun SponsorTile(modifier: Modifier, navigationIndex: Int, label: String, onClick: () -> Unit) {
+private fun SponsorTile(
+    modifier: Modifier,
+    introDelay: Float,
+    tileId: String,
+    label: String,
+    onClick: () -> Unit,
+) {
     val accent = LocalMetroPalette.current.sponsor
     MetroTile(
         modifier = modifier,
+        tileId = tileId,
+        transitionTitle = label,
         color = accent.color,
-        navigationIndex = navigationIndex,
+        onColor = accent.onColor,
+        introDelay = introDelay,
         onClick = onClick,
     ) {
         Text(

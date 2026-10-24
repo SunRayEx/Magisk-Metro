@@ -3,8 +3,6 @@ package com.topjohnwu.magisk.ui.home
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,14 +49,15 @@ import androidx.compose.ui.unit.sp
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.AppContext
-import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
 import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.component.SettingsArrow
 import com.topjohnwu.magisk.ui.component.SmallTitle
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.ui.theme.MetroColors
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -100,12 +97,6 @@ internal fun EditTilesScreen() {
     val context = LocalContext.current
     var pickerMode by remember { mutableStateOf<PickerMode?>(null) }
 
-    // Full Metro entrance: the page slides in from the right.
-    val entrance = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        entrance.animateTo(1f, tween(durationMillis = 260, easing = MetroEaseOut))
-    }
-
     // Deleting, adding and built-in toggles all bump MetroUiState, which this list reads
     // directly, so every edit in this screen (or anywhere else) refreshes the rows below.
     val customTiles = remember(MetroUiState.version) { MetroCustomTiles.load() }
@@ -113,12 +104,8 @@ internal fun EditTilesScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .graphicsLayer {
-                alpha = entrance.value
-                translationX = (1f - entrance.value) * 120f * density
-            },
+            .metroScreenBackground()
+            .metroPageShell(),
     ) {
         Text(
             text = stringResource(R.string.metro_edit_tiles_title),

@@ -162,4 +162,12 @@
     <string name="metro_su_zero_title">0 级授权</string>
     <string name="metro_su_once_hint">单次授权不会出现在“授权”列表中，本次请求结束后立即失效。</string>
     <string name="metro_su_policy_zero">0 级（欺骗性）</string>
+    <!-- 图片壁纸主题 -->
+    <string name="metro_wallpaper_title">图片壁纸</string>
+    <string name="metro_wallpaper_summary">将照片设为 Metro 背景，并从图片提取强调色</string>
+    <string name="metro_wallpaper_enabled">启用图片壁纸</string>
+    <string name="metro_wallpaper_blur">磁贴模糊</string>
+    <string name="metro_wallpaper_replace">更换图片</string>
+    <string name="metro_wallpaper_remove">移除壁纸</string>
+    <string name="metro_wallpaper_failed">无法加载所选图片，已回退到普通主题</string>
 </resources>

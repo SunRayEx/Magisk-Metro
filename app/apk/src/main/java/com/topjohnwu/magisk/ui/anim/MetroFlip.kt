@@ -21,17 +21,16 @@ import kotlinx.coroutines.delay
 /** WP-like ease-out (fast start, gentle settle). */
 val MetroEaseOut = CubicBezierEasing(0.1f, 0.9f, 0.2f, 1f)
 
+/** WP-like fly-out tumble: slow start, accelerating away, so tiles visibly leave. */
+val MetroFlyEase = CubicBezierEasing(0.42f, 0f, 0.8f, 0.45f)
+
+/** WP-like tile dive: near-symmetric, so the zoom toward the screen reads through its
+ *  whole length instead of snapping to full size in the first frames. */
+val MetroDiveEase = CubicBezierEasing(0.37f, 0f, 0.28f, 1f)
+
 private const val FlipDurationMs = 360
 private const val StaggerMs = 45L
 private const val AnimatedItems = 8
-
-/** Shared transition signal for content hosted by the secondary Metro page. */
-object MetroPageExit {
-    val state = androidx.compose.runtime.mutableStateOf(false)
-    var active: Boolean
-        get() = state.value
-        set(value) { state.value = value }
-}
 
 @Composable
 fun MetroFlipItem(
@@ -41,8 +40,8 @@ fun MetroFlipItem(
     content: @Composable () -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(visible, MetroPageExit.active) {
-        if (visible && !MetroPageExit.active) {
+    LaunchedEffect(visible) {
+        if (visible) {
             delay(index.coerceAtMost(AnimatedItems - 1).coerceAtLeast(0) * StaggerMs)
             progress.animateTo(1f, tween(FlipDurationMs, easing = MetroEaseOut))
         } else {

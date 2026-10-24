@@ -330,6 +330,7 @@ fun HomeScreen(
     )
 }
 
+@Suppress("DEPRECATION")
 @Composable
 private fun RebootButton(
     modifier: Modifier = Modifier

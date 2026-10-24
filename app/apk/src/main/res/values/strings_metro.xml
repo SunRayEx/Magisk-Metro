@@ -163,4 +163,12 @@
     <string name="metro_su_zero_title">Level 0 authorization</string>
     <string name="metro_su_once_hint">A one-time grant never appears in the authorized list and expires immediately after this request.</string>
     <string name="metro_su_policy_zero">level 0 (deceptive)</string>
+    <!-- Image wallpaper theme -->
+    <string name="metro_wallpaper_title">Image wallpaper</string>
+    <string name="metro_wallpaper_summary">Use a photo as the Metro backdrop; the accent color is derived from it</string>
+    <string name="metro_wallpaper_enabled">Use image wallpaper</string>
+    <string name="metro_wallpaper_blur">Tile blur</string>
+    <string name="metro_wallpaper_replace">Replace image</string>
+    <string name="metro_wallpaper_remove">Remove wallpaper</string>
+    <string name="metro_wallpaper_failed">Couldn\'t load the selected image; showing the regular theme</string>
 </resources>

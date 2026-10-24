@@ -1,8 +1,6 @@
 package com.topjohnwu.magisk.ui.theme
 
 import android.graphics.Color
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,8 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Config
-import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import com.topjohnwu.magisk.ui.home.MetroUiState
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import java.util.Locale
 
 /**
@@ -81,12 +77,6 @@ fun MetroColorsScreen(
     var invalidRole by remember { mutableStateOf<MetroAccentRole?>(null) }
     var saving by remember { mutableStateOf(false) }
 
-    // Metro entrance: slide/fade in like the other secondary screens.
-    val entrance = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        entrance.animateTo(1f, tween(260, easing = MetroEaseOut))
-    }
-
     fun isValid(hex: String) = runCatching { Color.parseColor(hex) }.isSuccess
 
     fun save() {
@@ -105,13 +95,9 @@ fun MetroColorsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
+            .metroScreenBackground()
             .imePadding()
-            .graphicsLayer {
-                alpha = entrance.value
-                translationX = (1f - entrance.value) * 24.dp.toPx()
-            },
+            .metroPageShell(),
     ) {
         Text(
             text = stringResource(R.string.metro_custom_colors),

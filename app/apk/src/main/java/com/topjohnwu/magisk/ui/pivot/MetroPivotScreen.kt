@@ -8,13 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,7 +21,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -33,15 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.ui.anim.MetroEaseOut
-import com.topjohnwu.magisk.ui.anim.MetroPageExit
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -57,6 +53,7 @@ enum class PivotSection {
 }
 
 @Composable
+@Suppress("DEPRECATION")
 fun MetroPivotScreen(
     superuserVM: SuperuserViewModel,
     logVM: LogViewModel,
@@ -77,17 +74,6 @@ fun MetroPivotScreen(
     // Publish the visible section so the hosting fragment (and every dialog raised through it)
     // tints itself with the accent of the tile that opened this pivot.
     MetroPivotState.section.value = activeSection
-    val entrance = remember { Animatable(0f) }
-    val exit = remember { Animatable(0f) }
-    // Leaving the pivot plays the entrance backwards: the page slides back out to the right
-    // and fades while the Start board behind flies its tiles back in.
-    LaunchedEffect(MetroPageExit.active) {
-        if (MetroPageExit.active) {
-            exit.animateTo(1f, tween(durationMillis = 300, easing = MetroEaseOut))
-        } else {
-            exit.snapTo(0f)
-        }
-    }
     val accent = when (activeSection) {
         PivotSection.MAGISK -> palette.magisk
         PivotSection.APPS -> palette.apps
@@ -113,9 +99,6 @@ fun MetroPivotScreen(
     LaunchedEffect(pagerState.currentPage) {
         headerState.animateScrollToItem(pagerState.currentPage)
     }
-    LaunchedEffect(Unit) {
-        entrance.animateTo(1f, tween(durationMillis = 300, delayMillis = 90))
-    }
     LaunchedEffect(accent) {
         (view.context as? Activity)?.window?.let { window ->
             // Blend between section accents instead of snapping when pages settle.
@@ -131,12 +114,11 @@ fun MetroPivotScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .graphicsLayer {
-                alpha = entrance.value * (1f - exit.value)
-                translationX = (1f - entrance.value) * 120f * density + exit.value * 120f * density
-            },
+            .metroScreenBackground()
+            // The shared Metro page shell: a quick appear fade plus the coordinated exit
+            // fade driven by the home-transition coordinator (the tile ghost covers the
+            // swap), so this page never animates over the Start board's own transition.
+            .metroPageShell(),
     ) {
         LazyRow(
             state = headerState,

@@ -33,6 +33,7 @@ import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.model.ColorMode
 
 @SuppressLint("RestrictedApi")
+@Suppress("DEPRECATION")
 fun dynamicColorScheme(
     seed: Color,
     isDark: Boolean,

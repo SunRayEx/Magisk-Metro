@@ -1,7 +1,5 @@
 package com.topjohnwu.magisk.ui.module
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,7 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,13 +37,14 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.PersistentModules
 import com.topjohnwu.magisk.core.model.module.LocalModule
-import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
 import com.topjohnwu.magisk.ui.home.MetroUiState
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
 import com.topjohnwu.magisk.ui.theme.MetroAccent
 import com.topjohnwu.magisk.ui.theme.MetroAccentRole
 import com.topjohnwu.magisk.ui.theme.MetroColors
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
@@ -80,21 +77,11 @@ internal fun PersistentScreen() {
         }
     }
 
-    // Full Metro entrance: the page slides in from the right while its rows flip in.
-    val entrance = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        entrance.animateTo(1f, tween(durationMillis = 260, easing = MetroEaseOut))
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .graphicsLayer {
-                alpha = entrance.value
-                translationX = (1f - entrance.value) * 120f * density
-            },
+            .metroScreenBackground()
+            .metroPageShell(),
     ) {
         Text(
             text = stringResource(R.string.metro_persistent),

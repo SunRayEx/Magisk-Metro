@@ -50,6 +50,11 @@ enum class Theme(
         themeName = "Wallpaper colors",
         themeRes = R.style.ThemeFoundationMD2_Default
     ),
+    /** Runtime-only selection used while the SAF image wallpaper is enabled. */
+    Wallpaper(
+        themeName = "Image wallpaper",
+        themeRes = R.style.ThemeFoundationMD2_Default
+    ),
     Custom(
         themeName = "Custom theme",
         themeRes = R.style.ThemeFoundationMD2_Default
@@ -62,12 +67,15 @@ enum class Theme(
         get() = when (this) {
             Dynamic -> AppContext.getString(R.string.metro_dynamic_color_title)
             Custom -> AppContext.getString(R.string.metro_custom_theme)
+            Wallpaper -> "Image wallpaper"
             else -> themeName
         }
 
     companion object {
         val selected
-            get() = if (Config.metroCustomTheme) {
+            get() = if (Config.metroWallpaperEnabled && Config.metroWallpaperUri.isNotBlank()) {
+                Wallpaper
+            } else if (Config.metroCustomTheme) {
                 Custom
             } else if (Config.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 Dynamic
@@ -80,7 +88,9 @@ enum class Theme(
                 add(Default)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Dynamic)
                 add(Custom)
-                addAll(values().filterNot { it == Default || it == Dynamic || it == Custom })
+                addAll(values().filterNot {
+                    it == Default || it == Dynamic || it == Wallpaper || it == Custom
+                })
             }
 
     }

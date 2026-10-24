@@ -9,11 +9,17 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.google.android.material.R as MaterialR
+import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.ui.home.MetroUiState
 
 private fun android.content.Context.themeColor(attr: Int, fallback: Int = 0): Color =
     obtainStyledAttributes(intArrayOf(attr)).use { Color(it.getColor(0, fallback)) }
@@ -76,7 +82,18 @@ private fun uniformMetroPalette(accent: MetroAccent) = MetroPalette(
 @Composable
 fun MagisKubeTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val view = LocalView.current
     val dark = isSystemInDarkTheme()
+
+    // Image wallpaper: decode/refresh is idempotent and off the main thread. While the
+    // wallpaper is active its extracted accent drives the GLOBAL palette (tiles included),
+    // matching "图片壁纸生效后磁贴调色板用提取色".
+    LaunchedEffect(MetroWallpaper.version, MetroUiState.version) {
+        MetroWallpaper.ensureLoaded()
+    }
+    val wallpaperArt = MetroWallpaper.art
+    val wallpaperActive = MetroWallpaper.active
+
     val colors = if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
@@ -114,7 +131,63 @@ fun MagisKubeTheme(content: @Composable () -> Unit) {
         }
     }
     val usesDynamicColor = Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val palette = if (Theme.selected == Theme.Custom) {
+    val wallpaperAccent = if (wallpaperActive && wallpaperArt != null) {
+        MetroAccent(wallpaperArt.accent, wallpaperArt.onAccent)
+    } else if (
+        Config.metroWallpaperEnabled && Config.metroWallpaperUri.isNotBlank() &&
+        !MetroWallpaper.loadFailed && Config.metroWallpaperAccent != 0
+    ) {
+        // Still decoding: the cached extracted accent keeps the palette stable from the very
+        // first frame after a restart. A real load failure clears this and falls back to the
+        // regular theme.
+        MetroAccent(
+            Color(Config.metroWallpaperAccent),
+            Color(MetroColors.readableOn(Config.metroWallpaperAccent)),
+        )
+    } else null
+    val themedColors = if (wallpaperAccent != null) {
+        // The image wallpaper IS the selected theme while enabled: every MD3 accent
+        // (primary/secondary/tertiary — buttons, switches, sliders, headers, nav chrome)
+        // follows the extracted colour, so no packaged-theme colour can leak through.
+        colors.copy(
+            primary = wallpaperAccent.color,
+            onPrimary = wallpaperAccent.onColor,
+            primaryContainer = wallpaperAccent.color.copy(alpha = 0.22f),
+            onPrimaryContainer = if (dark) Color.White else Color.Black,
+            secondary = wallpaperAccent.color,
+            onSecondary = wallpaperAccent.onColor,
+            secondaryContainer = wallpaperAccent.color.copy(alpha = 0.18f),
+            onSecondaryContainer = if (dark) Color.White else Color.Black,
+            tertiary = wallpaperAccent.color,
+            onTertiary = wallpaperAccent.onColor,
+            tertiaryContainer = wallpaperAccent.color.copy(alpha = 0.16f),
+            onTertiaryContainer = if (dark) Color.White else Color.Black,
+            background = Color.Transparent,
+            onBackground = if (dark) Color.White else Color.Black,
+            surface = Color.Transparent,
+            onSurface = if (dark) Color.White else Color.Black,
+            surfaceVariant = wallpaperAccent.color.copy(alpha = 0.12f),
+            onSurfaceVariant = if (dark) Color.White.copy(alpha = 0.82f)
+            else Color.Black.copy(alpha = 0.78f),
+            outline = wallpaperAccent.color.copy(alpha = 0.62f),
+            outlineVariant = wallpaperAccent.color.copy(alpha = 0.32f),
+            surfaceTint = wallpaperAccent.color,
+        )
+    } else colors
+    if (wallpaperAccent != null) {
+        SideEffect {
+            (view.context as? android.app.Activity)?.window?.let { window ->
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
+    val palette = if (wallpaperAccent != null) {
+        uniformMetroPalette(wallpaperAccent)
+    } else if (Theme.selected == Theme.Custom) {
         MetroPalette(
             magisk = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.MAGISK)), Color(MetroColors.onAccent(context, MetroAccentRole.MAGISK))),
             modules = MetroAccent(Color(MetroColors.accent(context, MetroAccentRole.MODULES)), Color(MetroColors.onAccent(context, MetroAccentRole.MODULES))),
@@ -130,6 +203,6 @@ fun MagisKubeTheme(content: @Composable () -> Unit) {
         uniformMetroPalette(MetroAccent(colors.primary, colors.onPrimary))
     }
     CompositionLocalProvider(LocalMetroPalette provides palette) {
-        MaterialTheme(colorScheme = colors, content = content)
+        MaterialTheme(colorScheme = themedColors, content = content)
     }
 }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,6 +68,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import com.topjohnwu.magisk.ui.component.verticalScrollbar
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.core.R as CoreR
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,14 +91,16 @@ fun DenyListScreen(
     var showFilterMenu by remember { mutableStateOf(false) }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier
+            .metroScreenBackground()
+            .metroPageShell(),
+        containerColor = Color.Transparent,
         topBar = {
             // Metro design language: no top bar. Section accent colors the header title,
             // sort/filter actions stay inline beside it.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
                     .padding(start = 24.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

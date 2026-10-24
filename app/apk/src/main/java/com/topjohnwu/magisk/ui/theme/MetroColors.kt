@@ -143,6 +143,9 @@ object MetroColors {
     /** Runtime accent for the ACTIVE theme only; previews must use [previewPrimary]. */
     @ColorInt
     fun themePrimary(context: Context): Int {
+        if (Theme.selected == Theme.Wallpaper && Config.metroWallpaperAccent != 0) {
+            return Config.metroWallpaperAccent
+        }
         if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             return dynamicPrimary(context)
         }
@@ -158,6 +161,9 @@ object MetroColors {
 
     @ColorInt
     fun themeOnPrimary(context: Context): Int {
+        if (Theme.selected == Theme.Wallpaper && Config.metroWallpaperAccent != 0) {
+            return readableOn(Config.metroWallpaperAccent)
+        }
         if (Theme.selected == Theme.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val dark = (context.resources.configuration.uiMode and
                 android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==

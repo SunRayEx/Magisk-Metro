@@ -15,20 +15,29 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntSize
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,12 +82,17 @@ import com.topjohnwu.magisk.ui.home.MetroContributorScreen
 import com.topjohnwu.magisk.ui.theme.MetroThemeScreen
 import com.topjohnwu.magisk.ui.theme.MetroColorsScreen
 import com.topjohnwu.magisk.ui.home.TileGroupScreen
+import com.topjohnwu.magisk.ui.metro.LocalMetroRootSize
+import com.topjohnwu.magisk.ui.metro.LocalMetroTransition
+import com.topjohnwu.magisk.ui.metro.MetroTileContinuum
+import com.topjohnwu.magisk.ui.metro.MetroTransitionController
 import com.topjohnwu.magisk.ui.module.PersistentScreen
 import com.topjohnwu.magisk.ui.pivot.MetroPivotScreen
 import com.topjohnwu.magisk.ui.pivot.PivotSection
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.MagisKubeTheme
+import com.topjohnwu.magisk.ui.theme.MetroWallpaperBackdrop
 import com.topjohnwu.magisk.ui.theme.METRO_DENSITY_SCALE
 import com.topjohnwu.magisk.ui.theme.Theme
 import com.topjohnwu.magisk.view.Shortcuts
@@ -140,7 +154,8 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
         extension.onSaveInstanceState(outState)
     }
 
-    @SuppressLint("InlinedApi")
+    @Suppress("DEPRECATION")
+    @SuppressLint("InlinedApi", "DEPRECATION")
     override fun onCreateUi(savedInstanceState: Bundle?) {
         showUnsupportedMessage()
         askForHomeShortcut()
@@ -157,17 +172,62 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
 
         setContent {
             MagiskTheme {
-                Box(modifier = Modifier.fillMaxSize()) {
+                // The compose root reports its px size so the transition ghost and the tile
+                // glass can address the full window (the activity runs edge-to-edge).
+                var rootSize by remember { mutableStateOf(IntSize.Zero) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { rootSize = it.size },
+                ) {
                     val navigator = rememberNavigator(Route.Main)
-                    CompositionLocalProvider(LocalNavigator provides navigator) {
+                    val context = LocalContext.current
+                    // The transition coordinator must outlive every NavDisplay entry: it is
+                    // what keeps the leave/return state alive across the route swap.
+                    var introPlayed by rememberSaveable { mutableStateOf(false) }
+                    val transition = remember {
+                        MetroTransitionController(context, playedIntro = introPlayed)
+                    }
+                    transition.onIntroPlayed = { introPlayed = true }
+                    DisposableEffect(transition, navigator) {
+                        transition.bind(navigator)
+                        onDispose {
+                            // Do not leave a stale interceptor attached if the root is
+                            // replaced during recreation or a host teardown.
+                            if (navigator.popInterceptor != null) {
+                                navigator.popInterceptor = null
+                            }
+                        }
+                    }
+                    // Pump the transition state machine from the composition: this scope
+                    // carries the MonotonicFrameClock Compose animations suspend on, and it
+                    // lives exactly as long as the activity (longer than any nav entry).
+                    LaunchedEffect(transition) {
+                        with(transition) { pump() }
+                    }
+                    CompositionLocalProvider(
+                        LocalNavigator provides navigator,
+                        LocalMetroTransition provides transition,
+                        LocalMetroRootSize provides rootSize,
+                    ) {
+                        MagisKubeTheme {
+                        // One shared backdrop behind every route; pages render translucent
+                        // backgrounds over it when the wallpaper theme is active.
+                        MetroWallpaperBackdrop(
+                            secondaryPage = navigator.current() != Route.Main,
+                        )
                         HandleFlashIntent(navigator)
 
                         NavDisplay(
+                            modifier = Modifier.then(
+                                if (navigator.current() == Route.Main) Modifier
+                                else Modifier.windowInsetsPadding(WindowInsets.systemBars),
+                            ),
                             backStack = navigator.backStack,
                             onBack = { navigator.pop() },
-                            // The Metro screens run their own tile entrance/exit choreography
-                            // (MetroFlipItem stagger + board leave animation), so the nav host's
-                            // own crossfade would double up on top of it.
+                            // The Metro transition coordinator owns all home <-> page motion
+                            // (tile press, board fly-out, ghost expand/shrink); the nav
+                            // host's own transitions must stay off or they would fight it.
                             transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
                             popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
                             entryDecorators = listOf(
@@ -327,6 +387,10 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                                 }
                             }
                         )
+
+                        // The tapped tile's own capture, morphing across the swap.
+                        MetroTileContinuum(transition)
+                        }
                     }
                     MainActivityDialogs(
                         showInvalid = showInvalidState.collectAsStateWithLifecycle().value,

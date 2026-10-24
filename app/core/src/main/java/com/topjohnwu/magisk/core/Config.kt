@@ -56,6 +56,10 @@ object Config : PreferenceConfig, DBConfig {
         const val METRO_HIDDEN_TILES = "metro_hidden_tiles"
         const val METRO_PERSISTENT_MODULES = "metro_persistent_modules"
         const val METRO_NIGHT_MODE = "metro_night_mode"
+        const val METRO_WALLPAPER_URI = "metro_wallpaper_uri"
+        const val METRO_WALLPAPER_ENABLED = "metro_wallpaper_enabled"
+        const val METRO_WALLPAPER_BLUR = "metro_wallpaper_blur"
+        const val METRO_WALLPAPER_ACCENT = "metro_wallpaper_accent"
 
         val NO_MIGRATION = setOf(ASKED_HOME, SU_REQUEST_TIMEOUT,
             SU_AUTO_RESPONSE, SU_REAUTH, SU_TAPJACK)
@@ -146,6 +150,14 @@ object Config : PreferenceConfig, DBConfig {
     var metroPersistentModules by preference(Key.METRO_PERSISTENT_MODULES, false)
     // -1 = follow system, 0 = light, 1 = dark
     var metroNightMode by preference(Key.METRO_NIGHT_MODE, -1)
+
+    // Image wallpaper theme: a persisted SAF document Uri (not a file path), an on/off
+    // switch, a 0..100 blur preference for the tile glass, and the cached accent color
+    // extracted from the image so the palette survives restarts.
+    var metroWallpaperUri by preference(Key.METRO_WALLPAPER_URI, "")
+    var metroWallpaperEnabled by preference(Key.METRO_WALLPAPER_ENABLED, false)
+    var metroWallpaperBlur by preference(Key.METRO_WALLPAPER_BLUR, 40)
+    var metroWallpaperAccent by preference(Key.METRO_WALLPAPER_ACCENT, 0)
     var checkUpdate
         get() = checkUpdatePrefs
         set(value) {

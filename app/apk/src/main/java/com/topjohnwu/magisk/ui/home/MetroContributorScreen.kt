@@ -26,7 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
+import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import com.topjohnwu.magisk.core.R as CoreR
 
 private const val CONTRIBUTOR_HOME_URL = "https://github.com/SunRayEx/Magisk-Metro"
@@ -48,7 +50,8 @@ fun MetroContributorScreen(onLinkClick: (String) -> Unit) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .metroScreenBackground()
+            .metroPageShell(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
     ) {
         item(key = "contributor_home") {
