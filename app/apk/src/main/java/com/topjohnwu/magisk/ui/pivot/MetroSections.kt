@@ -889,7 +889,10 @@ fun ModulesSection(vm: ModuleViewModel) {
                     MetroCentered(stringResource(if (page == 1) R.string.metro_no_modules else R.string.metro_no_updates))
                 }
             } else {
-                itemsIndexed(pageModules) { index, item ->
+                itemsIndexed(
+                    items = pageModules,
+                    key = { _, item -> item.module.id },
+                ) { index, item ->
                     MetroFlipItem(index = index + if (page == 1) 1 else 0, visible = visible) {
                         ModuleRow(vm, item, accent)
                     }
@@ -1088,15 +1091,12 @@ private fun ModuleRow(vm: ModuleViewModel, item: ModuleItem, accent: MetroAccent
                 else stringResource(R.string.metro_module_remove),
                 accent,
             ) { vm.toggleRemove(item) }
-            if (item.showUpdate) {
+            if (item.updateReady) {
                 MetroTextButton(
                     text = stringResource(R.string.metro_module_update),
                     accent = accent,
-                    // Mirror the upstream screen: the button is only meaningful when an update is
-                    // actually pending. Showing it greyed out for a module that is already current
-                    // reads as a broken control.
-                    enabled = item.updateReady,
-                    selected = item.updateReady,
+                    enabled = true,
+                    selected = true,
                 ) {
                     val updateInfo = module.updateInfo ?: return@MetroTextButton
                     val activity = context.findActivity()

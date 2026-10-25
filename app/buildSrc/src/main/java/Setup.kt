@@ -331,7 +331,7 @@ fun Project.setupMainApk() {
             applicationId = "org.magiskube.magisk"
             vectorDrawables.useSupportLibrary = true
             versionName = Config.version
-            versionCode = Config.versionCode
+            versionCode = Config.appVersionCode
             ndk {
                 abiFilters += ABI_SUPPORT_LIST
                 debugSymbolLevel = "FULL"

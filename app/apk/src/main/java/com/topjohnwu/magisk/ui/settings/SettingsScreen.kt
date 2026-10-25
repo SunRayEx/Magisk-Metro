@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,7 @@ fun SettingsScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val scrollState = rememberScrollState()
+    LaunchedEffect(Unit) { viewModel.refreshExternalZygisk() }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -416,13 +418,20 @@ internal fun MagiskSection(
 
             // Zygisk
             var zygisk by remember { mutableStateOf(Config.zygisk) }
+            val externalZygisk by viewModel.externalZygisk.collectAsStateWithLifecycle()
+            val externalProviderActive = !Info.isZygiskEnabled && externalZygisk != null
             SettingsSwitch(
                 title = stringResource(CoreR.string.zygisk),
-                summary = stringResource(
-                    if (zygisk != Info.isZygiskEnabled) CoreR.string.reboot_apply_change
-                    else CoreR.string.settings_zygisk_summary
-                ),
+                summary = when {
+                    externalProviderActive -> stringResource(
+                        CoreR.string.settings_zygisk_external,
+                        externalZygisk.orEmpty(),
+                    )
+                    zygisk != Info.isZygiskEnabled -> stringResource(CoreR.string.reboot_apply_change)
+                    else -> stringResource(CoreR.string.settings_zygisk_summary)
+                },
                 checked = zygisk,
+                enabled = !externalProviderActive,
                 onCheckedChange = {
                     zygisk = it
                     Config.zygisk = it

@@ -764,12 +764,12 @@ fn collect_modules(zygisk_enabled: bool, open_zygisk: bool) -> Vec<ModuleInfo> {
                 dir.unlink_at(cstr!("zygisk/unloaded"), UnlinkatFlags::NoRemoveDir)
                     .ok();
             }
-        } else {
-            // Ignore zygisk modules when zygisk is not enabled
-            if is_zygisk {
-                info!("{name}: ignore");
-                return Ok(());
-            }
+        } else if is_zygisk {
+            // Keep mounting Zygisk provider/modules even when Magisk's own Zygisk
+            // implementation is disabled. Third-party providers such as Zygisk Next and
+            // ReZygisk require this mode: they provide the injector, while Magisk still
+            // provides the normal module filesystem and lifecycle scripts.
+            info!("{name}: mount without native Zygisk loading");
         }
         modules.push(ModuleInfo {
             name: name.to_string(),

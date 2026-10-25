@@ -69,7 +69,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.download.DownloadEngine
 import com.topjohnwu.magisk.core.model.module.OnlineModule
@@ -235,7 +234,7 @@ fun ModuleScreen(
                     item = item,
                     viewModel = viewModel,
                     onUpdateClick = { onlineModule ->
-                        if (onlineModule != null && Info.isConnected.value == true) {
+                        if (onlineModule != null) {
                             pendingOnlineModule = onlineModule
                             showOnlineDialog = true
                         }

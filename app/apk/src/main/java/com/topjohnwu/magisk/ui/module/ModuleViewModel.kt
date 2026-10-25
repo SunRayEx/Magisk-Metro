@@ -29,7 +29,7 @@ data class ModuleItem(
     val module: LocalModule,
     val isEnabled: Boolean = module.enable,
     val isRemoved: Boolean = module.remove,
-    val showUpdate: Boolean = module.updateInfo != null,
+    val showUpdate: Boolean = module.updateInfo != null && module.outdated,
 ) {
     val showNotice: Boolean
     val showAction: Boolean
@@ -91,26 +91,17 @@ class ModuleViewModel : AsyncLoadViewModel() {
             val modules = withContext(Dispatchers.Default) {
                 LocalModule.installed().map { ModuleItem(it) }
             }
-            _uiState.update { it.copy(loading = false, modules = modules) }
-            loadUpdateInfo()
+            val modulesWithUpdates = withContext(Dispatchers.IO) {
+                modules.map { item ->
+                    item.module.fetch()
+                    ModuleItem(item.module)
+                }
+            }
+            // Publish the complete snapshot once. Publishing before the network checks makes
+            // update rows appear and disappear while the pivot is already animating.
+            _uiState.update { it.copy(loading = false, modules = modulesWithUpdates) }
         } else {
             _uiState.update { it.copy(loading = false) }
-        }
-    }
-
-    private suspend fun loadUpdateInfo() {
-        withContext(Dispatchers.IO) {
-            _uiState.update { state ->
-                state.copy(
-                    modules = state.modules.map { item ->
-                        if (item.module.fetch()) {
-                            item.copy(showUpdate = item.module.updateInfo != null)
-                        } else {
-                            item
-                        }
-                    }
-                )
-            }
         }
     }
 

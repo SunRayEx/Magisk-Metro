@@ -7,6 +7,7 @@ import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.R
+import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.utils.RootUtils
 import com.topjohnwu.magisk.ui.navigation.Route
@@ -34,6 +35,22 @@ class SettingsViewModel : BaseViewModel() {
     val persistentModules: StateFlow<Boolean> = _persistentModules.asStateFlow()
 
     val zygiskMismatch get() = Config.zygisk != Info.isZygiskEnabled
+
+    private val _externalZygisk = MutableStateFlow<String?>(null)
+    val externalZygisk: StateFlow<String?> = _externalZygisk.asStateFlow()
+
+    fun refreshExternalZygisk() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val provider = runCatching {
+                LocalModule.installed()
+                    .asSequence()
+                    .filter { it.enable && it.isZygisk }
+                    .map { it.name.ifBlank { it.id } }
+                    .firstOrNull()
+            }.getOrNull()
+            _externalZygisk.value = provider
+        }
+    }
 
     private val _tileCustomization = MutableStateFlow(Config.metroTileCustomization)
     val tileCustomization: StateFlow<Boolean> = _tileCustomization.asStateFlow()

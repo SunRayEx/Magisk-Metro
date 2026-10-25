@@ -28,6 +28,7 @@ object Config {
 
     val version: String get() = get("version") ?: commitHash.ifBlank { "MagisKube-dev" }
     val versionCode: Int get() = get("magisk.versionCode")!!.toInt()
+    val appVersionCode: Int get() = get("magisk.appVersionCode")?.toInt() ?: versionCode
     val stubVersion: String get() = get("magisk.stubVersion")!!
     val abiList: Set<String> get() {
         val abiList = get("abiList") ?: return defaultAbis
