@@ -508,6 +508,8 @@ def dump_flags_app():
     flag_txt += f"version={config['version']}\n"
     flag_txt += f"magisk.versionCode={config['versionCode']}\n"
     flag_txt += f"magisk.appVersionCode={config.get('appVersionCode', config['versionCode'])}\n"
+    if "appVersion" in config:
+        flag_txt += f"magisk.appVersion={config['appVersion']}\n"
     app_build_dir = Path("app", "build")
     app_build_dir.mkdir(parents=True, exist_ok=True)
     write_if_diff(app_build_dir / "flags.prop", flag_txt)
