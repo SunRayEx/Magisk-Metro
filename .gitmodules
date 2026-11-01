@@ -19,3 +19,6 @@
 [submodule "selinux"]
 	path = native/src/external/selinux
 	url = https://android.googlesource.com/platform/external/selinux
+[submodule "xz-embedded"]
+	path = native/src/external/xz-embedded
+	url = https://github.com/tukaani-project/xz-embedded.git

@@ -112,6 +112,10 @@ LOCAL_SRC_FILES := metro/link/shim.c
 # Fully static: no bionic runtime dependencies, and no exec-label surprises for the
 # post-fs-data script or the manager app.
 LOCAL_LDFLAGS := -static
+# Since ONDK r30 the static libc.a carries bionic's Rust objects (icu4x) with their own
+# copy of std, which clashes with the std inside libmetroconf.a on rust_eh_personality.
+# Both sides are built with panic=abort, so the personality routine is never invoked.
+LOCAL_LDFLAGS += -Wl,--allow-multiple-definition
 include $(BUILD_EXECUTABLE)
 
 endif

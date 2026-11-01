@@ -21,9 +21,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.metroScreenBackground
+import com.topjohnwu.magisk.ui.component.rememberConfirmDialog
 import com.topjohnwu.magisk.ui.component.rememberExternalStoragePermissionLauncher
 import com.topjohnwu.magisk.ui.terminal.TerminalScreen
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
@@ -41,6 +45,26 @@ fun FlashScreen(
     val saveLog = rememberExternalStoragePermissionLauncher {
         viewModel.saveLog()
     }
+
+    val exitConfirmDialog = rememberConfirmDialog(onConfirm = onBack)
+    val exitTitle = stringResource(CoreR.string.running_exit_title)
+    val exitMessage = stringResource(CoreR.string.running_exit_msg)
+
+    val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = backState,
+        isBackEnabled = !finished,
+        onBackCompleted = {
+            if (!finished) {
+                exitConfirmDialog.showConfirm(
+                    title = exitTitle,
+                    content = exitMessage,
+                )
+            } else {
+                onBack()
+            }
+        }
+    )
 
     val statusText = when (flashState) {
         FlashViewModel.State.FLASHING -> stringResource(CoreR.string.flashing)
@@ -95,10 +119,11 @@ fun FlashScreen(
             }
         }
         TerminalScreen(
+            emulator = viewModel.emulator,
             modifier = Modifier
                 .fillMaxSize()
                 .weight(1f),
-            onEmulatorCreated = { viewModel.onEmulatorCreated(it) },
+            onResized = viewModel::onTerminalResized,
         )
     }
 }

@@ -17,12 +17,13 @@ gradlePlugin {
 }
 
 dependencies {
+    // Keep the Kotlin Gradle plugin aligned with the version used by the
+    // Compose compiler and project plugins. AGP declares its own bundled KGP,
+    // so do not let that transitive 2.2.x dependency win on buildSrc's classpath.
     implementation(kotlin("gradle-plugin", libs.versions.kotlin.get()))
-    implementation(libs.android.gradle.plugin)
-    implementation(libs.android.kapt.plugin)
-    implementation(libs.ksp.plugin)
-    implementation(libs.navigation.safe.args.plugin)
-    implementation(libs.lsparanoid.plugin)
-    implementation(libs.moshi.plugin)
+    implementation(libs.android.gradle.plugin) {
+        exclude(group = "org.jetbrains.kotlin")
+    }
+    compileOnly(libs.android.build.sdk.common)
     implementation(libs.jgit)
 }

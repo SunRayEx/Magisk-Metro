@@ -1,4 +1,5 @@
-@Suppress("UnstableApiUsage")
+@file:Suppress("UnstableApiUsage")
+
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     repositories {
@@ -7,5 +8,14 @@ dependencyResolutionManagement {
         maven("https://jitpack.io")
     }
 }
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 rootProject.name = "Magisk"
-include(":apk", ":core", ":shared", ":stub", ":test")
+include(":apk", ":core", ":test")

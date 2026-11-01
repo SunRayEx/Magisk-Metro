@@ -15,14 +15,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -57,17 +59,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.download.DownloadEngine
@@ -76,6 +83,7 @@ import com.topjohnwu.magisk.ui.MainActivity
 import com.topjohnwu.magisk.ui.component.ConfirmResult
 import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.component.MarkdownTextAsync
+import com.topjohnwu.magisk.ui.component.onlyHorizontal
 import com.topjohnwu.magisk.ui.component.rememberConfirmDialog
 import com.topjohnwu.magisk.ui.component.verticalScrollbar
 import com.topjohnwu.magisk.utils.textHolder
@@ -86,8 +94,10 @@ import com.topjohnwu.magisk.core.R as CoreR
 @Composable
 fun ModuleScreen(
     viewModel: ModuleViewModel,
+    isFabAtBottom: Boolean,
     modifier: Modifier = Modifier,
     onRegisterFab: (((() -> Unit)?) -> Unit)? = null,
+    contentFocusRequester: FocusRequester? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -193,7 +203,7 @@ fun ModuleScreen(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.padding(horizontal = 32.dp)
                 ) {
                     Icon(
@@ -213,26 +223,48 @@ fun ModuleScreen(
             return@Scaffold
         }
 
-        val listState = rememberLazyListState()
-        LazyColumn(
-            state = listState,
+        val listBottomPadding = padding.calculateBottomPadding() + if (isFabAtBottom) 92.dp else 12.dp
+        val scrollbarBottomPadding = padding.calculateBottomPadding() + if (isFabAtBottom) 80.dp else 12.dp
+
+        val gridState = rememberLazyStaggeredGridState()
+        // Staggered, as cards expand; 360dp leaves room for the action buttons row
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Adaptive(360.dp),
+            state = gridState,
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(padding)
-                .verticalScrollbar(listState, contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)),
-            contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .consumeWindowInsets(padding)
+                .padding(padding.onlyHorizontal())
+                .verticalScrollbar(
+                    gridState,
+                    contentPadding = PaddingValues(
+                        top = padding.calculateTopPadding() + 4.dp,
+                        bottom = scrollbarBottomPadding,
+                    ),
+                ),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                top = padding.calculateTopPadding() + 16.dp,
+                end = 12.dp,
+                bottom = listBottomPadding,
+            ),
+            verticalItemSpacing = 8.dp,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item { Spacer(Modifier.height(4.dp)) }
             items(
                 items = uiState.modules,
-                key = { it.module.id },
+                // Module ids come from module.prop and can be duplicated, directory names can't
+                key = { it.module.base.name },
                 contentType = { "ModuleCard" }
             ) { item ->
+                val isLast = item == uiState.modules.lastOrNull()
                 ModuleCard(
                     item = item,
                     viewModel = viewModel,
+                    modifier = if (isLast && contentFocusRequester != null) {
+                        Modifier.focusRequester(contentFocusRequester)
+                    } else Modifier,
                     onUpdateClick = { onlineModule ->
                         if (onlineModule != null) {
                             pendingOnlineModule = onlineModule
@@ -241,7 +273,6 @@ fun ModuleScreen(
                     }
                 )
             }
-            item { Spacer(Modifier.height(4.dp)) }
         }
     }
 }
@@ -256,7 +287,7 @@ private fun ModuleCard(
     val infoAlpha = if (!item.isRemoved && item.isEnabled && !item.showNotice) 1f else 0.5f
     val strikeThrough = if (item.isRemoved) TextDecoration.LineThrough else TextDecoration.None
     val colorScheme = MaterialTheme.colorScheme
-    var expanded by rememberSaveable(item.module.id) { mutableStateOf(false) }
+    var expanded by rememberSaveable(item.module.base.name) { mutableStateOf(false) }
     val hasDescription = item.module.description.isNotBlank()
 
     Card(
@@ -297,7 +328,9 @@ private fun ModuleCard(
                     }
                     Switch(
                         checked = item.isEnabled,
-                        onCheckedChange = { viewModel.toggleEnabled(item) }
+                        onCheckedChange = { viewModel.toggleEnabled(item) },
+                        // The switch is its own node, so name the module it enables
+                        modifier = Modifier.semantics { contentDescription = item.module.name },
                     )
                 }
 
@@ -346,7 +379,11 @@ private fun ModuleCard(
                         if (item.showAction) {
                             FilledTonalButton(
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                                onClick = { viewModel.runAction(item.module.id, item.module.name) },
+                                // Drop taps while a screen transition runs, so a quick
+                                // second tap can't open another screen
+                                onClick = dropUnlessResumed {
+                                    viewModel.runAction(item.module.base.name, item.module.name)
+                                },
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -355,7 +392,7 @@ private fun ModuleCard(
                                     Icon(
                                         modifier = Modifier.size(18.dp),
                                         imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = stringResource(CoreR.string.module_action)
+                                        contentDescription = null
                                     )
                                     Text(
                                         text = stringResource(CoreR.string.module_action),
@@ -390,7 +427,7 @@ private fun ModuleCard(
                             Icon(
                                 modifier = Modifier.size(18.dp),
                                 imageVector = Icons.Default.CloudUpload,
-                                contentDescription = stringResource(CoreR.string.update),
+                                contentDescription = null,
                             )
                             Text(
                                 text = stringResource(CoreR.string.update),
@@ -459,6 +496,7 @@ private fun OnlineModuleDialog(
         onDismiss = onDismiss,
         neutralText = stringResource(CoreR.string.download),
         onNeutral = { onDownload(false) },
+        scrollable = true,
     ) {
         MarkdownTextAsync {
             val str = svc.fetchString(item.changelog)

@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,7 +75,7 @@ import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.component.rememberLoadingDialog
 import com.topjohnwu.magisk.ui.deny.DenyAppState
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
-import com.topjohnwu.magisk.ui.deny.SortBy
+import com.topjohnwu.magisk.ui.component.AppSortBy as SortBy
 import com.topjohnwu.magisk.ui.deny.DenyProcessState
 import com.topjohnwu.magisk.ui.flash.FlashUtils
 import com.topjohnwu.magisk.ui.home.HomeViewModel
@@ -93,6 +94,8 @@ import com.topjohnwu.magisk.ui.settings.MagiskSection as SettingsMagiskSection
 import com.topjohnwu.magisk.ui.settings.SuperuserSection
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
 import com.topjohnwu.magisk.ui.superuser.PolicyItem
+import com.topjohnwu.magisk.ui.superuser.SuperuserAppInfo
+import com.topjohnwu.magisk.ui.superuser.SuperuserAppsViewModel
 import com.topjohnwu.magisk.ui.superuser.SuperuserViewModel
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
 import com.topjohnwu.magisk.ui.theme.MetroAccent
@@ -251,7 +254,9 @@ fun MagiskSection(vm: HomeViewModel) {
     val scope = rememberCoroutineScope()
     val loadingDialog = rememberLoadingDialog()
     var showUninstallDialog by rememberSaveable { mutableStateOf(false) }
-    var showManagerDialog by rememberSaveable { mutableStateOf(false) }
+    var managerUpdate by rememberSaveable {
+        mutableStateOf<com.topjohnwu.magisk.core.model.UpdateInfo?>(null)
+    }
 
     LaunchedEffect(uiState.showUninstall) {
         if (uiState.showUninstall) {
@@ -260,8 +265,8 @@ fun MagiskSection(vm: HomeViewModel) {
         }
     }
     LaunchedEffect(uiState.showManagerInstall) {
-        if (uiState.showManagerInstall) {
-            showManagerDialog = true
+        uiState.showManagerInstall?.let {
+            managerUpdate = it
             vm.onManagerInstallConsumed()
         }
     }
@@ -363,14 +368,15 @@ fun MagiskSection(vm: HomeViewModel) {
         )
     }
 
-    if (showManagerDialog) {
+    managerUpdate?.let { update ->
         ManagerInstallComposableDialog(
+            update = update,
             cacheDir = context.cacheDir,
-            onDismiss = { showManagerDialog = false },
+            onDismiss = { managerUpdate = null },
             onInstall = {
-                showManagerDialog = false
+                managerUpdate = null
                 (context as? MainActivity)?.let {
-                    DownloadEngine.startWithActivity(it, Subject.App())
+                    DownloadEngine.startWithActivity(it, Subject.App(update))
                 }
             }
         )
@@ -408,6 +414,34 @@ private fun MetroStatusRow(label: String, enabled: Boolean, accent: MetroAccent)
     }
 }
 
+/** A row of Apps > Authorized: an existing policy, or an installed app that can be granted. */
+@Immutable
+private sealed interface AuthorizedRow {
+    // Same key for both kinds, so a granted app keeps its list item instead of being recreated
+    val key: String
+    val label: String
+    val packageName: String
+    val isSystemApp: Boolean
+    /** Sort group: enabled policies, other policies, then apps without a policy. */
+    val group: Int
+
+    data class Policy(val item: PolicyItem) : AuthorizedRow {
+        override val key get() = "${item.uid}:${item.packageName}"
+        override val group get() = if (item.isEnabled) 0 else 1
+        override val label get() = item.appName
+        override val packageName get() = item.packageName
+        override val isSystemApp get() = item.isSystemApp
+    }
+
+    data class Candidate(val app: SuperuserAppInfo) : AuthorizedRow {
+        override val key get() = "${app.uid}:${app.packageName}"
+        override val group get() = 2
+        override val label get() = app.label
+        override val packageName get() = app.packageName
+        override val isSystemApp get() = app.isSystemApp
+    }
+}
+
 @Composable
 fun AppsSection(
     vm: SuperuserViewModel,
@@ -415,42 +449,59 @@ fun AppsSection(
     showDenyListInitially: Boolean,
 ) {
     val accent = LocalMetroPalette.current.apps
+    val appsVM: SuperuserAppsViewModel = viewModel(factory = VMFactory)
+    LaunchedEffect(appsVM) { appsVM.startLoading() }
     val uiState by vm.uiState.collectAsStateWithLifecycle()
-    val loading = uiState.loading
     val policies = uiState.policies
-
-    if (loading && policies.isEmpty()) {
-        MetroCentered(stringResource(R.string.metro_loading))
-        return
-    }
+    val appsLoading by appsVM.loading.collectAsStateWithLifecycle()
+    val apps by appsVM.apps.collectAsStateWithLifecycle()
     val denyLoading by denyListVM.loading.collectAsStateWithLifecycle()
     val denyItems by denyListVM.filteredApps.collectAsStateWithLifecycle()
+    val requireAuth = com.topjohnwu.magisk.ui.component.rememberBiometricAuth()
     val authorizedQuery = remember { mutableStateOf("") }
     val authorizedAppFilter = remember { mutableStateOf(AppFilter.USER) }
     val authorizedSortOrder = remember { mutableStateOf(SortOrder.ALPHABETICAL) }
-    // Keep unconfigured applications here so root can be granted without a separate prompt page.
-    // ALLOW is sorted above QUERY, so newly authorized apps move immediately after the write.
+    // Each row keeps the group it had when first shown, like the Exclude page does, so turning
+    // a switch on or off doesn't move the row. Groups refresh when the section is reopened.
+    val initialGroups = remember { HashMap<String, Int>() }
+    // Enabled policies come first, then denied policies, then installed apps without a policy,
+    // so root can be granted here directly. Apps on the DenyList are managed on the Exclude page.
     val authorized = remember(
         policies,
+        apps,
         denyItems,
         authorizedQuery.value,
         authorizedAppFilter.value,
         authorizedSortOrder.value,
     ) {
-        policies.asSequence()
-            .filter { it.policy.policy != SuPolicy.DENY && !denyListVM.isDenied(it.packageName) }
-            .filter { item ->
+        val installTime = apps.associate { it.packageName to it.firstInstallTime }
+        val policyUids = policies.mapTo(HashSet()) { it.uid }
+        val policyRows = policies.asSequence()
+            .filter { !denyListVM.isDenied(it.packageName) }
+            .map { AuthorizedRow.Policy(it) }
+        val candidateRows = apps.asSequence()
+            .filter { it.uid !in policyUids && !denyListVM.isDenied(it.packageName) }
+            .map { AuthorizedRow.Candidate(it) }
+        val query = authorizedQuery.value
+        val byOrder: Comparator<AuthorizedRow> = when (authorizedSortOrder.value) {
+            SortOrder.INSTALL_TIME -> compareByDescending<AuthorizedRow> {
+                installTime[it.packageName] ?: 0L
+            }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.label }
+            SortOrder.ALPHABETICAL -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }
+        }
+        (policyRows + candidateRows)
+            .filter { row ->
                 val matchesType = when (authorizedAppFilter.value) {
-                    AppFilter.USER -> !item.isSystemApp
-                    AppFilter.SYSTEM -> item.isSystemApp
+                    AppFilter.USER -> !row.isSystemApp
+                    AppFilter.SYSTEM -> row.isSystemApp
                 }
-                val query = authorizedQuery.value
                 matchesType && (query.isBlank() ||
-                    item.appName.contains(query, true) || item.packageName.contains(query, true))
+                    row.label.contains(query, true) || row.packageName.contains(query, true))
             }
             .sortedWith(
-                compareBy<PolicyItem> { it.policy.policy < SuPolicy.ALLOW }
-                    .thenBy { it.appName.lowercase() },
+                compareBy<AuthorizedRow> { row ->
+                    initialGroups.getOrPut(row.key) { row.group }
+                }.then(byOrder).thenBy { it.packageName }
             )
             .toList()
     }
@@ -472,20 +523,31 @@ fun AppsSection(
                     onAppFilterChange = { authorizedAppFilter.value = it },
                     onSortOrderChange = { authorizedSortOrder.value = it },
                 )
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    if (authorized.isEmpty()) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.metro_no_granted_apps),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Light,
-                                modifier = Modifier.padding(SectionPadding),
-                            )
-                        }
-                    } else {
-                        itemsIndexed(authorized) { index, item ->
-                            MetroFlipItem(index = index, visible = visible) { PolicyRow(vm, item, accent) }
+                if (authorized.isEmpty() && (uiState.loading || appsLoading)) {
+                    MetroCentered(stringResource(R.string.metro_loading))
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        if (authorized.isEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.metro_no_granted_apps),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Light,
+                                    modifier = Modifier.padding(SectionPadding),
+                                )
+                            }
+                        } else {
+                            itemsIndexed(authorized, key = { _, row -> row.key }) { index, row ->
+                                MetroFlipItem(index = index, visible = visible) {
+                                    when (row) {
+                                        is AuthorizedRow.Policy -> PolicyRow(vm, row.item, accent)
+                                        is AuthorizedRow.Candidate -> GrantRow(row.app, accent) {
+                                            requireAuth { vm.grant(row.app) }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -493,6 +555,40 @@ fun AppsSection(
         } else {
             DenyListSection(denyListVM, denyItems, denyLoading, accent, visible)
         }
+    }
+}
+
+@Composable
+private fun GrantRow(app: SuperuserAppInfo, accent: MetroAccent, onGrant: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onGrant)
+            .padding(SectionPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = app.packageName,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Switch(
+            checked = false,
+            onCheckedChange = { if (it) onGrant() },
+            colors = metroSwitchColors(accent),
+        )
     }
 }
 
@@ -633,6 +729,7 @@ private fun DenyListRow(vm: DenyListViewModel, item: DenyAppState, accent: Metro
 @Composable
 private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAccent) {
     var expanded by remember { mutableStateOf(false) }
+    val requireAuth = com.topjohnwu.magisk.ui.component.rememberBiometricAuth()
     val enabled = item.isEnabled
     Column(
         modifier = Modifier
@@ -651,7 +748,7 @@ private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAcc
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = if (item.policy.policy == SuPolicy.ZERO)
+                    text = if (item.policyValue == SuPolicy.ZERO)
                         "${item.packageName} · " + stringResource(R.string.metro_su_policy_zero)
                     else item.packageName,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
@@ -662,7 +759,7 @@ private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAcc
             }
             Switch(
                 checked = enabled,
-                onCheckedChange = { vm.togglePolicy(item) },
+                onCheckedChange = { requireAuth { vm.togglePolicy(item) } },
                 colors = metroSwitchColors(accent),
             )
         }
@@ -673,13 +770,13 @@ private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAcc
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 MetroTextButton(stringResource(CoreR.string.deny), accent) {
-                    vm.updatePolicy(item, SuPolicy.DENY)
+                    requireAuth { vm.updatePolicy(item, SuPolicy.DENY) }
                 }
                 MetroTextButton(stringResource(CoreR.string.restrict), accent) {
-                    vm.updatePolicy(item, SuPolicy.RESTRICT)
+                    requireAuth { vm.updatePolicy(item, SuPolicy.RESTRICT) }
                 }
                 MetroTextButton(stringResource(CoreR.string.grant), accent) {
-                    vm.updatePolicy(item, SuPolicy.ALLOW)
+                    requireAuth { vm.updatePolicy(item, SuPolicy.ALLOW) }
                 }
             }
             MetroToggleLine(
@@ -693,7 +790,9 @@ private fun PolicyRow(vm: SuperuserViewModel, item: PolicyItem, accent: MetroAcc
                 accent = accent,
             ) { vm.updateLogging(item) }
             Row(modifier = Modifier.padding(top = 8.dp)) {
-                MetroTextButton(stringResource(R.string.metro_revoke), accent) { vm.performDelete(item) }
+                MetroTextButton(stringResource(R.string.metro_revoke), accent) {
+                    requireAuth { vm.performDelete(item) }
+                }
             }
         }
     }
@@ -1133,7 +1232,23 @@ private fun android.content.Context.findActivity(): com.topjohnwu.magisk.ui.Main
 
 @Composable
 fun SettingsSection(vm: SettingsViewModel) {
-    val accent = LocalMetroPalette.current.settings
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val requireAuth = com.topjohnwu.magisk.ui.component.rememberBiometricAuth()
+    val enableUpdates = com.topjohnwu.magisk.ui.component.rememberNotificationPermissionLauncher {
+        vm.setCheckUpdate(true)
+    }
+    androidx.lifecycle.compose.LifecycleResumeEffect(vm) {
+        vm.refreshEnvironment()
+        vm.refreshExternalZygisk()
+        onPauseOrDispose {}
+    }
+    com.topjohnwu.magisk.ui.settings.SettingsDialogs(
+        uiState = uiState,
+        onSaveCustomUrl = vm::saveCustomChannelUrl,
+        onSaveDownloadPath = vm::saveDownloadPath,
+        onDismissDialog = vm::dismissDialog,
+    )
     MetroSubPivot(
         titles = listOf(
             stringResource(CoreR.string.settings_customization),
@@ -1150,10 +1265,44 @@ fun SettingsSection(vm: SettingsViewModel) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             when (page) {
-                0 -> CustomizationSection(vm)
-                1 -> AppSettingsSection(vm)
-                2 -> if (Info.env.isActive) SettingsMagiskSection(vm)
-                3 -> if (Info.showSuperUser) SuperuserSection(vm)
+                0 -> CustomizationSection(
+                    viewModel = vm,
+                    uiState = uiState,
+                    onOpenSystemLocale = {
+                        context.startActivity(com.topjohnwu.magisk.core.utils.LocaleSetting.localeSettingsIntent)
+                    },
+                    onLanguageSelected = vm::setLanguage,
+                    onColorModeSelected = vm::setColorMode,
+                )
+                1 -> AppSettingsSection(
+                    viewModel = vm,
+                    uiState = uiState,
+                    onUpdateChannelSelected = vm::setUpdateChannel,
+                    onOpenCustomUrlDialog = vm::openCustomChannelUrlDialog,
+                    onToggleDoh = vm::setDoh,
+                    onToggleCheckUpdate = { enabled ->
+                        if (enabled) enableUpdates() else vm.setCheckUpdate(false)
+                    },
+                    onOpenDownloadPathDialog = vm::openDownloadPathDialog,
+                    onToggleRandomPackageName = vm::setRandomPackageName,
+                )
+                2 -> if (uiState.isMagiskInstalled) SettingsMagiskSection(
+                    viewModel = vm,
+                    uiState = uiState,
+                    onCreateHosts = vm::createHosts,
+                    onToggleZygisk = vm::toggleZygisk,
+                    onToggleDenyList = vm::toggleDenyList,
+                )
+                3 -> if (uiState.isSuperUserAvailable) SuperuserSection(
+                    uiState = uiState,
+                    onToggleSuAuth = { enabled ->
+                        requireAuth(force = true) { vm.setSuAuth(enabled) }
+                    },
+                    onMultiuserModeSelected = vm::setMultiuserMode,
+                    onNamespaceModeSelected = vm::setNamespaceMode,
+                    onNotificationModeSelected = vm::setNotificationMode,
+                    onToggleSuRestrict = vm::setSuRestrict,
+                )
             }
         }
     }

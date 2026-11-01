@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.arch.VMFactory
+import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.base.ActivityExtension
 import com.topjohnwu.magisk.core.base.UntrackedActivity
 import com.topjohnwu.magisk.core.su.SuCallbackHandler
@@ -59,7 +60,17 @@ class SuRequestActivity : ComponentActivity(), UntrackedActivity {
         onBackPressedDispatcher.addCallback(this) { viewModel.denyPressed() }
         viewModel.finishActivity = { finish() }
         viewModel.authenticate = { onSuccess ->
-            extension.withAuthentication { if (it) onSuccess() }
+            if (!Info.isDeviceSecure) {
+                viewModel.authenticationCancelled()
+            } else {
+                try {
+                    extension.withAuthentication {
+                        if (it) onSuccess() else viewModel.authenticationCancelled()
+                    }
+                } catch (_: android.content.ActivityNotFoundException) {
+                    viewModel.authenticationCancelled()
+                }
+            }
         }
 
         if (intent.action == Intent.ACTION_VIEW) {
@@ -102,7 +113,9 @@ class SuRequestActivity : ComponentActivity(), UntrackedActivity {
 
     override fun onDestroy() {
         super.onDestroy()
-        viewModel.activityDestroyed()
+        viewModel.finishActivity = {}
+        viewModel.authenticate = {}
+        // ViewModel.onCleared denies unfinished requests; configuration recreation keeps it alive.
     }
 
     private object EmptyAccessibilityDelegate : View.AccessibilityDelegate() {

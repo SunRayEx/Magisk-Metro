@@ -17,7 +17,6 @@ using namespace std;
 
 #define RETURN_OK       0
 #define RETURN_ERROR    1
-#define RETURN_CHROMEOS 2
 #define RETURN_VENDOR   3
 
 static FileFormat check_fmt(const void *buf, size_t len) {
@@ -28,8 +27,8 @@ static int find_dtb_offset(const void *buf, size_t len) {
     return find_dtb_offset({static_cast<const uint8_t *>(buf), len});
 }
 
-static void decompress(FileFormat type, int fd, const void *in, size_t size) {
-    decompress_bytes(type, byte_view { in, size }, fd);
+static bool decompress(FileFormat type, int fd, const void *in, size_t size) {
+    return decompress_bytes(type, byte_view { in, size }, fd);
 }
 
 static off_t compress_len(FileFormat type, byte_view in, int fd) {
@@ -165,13 +164,14 @@ void dyn_img_hdr::load_hdr_file() {
 boot_img::boot_img(const char *image) :
 map(image), k_fmt(FileFormat::UNKNOWN), r_fmt(FileFormat::UNKNOWN), e_fmt(FileFormat::UNKNOWN) {
     fprintf(stderr, "Parsing boot image: [%s]\n", image);
-    for (const uint8_t *addr = map.data(); addr < map.data() + map.size(); ++addr) {
-        FileFormat fmt = check_fmt(addr, map.size());
+    const uint8_t *eof = map.data() + map.size();
+    for (const uint8_t *addr = map.data(); addr < eof; ++addr) {
+        FileFormat fmt = check_fmt(addr, eof - addr);
         switch (fmt) {
         case FileFormat::CHROMEOS:
-            // chromeos require external signing
             flags[CHROMEOS_FLAG] = true;
-            addr += 65535;
+            fprintf(stderr, "CHROMEOS\n");
+            addr += chromeos_vblock_size() - 1;
             break;
         case FileFormat::DHTB:
             flags[DHTB_FLAG] = true;
@@ -438,6 +438,11 @@ bool boot_img::parse_image(const uint8_t *addr, FileFormat type) {
         if (tail.size() >= 16 && BUFFER_MATCH(tail.data(), SEANDROID_MAGIC)) {
             fprintf(stderr, "SAMSUNG_SEANDROID\n");
             flags[SEANDROID_FLAG] = true;
+            if (tail.size() >= 16 + SIGNER_VER02_SZ &&
+                BUFFER_MATCH(tail.data() + 16, SIGNER_VER02_MAGIC)) {
+                fprintf(stderr, "SIGNER_VER02\n");
+                flags[SIGNER_VER02_FLAG] = true;
+            }
         } else if (tail.size() >= 16 && BUFFER_MATCH(tail.data(), LG_BUMP_MAGIC)) {
             fprintf(stderr, "LG_BUMP_IMAGE\n");
             flags[LG_BUMP_FLAG] = true;
@@ -451,7 +456,7 @@ bool boot_img::parse_image(const uint8_t *addr, FileFormat type) {
         if (BUFFER_MATCH(footer, AVB_FOOTER_MAGIC)) {
             avb_footer = static_cast<const AvbFooter*>(footer);
             // Double check if meta header exists
-            const void *meta = payload.data() + __builtin_bswap64(avb_footer->vbmeta_offset);
+            const void *meta = addr + __builtin_bswap64(avb_footer->vbmeta_offset);
             if (BUFFER_MATCH(meta, AVB_MAGIC)) {
                 fprintf(stderr, "VBMETA\n");
                 flags[AVB_FLAG] = true;
@@ -472,7 +477,11 @@ int split_image_dtb(Utf8CStr filename, bool skip_decomp) {
         FileFormat fmt = check_fmt_lg(img.data(), img.size());
         if (!skip_decomp && fmt_compressed(fmt)) {
             int fd = creat(KERNEL_FILE, 0644);
-            decompress(fmt, fd, img.data(), off);
+            if (!decompress(fmt, fd, img.data(), off)) {
+                close(fd);
+                unlink(KERNEL_FILE);
+                return 1;
+            }
             close(fd);
         } else {
             dump(img.data(), off, KERNEL_FILE);
@@ -495,7 +504,11 @@ int unpack(Utf8CStr image, bool skip_decomp, bool hdr) {
     if (!skip_decomp && fmt_compressed(boot.k_fmt)) {
         if (boot.hdr->kernel_size() != 0) {
             int fd = creat(KERNEL_FILE, 0644);
-            decompress(boot.k_fmt, fd, boot.kernel, boot.hdr->kernel_size());
+            if (!decompress(boot.k_fmt, fd, boot.kernel, boot.hdr->kernel_size())) {
+                close(fd);
+                unlink(KERNEL_FILE);
+                return RETURN_ERROR;
+            }
             close(fd);
         }
     } else {
@@ -519,7 +532,10 @@ int unpack(Utf8CStr image, bool skip_decomp, bool hdr) {
             owned_fd fd = xopenat(dirfd, file_name, O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC, 0644);
             FileFormat fmt = check_fmt_lg(boot.ramdisk + it.ramdisk_offset, it.ramdisk_size);
             if (!skip_decomp && fmt_compressed(fmt)) {
-                decompress(fmt, fd, boot.ramdisk + it.ramdisk_offset, it.ramdisk_size);
+                if (!decompress(fmt, fd, boot.ramdisk + it.ramdisk_offset, it.ramdisk_size)) {
+                    unlinkat(dirfd, file_name, 0);
+                    return RETURN_ERROR;
+                }
             } else {
                 xwrite(fd, boot.ramdisk + it.ramdisk_offset, it.ramdisk_size);
             }
@@ -527,7 +543,11 @@ int unpack(Utf8CStr image, bool skip_decomp, bool hdr) {
     } else if (!skip_decomp && fmt_compressed(boot.r_fmt)) {
         if (boot.hdr->ramdisk_size() != 0) {
             int fd = creat(RAMDISK_FILE, 0644);
-            decompress(boot.r_fmt, fd, boot.ramdisk, boot.hdr->ramdisk_size());
+            if (!decompress(boot.r_fmt, fd, boot.ramdisk, boot.hdr->ramdisk_size())) {
+                close(fd);
+                unlink(RAMDISK_FILE);
+                return RETURN_ERROR;
+            }
             close(fd);
         }
     } else {
@@ -541,7 +561,11 @@ int unpack(Utf8CStr image, bool skip_decomp, bool hdr) {
     if (!skip_decomp && fmt_compressed(boot.e_fmt)) {
         if (boot.hdr->extra_size() != 0) {
             int fd = creat(EXTRA_FILE, 0644);
-            decompress(boot.e_fmt, fd, boot.extra, boot.hdr->extra_size());
+            if (!decompress(boot.e_fmt, fd, boot.extra, boot.hdr->extra_size())) {
+                close(fd);
+                unlink(EXTRA_FILE);
+                return RETURN_ERROR;
+            }
             close(fd);
         }
     } else {
@@ -557,7 +581,6 @@ int unpack(Utf8CStr image, bool skip_decomp, bool hdr) {
     // Dump bootconfig
     dump(boot.bootconfig, boot.hdr->bootconfig_size(), BOOTCONFIG_FILE);
 
-    if (boot.flags[CHROMEOS_FLAG]) return RETURN_CHROMEOS;
     if (boot.hdr->is_vendor()) return RETURN_VENDOR;
     return RETURN_OK;
 }
@@ -579,6 +602,7 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
         uint32_t extra;
         uint32_t dtb;
         uint32_t tail;
+        uint32_t eof;
         uint32_t vbmeta;
     } off{};
 
@@ -601,7 +625,10 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
     int fd = open(out_img.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
 
     // Copy non-standard headers
-    if (boot.flags[DHTB_FLAG]) {
+    if (boot.flags[CHROMEOS_FLAG]) {
+        // Preallocate the vblock, which is generated after the image is fully patched
+        write_zero(fd, chromeos_vblock_size());
+    } else if (boot.flags[DHTB_FLAG]) {
         xwrite(fd, boot.map.data(), sizeof(dhtb_hdr));
     } else if (boot.flags[BLOB_FLAG]) {
         xwrite(fd, boot.map.data(), sizeof(blob_hdr));
@@ -769,18 +796,23 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
         file_align();
     }
 
+    // This tail offset matches the tail byte_view
+    off.tail = lseek(fd, 0, SEEK_CUR);
+
     // Proprietary stuffs
     if (boot.flags[SEANDROID_FLAG]) {
         xwrite(fd, SEANDROID_MAGIC, 16);
         if (boot.flags[DHTB_FLAG]) {
             xwrite(fd, "\xFF\xFF\xFF\xFF", 4);
         }
+        if (boot.flags[SIGNER_VER02_FLAG]) {
+            xwrite(fd, boot.tail.data() + 16, SIGNER_VER02_SZ);
+        }
     } else if (boot.flags[LG_BUMP_FLAG]) {
         xwrite(fd, LG_BUMP_MAGIC, 16);
     }
 
-    off.tail = lseek(fd, 0, SEEK_CUR);
-    file_align();
+    off.eof = lseek(fd, 0, SEEK_CUR);
 
     // vbmeta
     if (boot.flags[AVB_FLAG]) {
@@ -792,12 +824,16 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
         xwrite(fd, boot.vbmeta, vbmeta_size);
     }
 
-    // Pad image to original size if not chromeos (as it requires post processing)
-    if (!boot.flags[CHROMEOS_FLAG]) {
-        off_t current = lseek(fd, 0, SEEK_CUR);
-        if (current < boot.map.size()) {
-            write_zero(fd, boot.map.size() - current);
-        }
+    // chromeos blob trailer
+    if (boot.flags[CHROMEOS_FLAG]) {
+        file_align_with(4096);
+        auto trailer = chromeos_blob_trailer();
+        xwrite(fd, trailer.data(), trailer.size());
+    }
+
+    // Pad image to original size
+    if (off_t current = lseek(fd, 0, SEEK_CUR); current < boot.map.size()) {
+        write_zero(fd, boot.map.size() - current);
     }
 
     /******************
@@ -805,6 +841,7 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
      ******************/
 
     uint32_t aosp_img_size = off.tail - off.header;
+    uint32_t orig_img_size = off.eof - off.header;
 
     // Map output image as rw
     mmap_data out(fd, lseek(fd, 0, SEEK_END), true);
@@ -878,45 +915,19 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
         // Copy and patch AVB structures
         auto footer = reinterpret_cast<AvbFooter*>(out.data() + out.size() - sizeof(AvbFooter));
         memcpy(footer, boot.avb_footer, sizeof(AvbFooter));
-        footer->original_image_size = __builtin_bswap64(aosp_img_size);
+        footer->original_image_size = __builtin_bswap64(orig_img_size);
         footer->vbmeta_offset = __builtin_bswap64(off.vbmeta);
-
-        auto vbmeta = reinterpret_cast<AvbVBMetaImageHeader*>(out.data() + off.vbmeta);
-
         if (check_env("PATCHVBMETAFLAG")) {
+            auto vbmeta = reinterpret_cast<AvbVBMetaImageHeader*>(out.data() + off.vbmeta);
             vbmeta->flags = __builtin_bswap32(3);
-        }
-
-        // Sync hash descriptor image_size with the new AOSP portion size.
-        // Without this, some bootloaders (e.g. Motorola) reject images.
-        for (auto &desc : vbmeta->descriptors()) {
-            if (__builtin_bswap64(desc.tag) != AVB_DESCRIPTOR_TAG_HASH)
-                continue;
-
-            // enforce size limits; protect against adversarial input.
-            size_t buf_remaining = out.data() + out.size() - reinterpret_cast<uint8_t *>(&desc);
-            if (buf_remaining < __builtin_bswap64(desc.num_bytes_following) || buf_remaining - __builtin_bswap64(desc.num_bytes_following) < sizeof(AvbDescriptor)) {
-                // beware: both conditions are necessary because underflow in the subtraction could wrap
-                fprintf(stderr, "AVB hash descriptor num_bytes_following overflows buffer\n");
-                break;
-            }
-
-            if (__builtin_bswap64(desc.num_bytes_following) < sizeof(AvbHashDescriptor) - sizeof(AvbDescriptor)) {
-                fprintf(stderr, "AvbDescriptor too small to hold AvbHashDescriptor\n");
-                break;
-            }
-
-            auto &hd = reinterpret_cast<AvbHashDescriptor &>(desc);
-            hd.image_size = __builtin_bswap64(aosp_img_size);
-            break;
         }
     }
 
     if (boot.flags[DHTB_FLAG]) {
         // DHTB header
         auto d_hdr = reinterpret_cast<dhtb_hdr *>(out.data());
-        d_hdr->size = aosp_img_size + 16 /* SEANDROID_MAGIC */ + 4 /* DHTB trailer */;
-        sha256_hash(byte_view(out.data() + sizeof(dhtb_hdr), d_hdr->size),
+        d_hdr->size = orig_img_size;
+        sha256_hash(byte_view(out.data() + off.header, orig_img_size),
                     byte_data(d_hdr->checksum, SHA256_DIGEST_SIZE));
     } else if (boot.flags[BLOB_FLAG]) {
         // Blob header
@@ -932,6 +943,16 @@ void repack(Utf8CStr src_img, Utf8CStr out_img, bool skip_comp) {
             lseek(fd, off.tail, SEEK_SET);
             xwrite(fd, sig.data(), sig.size());
         }
+    }
+
+    if (boot.flags[CHROMEOS_FLAG]) {
+        byte_view payload(out.data() + off.header, aosp_img_size);
+        auto vblock = sign_chromeos(payload);
+        if (vblock.empty()) {
+            fprintf(stderr, "Failed to sign ChromeOS boot image\n");
+            exit(1);
+        }
+        memcpy(out.data(), vblock.data(), vblock.size());
     }
 
     close(fd);

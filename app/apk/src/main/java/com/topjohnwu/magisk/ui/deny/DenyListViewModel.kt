@@ -1,11 +1,12 @@
 package com.topjohnwu.magisk.ui.deny
 
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.AsyncLoadViewModel
 import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.magisk.core.ktx.concurrentMap
+import com.topjohnwu.magisk.ui.component.AppSortBy
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,8 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-enum class SortBy { NAME, PACKAGE_NAME, INSTALL_TIME, UPDATE_TIME }
-
+@Immutable
 data class DenyProcessState(
     val process: ProcessInfo,
     val isEnabled: Boolean = process.isEnabled,
@@ -31,6 +31,7 @@ data class DenyProcessState(
         if (process.isIsolated) "(isolated) ${process.name}*" else process.name
 }
 
+@Immutable
 data class DenyAppState(
     val info: AppProcessInfo,
     val processes: List<DenyProcessState> = info.processes.map { DenyProcessState(it) },
@@ -68,8 +69,8 @@ class DenyListViewModel : AsyncLoadViewModel() {
     private val _showOS = MutableStateFlow(false)
     val showOS: StateFlow<Boolean> = _showOS.asStateFlow()
 
-    private val _sortBy = MutableStateFlow(SortBy.NAME)
-    val sortBy: StateFlow<SortBy> = _sortBy.asStateFlow()
+    private val _sortBy = MutableStateFlow(AppSortBy.NAME)
+    val sortBy: StateFlow<AppSortBy> = _sortBy.asStateFlow()
 
     private val _sortReverse = MutableStateFlow(false)
     val sortReverse: StateFlow<Boolean> = _sortReverse.asStateFlow()
@@ -82,14 +83,14 @@ class DenyListViewModel : AsyncLoadViewModel() {
         val q = args[1] as String
         val showSys = args[2] as Boolean
         val showOS = args[3] as Boolean
-        val sort = args[4] as SortBy
+        val sort = args[4] as AppSortBy
         val reverse = args[5] as Boolean
 
         val filtered = apps.filter { app ->
             val passFilter = app.isChecked ||
                 app.initiallyChecked ||
-                ((showSys || !app.info.isSystemApp()) &&
-                ((showSys && showOS) || app.info.isApp()))
+                ((showSys || !app.info.isSystemApp) &&
+                ((showSys && showOS) || app.info.isApp))
             val passQuery = q.isBlank() ||
                 app.info.label.contains(q, true) ||
                 app.info.packageName.contains(q, true) ||
@@ -98,10 +99,10 @@ class DenyListViewModel : AsyncLoadViewModel() {
         }
 
         val secondary: Comparator<DenyAppState> = when (sort) {
-            SortBy.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.info.label }
-            SortBy.PACKAGE_NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.info.packageName }
-            SortBy.INSTALL_TIME -> compareByDescending { it.info.firstInstallTime }
-            SortBy.UPDATE_TIME -> compareByDescending { it.info.lastUpdateTime }
+            AppSortBy.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.info.label }
+            AppSortBy.PACKAGE_NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.info.packageName }
+            AppSortBy.INSTALL_TIME -> compareByDescending { it.info.firstInstallTime }
+            AppSortBy.UPDATE_TIME -> compareByDescending { it.info.lastUpdateTime }
         }
         val comparator = compareBy<DenyAppState> { !it.initiallyChecked }
             .then(if (reverse) secondary.reversed() else secondary)
@@ -114,7 +115,7 @@ class DenyListViewModel : AsyncLoadViewModel() {
         if (!v) _showOS.value = false
     }
     fun setShowOS(v: Boolean) { _showOS.value = v }
-    fun setSortBy(s: SortBy) { _sortBy.value = s }
+    fun setSortBy(s: AppSortBy) { _sortBy.value = s }
     fun toggleSortReverse() { _sortReverse.value = !_sortReverse.value }
 
     fun toggleExpanded(app: DenyAppState) {
@@ -142,8 +143,7 @@ class DenyListViewModel : AsyncLoadViewModel() {
                             proc.copy(isEnabled = true)
                         } else {
                             if (proc.process.isIsolated && proc.isEnabled) {
-                                val (name, pkg) = proc.process
-                                Shell.cmd("magisk --denylist rm $pkg '$name'").submit()
+                                Shell.cmd(removeCommand(proc.process)).submit()
                             }
                             proc.copy(isEnabled = false)
                         }
@@ -158,9 +158,9 @@ class DenyListViewModel : AsyncLoadViewModel() {
 
     fun toggleProcess(app: DenyAppState, proc: DenyProcessState) {
         val newEnabled = !proc.isEnabled
-        val arg = if (newEnabled) "add" else "rm"
         val (name, pkg) = proc.process
-        Shell.cmd("magisk --denylist $arg $pkg '$name'").submit()
+        val cmd = if (newEnabled) "magisk --denylist add $pkg '$name'" else removeCommand(proc.process)
+        Shell.cmd(cmd).submit()
 
         _allApps.update { apps ->
             apps.map { currentApp ->
@@ -180,14 +180,23 @@ class DenyListViewModel : AsyncLoadViewModel() {
         }
     }
 
-    var stateRevision = 0
-        private set
-
     fun isDenied(packageName: String): Boolean =
         _allApps.value.any { it.info.packageName == packageName && it.itemsChecked > 0 }
 
-    @SuppressLint("InlinedApi")
+    private fun removeCommand(proc: ProcessInfo): String {
+        if (!proc.isIsolated) return "magisk --denylist rm ${proc.packageName} '${proc.name}'"
+        // Isolated processes are matched by name prefix. Older versions of the app added one
+        // entry per isolated service (e.g. "com.foo:com.foo.Service") instead of the prefix
+        // itself, so remove every entry starting with the prefix.
+        return "magisk --denylist ls | while IFS='|' read -r pkg proc; do " +
+            "[ \"\$pkg\" = $ISOLATED_MAGIC ] && case \"\$proc\" in '${proc.name}'*) " +
+            "magisk --denylist rm $ISOLATED_MAGIC \"\$proc\";; esac; done"
+    }
+
     override suspend fun doLoadWork() {
+        // Scanning every app is slow and resets the list, so only do it once: this is called
+        // again whenever the screen is recreated, e.g. on rotation
+        if (_allApps.value.isNotEmpty()) return
         _loading.value = true
         val apps = withContext(Dispatchers.Default) {
             val pm = AppContext.packageManager

@@ -38,28 +38,25 @@
     <string name="manager_download_install">اضغط للتنزيل والتثبيت</string>
     <string name="direct_install">التثبيت المباشر (موصى به)</string>    <string name="install_inactive_slot">التثبيت على الفتحة غير النشطة (بعد OTA)</string>    <string name="install_inactive_slot_msg">سيُجبَر جهازك على الإقلاع من الفتحة غير النشطة الحالية بعد إعادة التشغيل!\nاستخدم هذا الخيار فقط بعد اكتمال تحديث OTA.\nهل تريد المتابعة؟</string>
     <string name="setup_title">إعداد إضافي</string>
-    <string name="select_patch_file">تحديد ملف وتصحيحه</string>
-    <string name="patch_file_msg">حدد ملف خام (‎*.img) أو ملف ODIN tar (‎*.tar) أو ملف payload.bin (‎*.bin)</string>
-    <string name="download_patch_file">تنزيل ملف وتعديله</string>
     <string name="download_dialog_title">أدخل رابط الملف</string>
     <string name="download_dialog_msg">ملف OTA كاملة أو ملف المصنع</string>
     <string name="reboot_delay_toast">إعادة التشغيل خلال 5 ثوانٍ…</string>
     <string name="flash_screen_title">التثبيت</string>
 
     <!--Superuser-->
-    <string name="su_request_title">يطلب هذا التطبيق صلاحية الروت، يمنح وصولًا كاملًا إلى جهازك. ارفض إن لم تكن متأكدًا!</string>
-    <string name="touch_filtered_warning">يحجب أحد التطبيقات طلب صلاحية الروت، لذا لا يستطيع Magisk التحقق من استجابتك.</string>
+
+
     <string name="deny">رفض</string>
-    <string name="prompt">اسأل</string>
+
     <string name="restrict">تقييد</string>
     <string name="grant">منح</string>
-    <string name="su_warning">يمنح وصولًا كاملًا إلى جهازك.\nارفض إن لم تكن متأكدًا!</string>
-    <string name="forever">للأبد</string>
-    <string name="once">مرة واحدة</string>
-    <string name="tenmin">10 دقائق</string>
-    <string name="twentymin">20 دقيقة</string>
-    <string name="thirtymin">30 دقيقة</string>
-    <string name="sixtymin">60 دقيقة</string>
+
+
+
+
+
+
+
     <string name="su_allow_toast">تم منح %1$s صلاحيات الروت</string>
     <string name="su_deny_toast">تم رفض صلاحيات الروت لـ %1$s</string>
     <string name="su_snack_grant">تم منح صلاحيات الروت لـ %1$s</string>
@@ -136,10 +133,6 @@
     <string name="settings_dark_mode_dark">داكن دائمًا</string>
     <string name="settings_download_path_title">مسار التنزيل</string>
     <string name="settings_download_path_message">سيتم حفظ الملفات في %1$s</string>
-    <string name="settings_hide_app_title">إخفاء تطبيق Magisk</string>
-    <string name="settings_hide_app_summary">تثبيت تطبيق وسيط برقم حزمة عشوائي واسم مخصص</string>
-    <string name="settings_restore_app_title">استعادة تطبيق Magisk</string>
-    <string name="settings_restore_app_summary">إظهار التطبيق واستعادة ملف APK الأصلي</string>
     <string name="language">اللغة</string>
     <string name="system_default">(افتراضي النظام)</string>
     <string name="settings_check_update_title">التحقق من التحديثات</string>
@@ -153,32 +146,12 @@
     <string name="settings_zygisk_summary">تشغيل أجزاء من Magisk داخل عملية Zygote</string>
     <string name="settings_denylist_title">تطبيق قائمة الحظر</string>
     <string name="settings_denylist_summary">ستُعاد جميع تعديلات Magisk على العمليات المدرجة في قائمة الحظر</string>
-    <string name="settings_denylist_config_title">ضبط قائمة الحظر</string>
-    <string name="settings_denylist_config_summary">تحديد العمليات المراد إدراجها في قائمة الحظر</string>
     <string name="settings_hosts_title">ملفات Hosts بدون نظام</string>
     <string name="settings_hosts_summary">دعم ملفات hosts بدون نظام لتطبيقات حجب الإعلانات</string>
     <string name="settings_hosts_toast">تمت تثبيت إضافة ملفات hosts بدون نظام</string>
-    <string name="settings_app_name_hint">الاسم الجديد</string>
-    <string name="settings_app_name_helper">سيتم إعادة تعبئة التطبيق بهذا الاسم</string>
-    <string name="settings_app_name_error">صيغة غير صالحة</string>
-    <string name="settings_su_app_adb">التطبيقات و ADB</string>
-    <string name="settings_su_app">التطبيقات فقط</string>
-    <string name="settings_su_adb">ADB فقط</string>
-    <string name="settings_su_disable">معطّل</string>
-    <string name="settings_su_request_10">10 ثوانٍ</string>
-    <string name="settings_su_request_15">15 ثانية</string>
-    <string name="settings_su_request_20">20 ثانية</string>
-    <string name="settings_su_request_30">30 ثانية</string>
-    <string name="settings_su_request_45">45 ثانية</string>
-    <string name="settings_su_request_60">60 ثانية</string>
-    <string name="superuser_access">صلاحية الروت</string>
-    <string name="auto_response">الاستجابة التلقائية</string>
-    <string name="request_timeout">مهلة الطلب</string>
     <string name="superuser_notification">إشعار صلاحية الروت</string>
-    <string name="settings_su_reauth_title">إعادة المصادقة بعد الترقية</string>
-    <string name="settings_su_reauth_summary">طلب صلاحيات صلاحية الروت مجددًا بعد ترقية التطبيقات</string>
-    <string name="settings_su_tapjack_title">الحماية من اختطاف النقرات</string>
-    <string name="settings_su_tapjack_summary">لن يستجيب مربع حوار طلب صلاحية الروت للمدخلات إذا كان محجوبًا بأي نافذة أو طبقة عرض أخرى</string>
+
+
     <string name="settings_su_auth_title">مصادقة المستخدم</string>
     <string name="settings_su_auth_summary">طلب مصادقة المستخدم عند منح صلاحيات الروت</string>
     <string name="settings_su_auth_insecure">لا توجد وسيلة مصادقة مضبوطة على الجهاز</string>
@@ -192,7 +165,6 @@
     <string name="color_mode_monet_system">Monet (النظام)</string>
     <string name="color_mode_monet_light">Monet (فاتح)</string>
     <string name="color_mode_monet_dark">Monet (داكن)</string>
-    <string name="setting_add_shortcut_summary">إضافة اختصار واضح على الشاشة الرئيسية في حال أصبح اسم التطبيق وأيقونته صعبَي التمييز بعد الإخفاء</string>
     <string name="settings_doh_title">DNS عبر HTTPS</string>
     <string name="settings_doh_description">حل بديل لتسمم DNS في بعض الدول</string>
     <string name="settings_random_name_title">جعل اسم الملف الناتج عشوائي</string>
@@ -233,7 +205,6 @@
     <string name="flashing">جارٍ التثبيت…</string>    <string name="done">تم!</string>
     <string name="done_action">اكتمل تنفيذ إجراء %1$s</string>
     <string name="failure">فشل!</string>
-    <string name="hide_app_title">جارٍ إخفاء تطبيق Magisk…</string>
     <string name="open_link_failed_toast">لا يوجد تطبيق لفتح الرابط</string>
     <string name="complete_uninstall">إلغاء تثبيت كامل</string>
     <string name="restore_img">استعادة الملف</string>
@@ -251,14 +222,9 @@
     <string name="unsupport_system_app_msg">تشغيل هذا التطبيق كتطبيق نظام غير مدعوم. يرجى إعادته إلى تطبيق مستخدم عادي.</string>
     <string name="unsupport_other_su_msg">تم اكتشاف ملف ثنائي «su» لا ينتمي إلى Magisk. يرجى إزالة أي برنامج مدير روت أخر و/أو إعادة تثبيت Magisk.</string>
     <string name="unsupport_external_storage_msg">تم تثبيت Magisk على تخزين خارجي. يرجى نقل التطبيق إلى التخزين الداخلي.</string>
-    <string name="unsupport_nonroot_stub_msg">لا يستطيع تطبيق Magisk المخفي الاستمرار في العمل لأن الوصول للروت فُقد. يرجى استعادة ملف APK الأصلي.</string>
-    <string name="unsupport_nonroot_stub_title">@string/settings_restore_app_title</string>
     <string name="external_rw_permission_denied">امنح إذن التخزين لتفعيل هذه الميزة</string>
     <string name="post_notifications_denied">امنح إذن الإشعارات لتفعيل هذه الميزة</string>
     <string name="install_unknown_denied">اسمح بـ«تثبيت تطبيقات غير معروفة» لتفعيل هذه الميزة</string>
-    <string name="add_shortcut_title">إضافة اختصار إلى الشاشة الرئيسية</string>
-    <string name="add_shortcut_msg">بعد إخفاء التطبيق، قد يصبح اسمه وأيقونته صعبَي التمييز. هل تريد إضافة اختصار واضح إلى الشاشة الرئيسية؟</string>
     <string name="app_not_found">لا يوجد تطبيق للتعامل مع هذا الإجراء</string>
     <string name="reboot_apply_change">أعد التشغيل لتطبيق التغييرات</string>
-    <string name="restore_app_confirmation">سيتم استعادة التطبيق المخفي إلى حالته الأصلية. هل أنت متأكد؟</string>
 </resources>

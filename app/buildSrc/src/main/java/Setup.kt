@@ -56,7 +56,7 @@ fun Project.setupCommon() {
         ndkVersion = "30.0.15729638"
 
         defaultConfig.apply {
-            minSdk = 23
+            minSdk = 24
         }
 
         compileOptions.apply {
@@ -70,7 +70,7 @@ fun Project.setupCommon() {
                     "/META-INF/*",
                     "/META-INF/androidx/**",
                     "/META-INF/versions/**",
-                    "/org/bouncycastle/**",
+                    "/META-INF/native-image/**",
                     "/org/apache/commons/**",
                     "/kotlin/**",
                     "/kotlinx/**",
@@ -211,7 +211,6 @@ fun Project.setupCoreLib() {
                 it.addGeneratedSourceDirectory(syncResources, SyncWithDir::outputFolder)
             }
 
-            val stubTask = tasks.getByPath(":stub:comment$variantCapped")
             val syncAssets = tasks.register("sync${variantCapped}Assets", SyncWithDir::class) {
                 outputFolder.set(layout.buildDirectory.dir("$variantName/assets"))
                 into(outputFolder)
@@ -221,16 +220,6 @@ fun Project.setupCoreLib() {
                 from(rootFile("scripts")) {
                     include("util_functions.sh", "boot_patch.sh", "addon.d.sh",
                         "app_functions.sh", "uninstaller.sh", "module_installer.sh")
-                }
-                into("chromeos") {
-                    from(rootFile("tools/futility"))
-                    from(rootFile("tools/keys")) {
-                        include("kernel_data_key.vbprivk", "kernel.keyblock")
-                    }
-                }
-                from(stubTask) {
-                    include { it.name.endsWith(".apk") }
-                    rename { "stub.apk" }
                 }
                 filesMatching("**/util_functions.sh") {
                     filter {
@@ -312,8 +301,7 @@ fun Project.setupAppCommon() {
                 this.transformationRequest = transformationRequest
                 this.signingConfig = signingConfig
                 this.comment = "version=${Config.version}\n" +
-                        "versionCode=${Config.versionCode}\n" +
-                        "stubVersion=${Config.stubVersion}\n"
+                        "versionCode=${Config.versionCode}\n"
                 this.outFolder.set(layout.buildDirectory.dir("outputs/apk/${variant.name}"))
             }
 

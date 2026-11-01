@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +70,32 @@ private data class InstalledApp(
 
 private enum class PickerMode { App, Group, Magisk }
 
+@Composable
+private fun TileIconPicker(tile: MetroCustomTile, onDismiss: () -> Unit) {
+    MagiskDialog(
+        onDismissRequest = onDismiss,
+        title = tile.title,
+        dismissText = stringResource(android.R.string.cancel),
+        onDismiss = onDismiss,
+    ) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+            items(MetroTileIcons.names, key = { it }) { name ->
+                ListItem(
+                    headlineContent = { Text(name) },
+                    leadingContent = {
+                        MetroTileIcons.get(name)?.let { Icon(it, contentDescription = null) }
+                    },
+                    modifier = Modifier.clickable {
+                        MetroCustomTiles.setIcon(tile.id, name)
+                        onDismiss()
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
 /** Built-in Start tiles that can be shown or hidden from this screen. */
 private data class BuiltInTile(
     val id: String,
@@ -95,7 +122,9 @@ private object BuiltInTiles {
 internal fun EditTilesScreen() {
     val accent = LocalMetroPalette.current.settings
     val context = LocalContext.current
+    val resources = LocalResources.current
     var pickerMode by remember { mutableStateOf<PickerMode?>(null) }
+    var iconTile by remember { mutableStateOf<MetroCustomTile?>(null) }
 
     // Deleting, adding and built-in toggles all bump MetroUiState, which this list reads
     // directly, so every edit in this screen (or anywhere else) refreshes the rows below.
@@ -141,6 +170,7 @@ internal fun EditTilesScreen() {
                 items(customTiles, key = { it.id }) { tile ->
                     CustomTileRow(
                         tile = tile,
+                        onIconClick = { iconTile = tile },
                     )
                 }
             }
@@ -198,7 +228,7 @@ internal fun EditTilesScreen() {
                 pickerMode = null
                 MetroCustomTiles.add(
                     packageName = destination.pseudoPackage,
-                    title = context.getString(destination.labelRes),
+                    title = resources.getString(destination.labelRes),
                     ticker = "",
                     color = tileColor(context),
                 )
@@ -206,6 +236,7 @@ internal fun EditTilesScreen() {
         )
         null -> {}
     }
+    iconTile?.let { TileIconPicker(it) { iconTile = null } }
 }
 
 @Composable
@@ -248,16 +279,17 @@ private fun BuiltInTileRow(tile: BuiltInTile, accent: com.topjohnwu.magisk.ui.th
 }
 
 @Composable
-private fun CustomTileRow(tile: MetroCustomTile) {
+private fun CustomTileRow(tile: MetroCustomTile, onIconClick: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var confirmDelete by remember { mutableStateOf(false) }
     val pm = context.packageManager
-    val label = remember(tile.id) {
+    val label = remember(tile.id, resources) {
         when {
             MetroMagiskShortcuts.isShortcut(tile.packageName) -> {
                 MetroMagiskShortcuts.destinations
                     .firstOrNull { it.pseudoPackage == tile.packageName }
-                    ?.let { context.getString(it.labelRes) }
+                    ?.let { resources.getString(it.labelRes) }
             }
             else -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(tile.packageName, 0)).toString() }.getOrNull()
         } ?: tile.packageName
@@ -297,6 +329,15 @@ private fun CustomTileRow(tile: MetroCustomTile) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        },
+        leadingContent = {
+            if (tile.groupMembers.size <= 1) {
+                Icon(
+                    imageVector = MetroTileIcons.get(tile.icon) ?: Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp).clickable(onClick = onIconClick),
+                )
+            }
         },
         trailingContent = {
             Icon(

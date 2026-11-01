@@ -47,8 +47,11 @@ enum class PivotSection {
     MAGISK, APPS, LOGS, MODULES, SETTINGS;
 
     companion object {
+        /** Opens [APPS] on its Exclude (DenyList) page. */
+        const val DENYLIST_ALIAS = "DENYLIST"
+
         fun fromName(name: String?): PivotSection =
-            entries.firstOrNull { it.name == name } ?: APPS
+            if (name == DENYLIST_ALIAS) APPS else entries.firstOrNull { it.name == name } ?: APPS
     }
 }
 

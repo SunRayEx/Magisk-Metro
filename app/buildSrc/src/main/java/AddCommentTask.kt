@@ -41,8 +41,8 @@ abstract class AddCommentTask: DefaultTask() {
 
         val privateKey = signingConfig.get().getPrivateKey()
         val signingOptions = SigningOptions.builder()
-            .setMinSdkVersion(0)
-            .setV1SigningEnabled(true)
+            .setMinSdkVersion(24)
+            .setV1SigningEnabled(false)
             .setV2SigningEnabled(true)
             .setKey(privateKey.privateKey)
             .setCertificates(privateKey.certificate as X509Certificate)

@@ -38,28 +38,25 @@
     <string name="manager_download_install">Натисніть, щоб завантажити і встановити</string>
     <string name="direct_install">Пряме встановлення (рекомендовано)</string>    <string name="install_inactive_slot">Встановити в неактивний слот (після OTA)</string>    <string name="install_inactive_slot_msg">Ваш пристрій буде примусово перезавантажено в неактивний слот!\nВикористовуйте цю опцію тільки для встановлення OTA.\nПродовжити?</string>
     <string name="setup_title">Додаткове налаштування</string>
-    <string name="select_patch_file">Вибрати і пропатчити файл</string>
-    <string name="patch_file_msg">Виберіть необроблений образ (*.img) або стиснутий файл ODIN (*.tar)</string>
-    <string name="download_patch_file">Завантажити і пропатчити файл</string>
     <string name="download_dialog_title">Введіть URL образу</string>
     <string name="download_dialog_msg">Повний OTA-образ або заводський образ</string>
     <string name="reboot_delay_toast">Перезавантаження через 5 секунд…</string>
     <string name="flash_screen_title">Встановлення</string>
 
     <!--Superuser-->
-    <string name="su_request_title">Запит прав суперкористувача</string>
-    <string name="touch_filtered_warning">Magisk не може перевірити вашу відповідь, тому що застосунок заступає вікно запиту прав суперкористувача</string>
+
+
     <string name="deny">Відмовити</string>
-    <string name="prompt">Запитувати</string>
+
     <string name="restrict">Обмежити</string>
     <string name="grant">Надати</string>
-    <string name="su_warning">Надати повний доступ до пристрою.\nЯкщо не впевнені, відмовте в доступі!</string>
-    <string name="forever">Назавжди</string>
-    <string name="once">Одноразово</string>
-    <string name="tenmin">10 хв.</string>
-    <string name="twentymin">20 хв.</string>
-    <string name="thirtymin">30 хв.</string>
-    <string name="sixtymin">60 хв.</string>
+
+
+
+
+
+
+
     <string name="su_allow_toast">%1$s надані права суперкористувача</string>
     <string name="su_deny_toast">%1$s відмовлено в правах суперкористувача</string>
     <string name="su_snack_grant">%1$s надані права суперкористувача</string>
@@ -136,10 +133,6 @@
     <string name="settings_dark_mode_dark">Завжди темний</string>
     <string name="settings_download_path_title">Шлях завантаження</string>
     <string name="settings_download_path_message">Файли зберігатимуться в %1$s</string>
-    <string name="settings_hide_app_title">Сховати застосунок Magisk</string>
-    <string name="settings_hide_app_summary">Встановити проксі-застосунок з довільним ID пакунку та назвою</string>
-    <string name="settings_restore_app_title">Відновити застосунок Magisk</string>
-    <string name="settings_restore_app_summary">Відновити застосунок з оригінального APK та показати його</string>
     <string name="language">Мова</string>
     <string name="system_default">(системна)</string>
     <string name="settings_check_update_title">Перевіряти оновлення</string>
@@ -153,32 +146,12 @@
     <string name="settings_zygisk_summary">Запускати частини Magisk в сервісі zygote</string>
     <string name="settings_denylist_title">Увімкнути DenyList</string>
     <string name="settings_denylist_summary">Всі зміни, внесені Magisk, будуть приховані від процесів, позначених у DenyList</string>
-    <string name="settings_denylist_config_title">Налаштувати DenyList</string>
-    <string name="settings_denylist_config_summary">Вибрати процеси, які будуть додані до denylist</string>
     <string name="settings_hosts_title">Позасистемні хости</string>
     <string name="settings_hosts_summary">Підтримка позасистемних хостів для застосунків блокування реклами</string>
     <string name="settings_hosts_toast">Додано модуль позасистемних хостів</string>
-    <string name="settings_app_name_hint">Нове ім\’я</string>
-    <string name="settings_app_name_helper">Застосунок буде перезібрано з цим ім\’ям</string>
-    <string name="settings_app_name_error">Неправильний формат</string>
-    <string name="settings_su_app_adb">Застосунки і ADB</string>
-    <string name="settings_su_app">Застосунки</string>
-    <string name="settings_su_adb">ADB</string>
-    <string name="settings_su_disable">Вимкнено</string>
-    <string name="settings_su_request_10">10 секунд</string>
-    <string name="settings_su_request_15">15 секунд</string>
-    <string name="settings_su_request_20">20 секунд</string>
-    <string name="settings_su_request_30">30 секунд</string>
-    <string name="settings_su_request_45">45 секунд</string>
-    <string name="settings_su_request_60">60 секунд</string>
-    <string name="superuser_access">Доступ суперкористувача</string>
-    <string name="auto_response">Автоматична відповідь</string>
-    <string name="request_timeout">Час запиту</string>
     <string name="superuser_notification">Сповіщення суперкористувача</string>
-    <string name="settings_su_reauth_title">Повторна автентифікація</string>
-    <string name="settings_su_reauth_summary">Перевидача прав суперкористувача після оновлення застосунку</string>
-    <string name="settings_su_tapjack_title">Увімкнути захист від підміни натискань</string>
-    <string name="settings_su_tapjack_summary">Діалогове вікно суперкористувача не буде отримувати ввід від користувача, коли вікно перекрито іншим застосунком чи вікном</string>
+
+
     <string name="settings_su_auth_title">Автентифікація користувача</string>
     <string name="settings_su_auth_summary">Запитувати автентифікацію користувача під час запитів суперкористувача</string>
     <string name="settings_su_auth_insecure">На пристрої не налаштовано жодного методу автентифікації</string>
@@ -192,7 +165,6 @@
     <string name="color_mode_monet_system">Monet (системний)</string>
     <string name="color_mode_monet_light">Monet (світлий)</string>
     <string name="color_mode_monet_dark">Monet (темний)</string>
-    <string name="setting_add_shortcut_summary">Додати ярлик на домашній екран для зручного сприйняття застосунку після його приховування</string>
     <string name="settings_doh_title">DNS поверх HTTPS</string>
     <string name="settings_doh_description">Відключити DoH (при нестабільному підключенні)</string>
     <string name="settings_random_name_title">Робити випадковим ім\’я вихідного файлу</string>
@@ -233,7 +205,6 @@
     <string name="flashing">Прошивання…</string>    <string name="done">Готово!</string>
     <string name="done_action">Дію %1$s виконано</string>
     <string name="failure">Не вдалося!</string>
-    <string name="hide_app_title">Ховання застосунку Magisk…</string>
     <string name="open_link_failed_toast">Не знайдено застосунку для відкриття посилання</string>
     <string name="complete_uninstall">Повне видалення</string>
     <string name="restore_img">Відновити розділи</string>
@@ -251,14 +222,9 @@
     <string name="unsupport_system_app_msg">Запуск цього застосунку як системний застосунок не підтримується. Будь ласка, перевстановіть цей застосунок, щоб він був як звичайний застосунок, який встановлений користувачем.</string>
     <string name="unsupport_other_su_msg">Виявлено команду \"su\", яка не належить до Magisk. Будь ласка, видаліть інші непідтримувані su.</string>
     <string name="unsupport_external_storage_msg">Magisk встановлено на зовнішнє сховище. Будь ласка, перемістіть застосунок на внутрішнє сховище.</string>
-    <string name="unsupport_nonroot_stub_msg">Застосунок не може продовжувати працювати в прихованому режимі, тому що втрачено root. Будь ласка, відновіть оригінальний застосунок з APK.</string>
-    <string name="unsupport_nonroot_stub_title">@string/settings_restore_app_title</string>
     <string name="external_rw_permission_denied">Надайте доступ до сховища, щоб увімкнути цей функціонал</string>
     <string name="post_notifications_denied">Надайте дозвіл на сповіщення, щоб увімкнути цей функціонал</string>
     <string name="install_unknown_denied">Дозвольте \"Встановлення невідомих застосунків\", щоб увімкнути цей функціонал</string>
-    <string name="add_shortcut_title">Ярлик на домашньому екрані</string>
-    <string name="add_shortcut_msg">Після приховування цього застосунку, його значок та ім\’я будуть іншими, тому застосунок буде важко впізнати. Хочете додати ярлик на домашній екран?</string>
     <string name="app_not_found">Не знайдено застосунок, який повинен опрацювати цю дію</string>
     <string name="reboot_apply_change">Перезавантажити, щоб застосувати зміни</string>
-    <string name="restore_app_confirmation">Це відновить прихований застосунок до оригінального. Ви справді бажаєте це зробити?</string>
 </resources>

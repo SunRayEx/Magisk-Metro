@@ -1,5 +1,25 @@
 # Magisk Changelog
 
+### v31.1 (2026.10.24)
+
+- [General] Support Headless System User Mode (HSUM) devices
+- [General] Drop support for Android 6.0; Android 7.0 is now the minimum supported version
+- [General] Remove the app hiding (repackaging) feature and the stub app; Magisk no longer reinstalls the app automatically if it is missing
+- [App] Remove reactive superuser request prompts; superuser access is now explicitly granted ahead of time in the Superuser tab
+- [App] Unify the image patching pipeline across local files and remote URLs for raw images, OTA zips, factory image zips, Samsung Odin tars, and Aluminium OS recovery GPT images
+- [App] Automatically suggest official firmware downloads for Google Pixel and Googlebook (Aluminium OS) devices
+- [App] Support patching Aluminium OS recovery images and writing directly to a connected USB drive on Googlebooks
+- [App] Display real-time in-place read/write progress and transfer speeds when downloading and patching images
+- [MagiskSU] Remove obsolete superuser access mode and reauthentication settings
+- [MagiskSU] Fix `-g`/`-G` argument handling, forward unknown options to the shell, and fix daemon exec signal handling
+- [MagiskBoot] Support signing ChromeOS boot images natively and automatically re-sign on repack, removing the external `futility` binary
+- [MagiskBoot] Fix AVB 1.0 ECDSA signature verification and signing by using ASN.1 DER encoding
+- [MagiskBoot] Preserve Samsung `SignerVer02` signatures during boot image repack
+- [MagiskBoot] Revert updating AVB hash descriptor image size on repack
+- [MagiskBoot] Enable architecture-specific BCJ filters for XZ compression and improve `zImage` compressed payload detection
+- [MagiskBoot] Support building `magiskboot` natively on Linux and macOS hosts
+- [Core] Fix potential crashes when handling `NULL` database strings or failed daemon connections
+
 ### v31.0 (2026.9.4)
 
 - [App] Complete UI overhaul with Jetpack Compose and Material 3, completely removing the legacy View and Fragment architecture
@@ -100,7 +120,7 @@
 - [App] Use user-initiated job instead of foreground services on Android 14
 - [App] Support Android 13+ built-in per-app language preferences
 - [App] Add `action.sh` support to allow modules to define an action triggered from UI
-- [MagiskBoot] Support spliting kernel images without decompression
+- [MagiskBoot] Support splitting kernel images without decompression
 - [MagiskBoot] Properly support vendor boot images
 - [MagiskBoot] Disable Samsung PROCA from kernel image
 

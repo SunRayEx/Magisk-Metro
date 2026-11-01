@@ -6,10 +6,12 @@ import os
 import platform
 import re
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 from pathlib import Path
 from zipfile import ZipFile
@@ -75,12 +77,16 @@ abi_alias = {
     "arm64": "arm64-v8a",
     "x64": "x86_64",
 }
+abi32_map = {
+    "arm64-v8a": "armeabi-v7a",
+    "x86_64": "x86",
+}
 default_abis = support_abis.keys() - {"riscv64"}
 support_targets = {"magisk", "magiskinit", "magiskboot", "magiskpolicy", "resetprop", "metrolink"}
 default_targets = support_targets - {"resetprop"}
 rust_targets = default_targets - {"metrolink"}
 clean_targets = {"native", "cpp", "rust", "app"}
-ondk_version = "r29.5"
+ondk_version = "r30.1"
 
 # Global vars
 config = {}
@@ -262,7 +268,7 @@ def build_rust_src(targets: set[str]):
     os.chdir(Path("native", "src"))
 
     # Start building the build commands
-    cmds = ["build", "-p", ""]
+    cmds = ["build", "-p", "", "--lib"]
     if args.release:
         cmds.append("-r")
         profile = "release"
@@ -392,8 +398,33 @@ def dump_flag_header():
     native_gen_path.mkdir(mode=0o755, parents=True, exist_ok=True)
     write_if_diff(native_gen_path / "flags.h", flag_txt)
 
+    cert = b""
+    if "keyStore" in config:
+        env = find_jdk()
+        result = subprocess.run(
+            [
+                "keytool",
+                "-exportcert",
+                "-rfc",
+                "-keystore",
+                config["keyStore"],
+                "-storepass",
+                config["keyStorePass"],
+                "-alias",
+                config["keyAlias"],
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            error("Cannot export the configured APK signing certificate")
+        cert = ssl.PEM_cert_to_DER_cert(result.stdout.decode("utf-8"))
+
+    cert_hex = ", ".join(f"0x{b:02x}" for b in cert)
     rust_flag_txt = f'pub const MAGISK_VERSION: &str = "{config["version"]}";\n'
     rust_flag_txt += f'pub const MAGISK_VER_CODE: i32 = {config["versionCode"]};\n'
+    rust_flag_txt += f"pub const TRUSTED_CERT: &[u8] = &[{cert_hex}];\n"
     write_if_diff(native_gen_path / "flags.rs", rust_flag_txt)
 
 
@@ -471,9 +502,21 @@ def find_jdk():
     return env
 
 
+def dump_flags_app():
+    # Gradle consumes the same resolved version/ABI inputs as the native build.
+    flag_txt = f"abiList={','.join(build_abis.keys())}\n"
+    flag_txt += f"version={config['version']}\n"
+    flag_txt += f"magisk.versionCode={config['versionCode']}\n"
+    flag_txt += f"magisk.appVersionCode={config.get('appVersionCode', config['versionCode'])}\n"
+    app_build_dir = Path("app", "build")
+    app_build_dir.mkdir(parents=True, exist_ok=True)
+    write_if_diff(app_build_dir / "flags.prop", flag_txt)
+
+
 def build_apk(module: str):
     ensure_paths()
     env = find_jdk()
+    dump_flags_app()
     props = args.config.resolve()
 
     os.chdir("app")
@@ -513,18 +556,6 @@ def build_app():
     target = apk.parent / apk.name.replace("apk-", "app-")
     mv(source, target)
     header(f"Output: {target}")
-
-    # Stub building is directly integrated into the main app
-    # build process. Copy the stub APK into output directory.
-    source = Path("app", "core", "src", build_type, "assets", "stub.apk")
-    target = config["outdir"] / f"stub-{build_type}.apk"
-    cp(source, target)
-
-
-def build_stub():
-    header("* Building the stub app")
-    apk = build_apk(":stub")
-    header(f"Output: {apk}")
 
 
 def build_test():
@@ -596,13 +627,16 @@ def gen_ide():
     ensure_paths()
     set_build_abis({args.abi})
 
-    # Dump flags for both C++ and Rust code
+    # Dump flags for native code and the app from the same resolved configuration.
     dump_flag_header()
+    dump_flags_app()
 
     # Run build.rs to generate Rust/C++ FFI bindings
     os.chdir(Path("native", "src"))
-    run_cargo(["check"])
+    proc = run_cargo(["check"])
     os.chdir(Path("..", ".."))
+    if proc.returncode != 0:
+        error("Generate Rust/C++ bindings failed!")
 
     # Generate compilation database
     rm_rf(Path("native", "compile_commands.json"))
@@ -650,8 +684,10 @@ def cargo_cli():
     if len(args.commands) >= 1 and args.commands[0] == "--":
         args.commands = args.commands[1:]
     os.chdir(Path("native", "src"))
-    run_cargo(args.commands)
+    proc = run_cargo(args.commands)
     os.chdir(Path("..", ".."))
+    if proc.returncode != 0:
+        sys.exit(proc.returncode)
 
 
 def setup_ndk():
@@ -706,7 +742,7 @@ def setup_rustup():
 ##################
 
 
-def push_files(script: Path):
+def push_files(files: list[Path], push_apk: bool = False):
     if args.build:
         build_all()
     ensure_adb()
@@ -722,53 +758,75 @@ def push_files(script: Path):
             config["outdir"], ("app-release.apk" if args.release else "app-debug.apk")
         )
 
-    # Extract busybox from APK
-    busybox = Path(config["outdir"], "busybox")
-    with ZipFile(apk) as zf:
-        with zf.open(f"lib/{abi}/libbusybox.so") as libbb:
-            with open(busybox, "wb") as bb:
-                bb.write(libbb.read())
+    if not apk.is_file():
+        error(f"Cannot find {apk}")
 
-    try:
-        proc = execv([adb_path, "push", busybox, script, "/data/local/tmp"])
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp = Path(tmp_dir)
+        to_push = list(files)
+
+        with ZipFile(apk) as zf:
+            # Extract assets/*.sh
+            for name in zf.namelist():
+                if name.startswith("assets/") and name.endswith(".sh") and name.count("/") == 1:
+                    dest = tmp / Path(name).name
+                    dest.write_bytes(zf.read(name))
+                    to_push.append(dest)
+
+            # Extract native libs for target ABI
+            prefix = f"lib/{abi}/"
+            for name in zf.namelist():
+                if name.startswith(prefix):
+                    base_name = Path(name).name
+                    if base_name.startswith("lib") and base_name.endswith(".so"):
+                        dest = tmp / base_name[3:-3]
+                        dest.write_bytes(zf.read(name))
+                        to_push.append(dest)
+
+            # Extract 32-bit magisk if exist in the APK
+            abi32 = abi32_map.get(abi)
+            if abi32:
+                magisk32_entry = f"lib/{abi32}/libmagisk.so"
+                if magisk32_entry in zf.namelist():
+                    dest = tmp / "magisk32"
+                    dest.write_bytes(zf.read(magisk32_entry))
+                    to_push.append(dest)
+
+        proc = execv([adb_path, "push", *to_push, "/data/local/tmp"])
         if proc.returncode != 0:
             error("adb push failed!")
-    finally:
-        rm_rf(busybox)
 
-    proc = execv([adb_path, "push", apk, "/data/local/tmp/magisk.apk"])
-    if proc.returncode != 0:
-        error("adb push failed!")
+        if push_apk:
+            proc = execv([adb_path, "push", apk, "/data/local/tmp/magisk.apk"])
+            if proc.returncode != 0:
+                error("adb push failed!")
 
 
 def setup_avd():
     header("* Setting up emulator")
 
-    push_files(Path("scripts", "live_setup.sh"))
+    push_files([Path("scripts", "avd_setup.sh")], push_apk=True)
 
-    proc = execv([adb_path, "shell", "sh", "/data/local/tmp/live_setup.sh"])
+    proc = execv([adb_path, "shell", "sh", "/data/local/tmp/avd_setup.sh"])
     if proc.returncode != 0:
-        error("live_setup.sh failed!")
+        error("avd_setup.sh failed!")
 
 
-def patch_avd_file():
-    input = Path(args.image)
+def patch():
+    input_file = Path(args.image)
     output = Path(args.output)
 
-    header(f"* Patching {input.name}")
+    header(f"* Patching {input_file.name}")
 
-    push_files(Path("scripts", "host_patch.sh"))
+    script = "avd_patch.sh" if args.avd else "adb_patch.sh"
+    push_files([Path("scripts", script), input_file])
 
-    proc = execv([adb_path, "push", input, "/data/local/tmp"])
-    if proc.returncode != 0:
-        error("adb push failed!")
-
-    src_file = f"/data/local/tmp/{input.name}"
+    src_file = f"/data/local/tmp/{input_file.name}"
     out_file = f"{src_file}.magisk"
 
-    proc = execv([adb_path, "shell", "sh", "/data/local/tmp/host_patch.sh", src_file])
+    proc = execv([adb_path, "shell", "sh", f"/data/local/tmp/{script}", src_file])
     if proc.returncode != 0:
-        error("host_patch.sh failed!")
+        error(f"{script} failed!")
 
     proc = execv([adb_path, "pull", out_file, output])
     if proc.returncode != 0:
@@ -906,8 +964,6 @@ def parse_args():
 
     app_parser = subparsers.add_parser("app", help="build the Magisk app")
 
-    stub_parser = subparsers.add_parser("stub", help="build the stub app")
-
     test_parser = subparsers.add_parser("test", help="build the test app")
 
     clean_parser = subparsers.add_parser("clean", help="cleanup")
@@ -923,13 +979,16 @@ def parse_args():
         "-b", "--build", action="store_true", help="build before patching"
     )
 
-    avd_patch_parser = subparsers.add_parser(
-        "avd_patch", help="patch AVD ramdisk.img or init_boot.img"
+    patch_parser = subparsers.add_parser(
+        "patch", help="patch boot image or AVD ramdisk.img via ADB"
     )
-    avd_patch_parser.add_argument("image", help="path to ramdisk.img or init_boot.img")
-    avd_patch_parser.add_argument("output", help="output file name")
-    avd_patch_parser.add_argument("--apk", help="a Magisk APK to use")
-    avd_patch_parser.add_argument(
+    patch_parser.add_argument("image", help="path to image to patch")
+    patch_parser.add_argument("output", help="output file name")
+    patch_parser.add_argument("--apk", help="a Magisk APK to use")
+    patch_parser.add_argument(
+        "--avd", action="store_true", help="the input file is an AVD ramdisk.img"
+    )
+    patch_parser.add_argument(
         "-b", "--build", action="store_true", help="build before patching"
     )
 
@@ -965,10 +1024,9 @@ def parse_args():
     rustup_parser.set_defaults(func=setup_rustup)
     gen_parser.set_defaults(func=gen_ide)
     app_parser.set_defaults(func=build_app)
-    stub_parser.set_defaults(func=build_stub)
     test_parser.set_defaults(func=build_test)
     emu_parser.set_defaults(func=setup_avd)
-    avd_patch_parser.set_defaults(func=patch_avd_file)
+    patch_parser.set_defaults(func=patch)
     clean_parser.set_defaults(func=cleanup)
     ndk_parser.set_defaults(func=setup_ndk)
 
@@ -979,8 +1037,18 @@ def parse_args():
     return parser.parse_args()
 
 
+def sanitize_environ():
+    # zsh exports $_ with its internal metafied bytes when the script path is not ASCII,
+    # and std::env::vars() in Rust build scripts panics on values that are not UTF-8.
+    # Python keeps such bytes as surrogate escapes, so drop every variable carrying one.
+    for key, value in list(os.environ.items()):
+        if any("\udc80" <= c <= "\udcff" for c in key + value):
+            del os.environ[key]
+
+
 def main():
     global args
+    sanitize_environ()
     args = parse_args()
     args.config = Path(args.config)
     load_config()

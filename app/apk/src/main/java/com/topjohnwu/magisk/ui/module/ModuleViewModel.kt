@@ -16,12 +16,14 @@ import com.topjohnwu.magisk.ui.navigation.Route
 import com.topjohnwu.magisk.utils.asFlow
 import com.topjohnwu.magisk.view.Notifications
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.parcelize.Parcelize
 import com.topjohnwu.magisk.core.R as CoreR
 
@@ -62,7 +64,7 @@ class OnlineModuleSubject(
     override val autoLaunch: Boolean,
     override val notifyId: Int = Notifications.nextId(),
 ) : Subject.Module() {
-    override fun pendingIntent(context: Context) = FlashUtils.installIntent(context, file)
+    override fun pendingIntent(context: Context) = FlashUtils.installIntent(context, file, notifyId)
 }
 
 class ModuleViewModel : AsyncLoadViewModel() {
@@ -83,25 +85,56 @@ class ModuleViewModel : AsyncLoadViewModel() {
         }
     }
 
+    private var updateJob: Job? = null
+    private var loadGeneration = 0L
+
     override suspend fun doLoadWork() {
-        _uiState.update { it.copy(loading = true) }
+        val generation = ++loadGeneration
+        updateJob?.cancel()
+        // Keep showing the current list while refreshing: loading is only true until the first
+        // load finishes, so a refresh doesn't swap the list for a spinner and lose its scroll
         val moduleLoaded = Info.env.isActive &&
             withContext(Dispatchers.IO) { LocalModule.loaded() }
         if (moduleLoaded) {
+            val previous = _uiState.value.modules.associateBy { it.module.base.name }
             val modules = withContext(Dispatchers.Default) {
-                LocalModule.installed().map { ModuleItem(it) }
-            }
-            val modulesWithUpdates = withContext(Dispatchers.IO) {
-                modules.map { item ->
-                    item.module.fetch()
-                    ModuleItem(item.module)
+                LocalModule.installed().map { module ->
+                    // Keep the update info of the same module version until it is fetched
+                    // again, so update buttons don't disappear on every refresh
+                    previous[module.base.name]?.module
+                        ?.takeIf { it.versionCode == module.versionCode }
+                        ?.let {
+                            module.updateInfo = it.updateInfo
+                            module.outdated = it.outdated
+                        }
+                    ModuleItem(module)
                 }
             }
-            // Publish the complete snapshot once. Publishing before the network checks makes
-            // update rows appear and disappear while the pivot is already animating.
-            _uiState.update { it.copy(loading = false, modules = modulesWithUpdates) }
+            // Local discovery never waits for a repository. Keep existing update metadata
+            // while checking, then publish the results as one snapshot.
+            _uiState.update { it.copy(loading = false, modules = modules) }
+            updateJob = viewModelScope.launch {
+                val updates = withTimeoutOrNull(8_000L) {
+                    withContext(Dispatchers.IO) {
+                        modules.map { item ->
+                            item.module.fetch()
+                            item.module
+                        }.associateBy { it.base.name }
+                    }
+                } ?: return@launch
+                if (generation != loadGeneration) return@launch
+                _uiState.update { state ->
+                    state.copy(modules = state.modules.map { current ->
+                        val module = updates[current.module.base.name]
+                        if (module != null && module === current.module) {
+                            // Preserve toggles made while the network check was running.
+                            current.copy(showUpdate = module.updateInfo != null && module.outdated)
+                        } else current
+                    })
+                }
+            }
         } else {
-            _uiState.update { it.copy(loading = false) }
+            _uiState.update { it.copy(loading = false, modules = emptyList()) }
         }
     }
 
@@ -109,8 +142,8 @@ class ModuleViewModel : AsyncLoadViewModel() {
         navigateTo(Route.Flash(Const.Value.FLASH_ZIP, uri.toString()))
     }
 
-    fun runAction(id: String, name: String) {
-        navigateTo(Route.Action(id, name))
+    fun runAction(dir: String, name: String) {
+        navigateTo(Route.Action(dir, name))
     }
 
     fun openWebUi(id: String, name: String) {
@@ -123,7 +156,7 @@ class ModuleViewModel : AsyncLoadViewModel() {
         _uiState.update { state ->
             state.copy(
                 modules = state.modules.map {
-                    if (it.module.id == item.module.id) it.copy(isEnabled = newEnabled) else it
+                    if (it.module.base.name == item.module.base.name) it.copy(isEnabled = newEnabled) else it
                 }
             )
         }
@@ -135,7 +168,7 @@ class ModuleViewModel : AsyncLoadViewModel() {
         _uiState.update { state ->
             state.copy(
                 modules = state.modules.map {
-                    if (it.module.id == item.module.id) it.copy(isRemoved = newRemoved) else it
+                    if (it.module.base.name == item.module.base.name) it.copy(isRemoved = newRemoved) else it
                 }
             )
         }

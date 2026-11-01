@@ -8,6 +8,8 @@
 
 上游的全部核心能力原样保留:**MagiskSU** root 授权、**Magisk Modules** 无系统分区修改、**MagiskBoot** 镜像解包重打包、**Zygisk** 进程注入。
 
+支持 Android 7.0 及更高版本。
+
 ---
 
 ## 设计语言:一场 Metro UI 重写
@@ -34,6 +36,8 @@ Metro 的灵魂是扁平的大色块。本项目建立了一套**七角色强调
 ### 弹窗也是 Metro 的
 
 弹窗为直角、无阴影的 Metro 对话框,入场为绕顶边翻转的"转门"动画;着色同样跟随当前磁贴角色。
+
+默认应用文案位于 `app/core/src/main/res/values/strings.xml`。
 
 ### 全局 Metro 密度
 

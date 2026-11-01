@@ -21,7 +21,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.ui.component.rememberConfirmDialog
 import com.topjohnwu.magisk.ui.component.rememberExternalStoragePermissionLauncher
 import com.topjohnwu.magisk.ui.terminal.TerminalScreen
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
@@ -41,6 +45,18 @@ fun ActionScreen(
     val saveLog = rememberExternalStoragePermissionLauncher {
         viewModel.saveLog()
     }
+
+    val exitConfirmDialog = rememberConfirmDialog(onConfirm = onBack)
+    val exitTitle = stringResource(CoreR.string.running_exit_title)
+    val exitMessage = stringResource(CoreR.string.running_exit_msg)
+    val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = backState,
+        isBackEnabled = !finished,
+        onBackCompleted = {
+            exitConfirmDialog.showConfirm(title = exitTitle, content = exitMessage)
+        },
+    )
 
     // Metro design language: no top bar. A large accent header carries the title and the
     // action buttons sit inline beside it; the terminal fills the space underneath.
@@ -75,10 +91,11 @@ fun ActionScreen(
             }
         }
         TerminalScreen(
+            emulator = viewModel.emulator,
             modifier = Modifier
                 .fillMaxSize()
                 .weight(1f),
-            onEmulatorCreated = { viewModel.onEmulatorCreated(it) },
+            onResized = viewModel::onTerminalResized,
         )
     }
 }

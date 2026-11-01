@@ -3,19 +3,18 @@ package com.topjohnwu.magisk.core.su
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import com.topjohnwu.magisk.core.BuildConfig
+import android.system.Os
+import android.system.OsConstants
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.data.magiskdb.PolicyDao
 import com.topjohnwu.magisk.core.ktx.getPackageInfo
 import com.topjohnwu.magisk.core.model.su.SuPolicy
-import com.topjohnwu.superuser.Shell
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.DataOutputStream
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
 class SuRequestHandler(
@@ -33,20 +32,17 @@ class SuRequestHandler(
         if (!init(intent))
             return false
 
-        // Never allow com.topjohnwu.magisk (could be malware)
-        if (pkgInfo.packageName == BuildConfig.APP_PACKAGE_NAME) {
-            Shell.cmd("(pm uninstall ${BuildConfig.APP_PACKAGE_NAME} >/dev/null 2>&1)&").exec()
-            return false
-        }
-
         when (Config.suAutoResponse) {
             Config.Value.SU_AUTO_DENY -> {
                 respond(SuPolicy.DENY, 0)
                 return false
             }
             Config.Value.SU_AUTO_ALLOW -> {
-                respond(SuPolicy.ALLOW, 0)
-                return false
+                // Automatic responses must not bypass the configured credential check.
+                if (!Config.suAuth) {
+                    respond(SuPolicy.ALLOW, 0)
+                    return false
+                }
             }
         }
 
@@ -74,18 +70,20 @@ class SuRequestHandler(
             respond(SuPolicy.DENY, -1)
             return false
         }
-        if (!output.canWrite()) {
-            Timber.e("Cannot write to $output")
+        if (!runCatching { OsConstants.S_ISFIFO(Os.lstat(output.path).st_mode) }.getOrDefault(false)) {
+            Timber.e("Invalid request FIFO: $output")
             return false
         }
         return true
     }
 
     suspend fun respond(action: Int, time: Long) {
-        policy.policy = when {
-            action == SuPolicy.ZERO -> SuPolicy.ZERO
-            action == SuPolicy.ALLOW && Config.suRestrict -> SuPolicy.RESTRICT
-            else -> action
+        policy.expiresAt = null
+        policy.policy = when (action) {
+            SuPolicy.ZERO -> SuPolicy.ZERO
+            SuPolicy.ALLOW -> if (Config.suRestrict) SuPolicy.RESTRICT else SuPolicy.ALLOW
+            SuPolicy.RESTRICT -> SuPolicy.RESTRICT
+            else -> SuPolicy.DENY
         }
         if (time >= 0) {
             policy.remain = TimeUnit.MINUTES.toSeconds(time)
@@ -95,16 +93,40 @@ class SuRequestHandler(
 
         withContext(Dispatchers.IO) {
             try {
-                DataOutputStream(FileOutputStream(output)).use {
-                    it.writeInt(policy.policy)
-                    it.flush()
+                val fd = Os.open(output.path,
+                    OsConstants.O_WRONLY or OsConstants.O_NONBLOCK or
+                        OsConstants.O_CLOEXEC or OsConstants.O_NOFOLLOW, 0)
+                try {
+                    if (!OsConstants.S_ISFIFO(Os.fstat(fd).st_mode)) {
+                        Timber.e("Request path is no longer a FIFO")
+                        return@withContext
+                    }
+                    // A four-byte write is atomic for a FIFO. The daemon converts the
+                    // response from its native POD representation with from_be(), so the
+                    // Android side must retain the protocol's big-endian encoding.
+                    val response = ByteBuffer.allocate(Int.SIZE_BYTES)
+                        .putInt(policy.policy)
+                        .array()
+                    check(Os.write(fd, response, 0, response.size) == response.size)
+                } finally {
+                    Os.close(fd)
                 }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 Timber.e(e)
+                // A timed-out/closed FIFO must not leave behind an unseen permanent grant.
+                return@withContext
             }
-            if (time >= 0) {
-                policyDB.update(policy)
-                SuEvents.notifyPolicyChanged()
+            if (time >= 0 && action != SuPolicy.ZERO) {
+                try {
+                    policyDB.update(policy)
+                    SuEvents.notifyPolicyChanged()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The current request has already been answered. Do not claim the
+                    // policy was saved; subsequent requests must be evaluated again.
+                    Timber.e(e)
+                }
             }
         }
     }

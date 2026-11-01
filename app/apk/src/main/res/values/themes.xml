@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Main">
-        <item name="postSplashScreenTheme">@android:style/Theme.DeviceDefault.NoActionBar</item>
-    </style>
+    <style name="Main" parent="android:Theme.Material.Light.NoActionBar" />
 
-    <style name="Floating" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Floating" parent="Main">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowDisablePreview">true</item>
     </style>
 
 </resources>

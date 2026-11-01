@@ -1,45 +1,73 @@
 package com.topjohnwu.magisk.terminal
 
-import android.os.Handler
-import android.os.Looper
+import com.topjohnwu.magisk.core.AppContext
 import com.topjohnwu.superuser.Shell
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.File
 
 private val busyboxPath: String by lazy {
     Shell.cmd("readlink /proc/self/exe").exec().out.firstOrNull()
         ?: "/data/adb/magisk/busybox"
 }
 
-private val mainHandler = Handler(Looper.getMainLooper())
+private val terminalScope = CoroutineScope(Dispatchers.Main.immediate)
 
 fun TerminalEmulator.appendOnMain(bytes: ByteArray, len: Int) {
-    mainHandler.post {
+    terminalScope.launch {
         append(bytes, len)
         onScreenUpdate?.invoke()
     }
 }
 
 fun TerminalEmulator.appendLineOnMain(line: String) {
-    val bytes = "$line\r\n".toByteArray(Charsets.UTF_8)
-    appendOnMain(bytes, bytes.size)
+    terminalScope.launch {
+        val clear = if (inPlaceNewlines > 0) {
+            "\r\u001b[${inPlaceNewlines}A\u001b[J"
+        } else {
+            "\r\u001b[2K"
+        }
+        val text = if (line.startsWith('\r')) {
+            val content = line.substring(1)
+            inPlaceNewlines = content.count { it == '\n' }
+            "$clear${content.replace("\n", "\r\n")}"
+        } else {
+            inPlaceNewlines = 0
+            "$clear$line\r\n"
+        }
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        append(bytes, bytes.size)
+        onScreenUpdate?.invoke()
+    }
 }
+
+/** Quote a string as a single shell word, so it is never interpreted by the shell. */
+fun String.shellQuoted() = "'" + replace("'", "'\\''") + "'"
 
 /**
  * Run a command as root inside a PTY (via busybox script).
  * Reads raw bytes from the process and feeds them to the terminal emulator.
- * Must be called from a background thread.
- * Returns true if the process exits with code 0.
+ * Must be called from a background thread. [columns] and [rows] should be read from the
+ * emulator on the main thread, after the terminal has been sized to its viewport.
+ * Returns true if the command exits with code 0.
  */
-fun runSuCommand(emulator: TerminalEmulator, command: String): Boolean {
+fun runSuCommand(emulator: TerminalEmulator, columns: Int, rows: Int, command: String): Boolean {
+    // busybox script always exits with 0, so have the command write its exit code to a file
+    val exitFile = File.createTempFile("exit", null, AppContext.cacheDir)
     return try {
-        val cols = emulator.mColumns
-        val rows = emulator.mRows
-        val wrappedCmd = "export TERM=xterm-256color; stty cols $cols rows $rows 2>/dev/null; $command"
-        val escapedCmd = wrappedCmd.replace("'", "'\\''")
+        // Run the command in busybox ash with standalone mode, like every other script in the
+        // context of Magisk. busybox script itself starts $SHELL, which su sets to /system/bin/sh.
+        // ASH_STANDALONE has to be set before ash starts: it is only read on startup.
+        val shellCmd = "export TERM=xterm-256color; " +
+            "stty cols $columns rows $rows 2>/dev/null; " +
+            "($command); echo \$? > ${exitFile.path.shellQuoted()}"
+        val wrappedCmd = "ASH_STANDALONE=1 $busyboxPath sh -c ${shellCmd.shellQuoted()}"
 
         val process = ProcessBuilder(
             "su", "-c",
-            "$busyboxPath script -q -c '$escapedCmd' /dev/null"
+            "$busyboxPath script -q -c ${wrappedCmd.shellQuoted()} /dev/null"
         ).redirectErrorStream(true).start()
 
         process.outputStream.close()
@@ -53,10 +81,13 @@ fun runSuCommand(emulator: TerminalEmulator, command: String): Boolean {
             }
         }
 
-        process.waitFor() == 0
+        process.waitFor()
+        exitFile.readText().trim() == "0"
     } catch (e: Exception) {
         Timber.e(e, "runSuCommand failed")
         emulator.appendLineOnMain("! Error: ${e.message}")
         false
+    } finally {
+        exitFile.delete()
     }
 }

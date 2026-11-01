@@ -1,13 +1,13 @@
 package com.topjohnwu.magisk.ui.module
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.ktx.timeFormatStandard
 import com.topjohnwu.magisk.core.ktx.toTime
-import com.topjohnwu.magisk.core.utils.MediaStoreUtils
-import com.topjohnwu.magisk.core.utils.MediaStoreUtils.outputStream
 import com.topjohnwu.magisk.terminal.TerminalEmulator
 import com.topjohnwu.magisk.terminal.runSuCommand
+import com.topjohnwu.magisk.terminal.shellQuoted
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,34 +16,50 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ActionViewModel : BaseViewModel() {
+class ActionViewModel(private val savedState: SavedStateHandle) : BaseViewModel() {
 
     enum class State {
         RUNNING, SUCCESS, FAILED
     }
 
+    /**
+     * Whether the action was started before the process died. The action and its output only
+     * lived in memory and are gone, so it must never run again: repeating it may not be safe.
+     */
+    val isInterrupted = savedState.get<Boolean>(KEY_STARTED) == true
+
     private val _actionState = MutableStateFlow(State.RUNNING)
     val actionState: StateFlow<State> = _actionState.asStateFlow()
 
-    var actionId: String = ""
+    var actionDir: String = ""
     var actionName: String = ""
 
-    private var emulator: TerminalEmulator? = null
-    private val emulatorReady = CompletableDeferred<TerminalEmulator>()
+    val emulator = TerminalEmulator(
+        columns = 256,
+        rows = 40,
+        cellWidthPixels = 0,
+        cellHeightPixels = 0,
+        transcriptRows = null,
+    )
 
-    fun onEmulatorCreated(emu: TerminalEmulator) {
-        emulator = emu
-        emulatorReady.complete(emu)
+    private val terminalReady = CompletableDeferred<Unit>()
+
+    /** Called by the UI once the terminal has been sized to its viewport. */
+    fun onTerminalResized() {
+        terminalReady.complete(Unit)
     }
 
     fun startRunAction() {
+        savedState[KEY_STARTED] = true
         viewModelScope.launch {
-            val emu = emulatorReady.await()
-
+            // Start the command with the real terminal size
+            terminalReady.await()
+            val columns = emulator.mColumns
+            val rows = emulator.mRows
             val success = withContext(Dispatchers.IO) {
                 runSuCommand(
-                    emu,
-                    "cd /data/adb/modules/$actionId && sh ./action.sh"
+                    emulator, columns, rows,
+                    "cd ${"/data/adb/modules/$actionDir".shellQuoted()} && sh ./action.sh"
                 )
             }
 
@@ -52,19 +68,14 @@ class ActionViewModel : BaseViewModel() {
     }
 
     fun saveLog() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val name = "%s_action_log_%s.log".format(
-                actionName,
-                System.currentTimeMillis().toTime(timeFormatStandard)
-            )
-            val file = MediaStoreUtils.getFile(name)
-            file.uri.outputStream().bufferedWriter().use { writer ->
-                val transcript = emulator?.screen?.transcriptText
-                if (transcript != null) {
-                    writer.write(transcript)
-                }
-            }
-            showSnackbar(file.toString())
-        }
+        val name = "%s_action_log_%s.log".format(
+            actionName,
+            System.currentTimeMillis().toTime(timeFormatStandard)
+        )
+        saveLogFile(name) { it.write(emulator.screen.transcriptText) }
+    }
+
+    companion object {
+        private const val KEY_STARTED = "started"
     }
 }

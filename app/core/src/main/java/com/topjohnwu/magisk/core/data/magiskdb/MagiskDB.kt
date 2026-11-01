@@ -7,17 +7,17 @@ import kotlinx.coroutines.withContext
 
 open class MagiskDB {
 
-    class Literal(
-        val str: String
-    )
+    // Only for SQL expressions assembled by the database/model layer, never user input.
+    internal class Literal(val expression: String)
 
     suspend inline fun <R> exec(
         query: String,
         crossinline mapper: (Map<String, String>) -> R
     ): List<R> {
         return withContext(Dispatchers.IO) {
-            val out = Shell.cmd("magisk --sqlite '$query'").await().out
-            out.map { line ->
+            val result = Shell.cmd("magisk --sqlite '$query'").await()
+            check(result.isSuccess) { "Magisk database query failed" }
+            result.out.map { line ->
                 line.split("\\|".toRegex())
                     .map { it.split("=", limit = 2) }
                     .filter { it.size == 2 }
@@ -29,7 +29,8 @@ open class MagiskDB {
 
     suspend fun exec(query: String) {
         withContext(Dispatchers.IO) {
-            Shell.cmd("magisk --sqlite '$query'").await()
+            val result = Shell.cmd("magisk --sqlite '$query'").await()
+            check(result.isSuccess) { "Magisk database write failed" }
         }
     }
 
@@ -39,7 +40,7 @@ open class MagiskDB {
             when (it) {
                 is Boolean -> if (it) "1" else "0"
                 is Number -> it.toString()
-                is Literal -> it.str
+                is Literal -> it.expression
                 else -> "\"$it\""
             }
         }
@@ -49,6 +50,5 @@ open class MagiskDB {
     object Table {
         const val POLICY = "policies"
         const val SETTINGS = "settings"
-        const val STRINGS = "strings"
     }
 }

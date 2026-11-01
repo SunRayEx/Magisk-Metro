@@ -1,8 +1,18 @@
 package com.topjohnwu.magisk.core.repository
 
+import com.topjohnwu.magisk.core.BuildConfig
+import com.topjohnwu.magisk.core.Config
+import com.topjohnwu.magisk.core.Config.Value.BETA_CHANNEL
+import com.topjohnwu.magisk.core.Config.Value.CUSTOM_CHANNEL
+import com.topjohnwu.magisk.core.Config.Value.DEBUG_CHANNEL
+import com.topjohnwu.magisk.core.Config.Value.DEFAULT_CHANNEL
+import com.topjohnwu.magisk.core.Config.Value.STABLE_CHANNEL
+import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.data.GithubApiServices
 import com.topjohnwu.magisk.core.data.RawUrl
+import com.topjohnwu.magisk.core.ktx.dateFormat
+import com.topjohnwu.magisk.core.model.GooglebookRecoveryJson
 import com.topjohnwu.magisk.core.model.Release
 import com.topjohnwu.magisk.core.model.UpdateInfo
 import retrofit2.HttpException
@@ -34,6 +44,33 @@ class NetworkService(
             .getOrNull()
             ?: return UpdateInfo()
         return release.asMetroInfo()
+    }
+
+    suspend fun fetchGooglebookRecovery() = safe {
+        raw.fetchGooglebookRecoveryJson(Const.Url.GOOGLEBOOK_RECOVERY_URL)
+    }
+
+    suspend fun fetchPixelFactoryImages() = safe {
+        raw.fetchPixelFactoryImages(Const.Url.PIXEL_FACTORY_IMAGES_URL)
+    }
+
+    // Keep going through all release pages until we find a match
+    private suspend inline fun findRelease(predicate: (Release) -> Boolean): Release? {
+        var page = 1
+        while (true) {
+            val response = api.fetchReleases(page = page)
+            val releases = response.body() ?: throw HttpException(response)
+            // Remove all non Magisk releases
+            releases.removeAll { it.tag[0] != 'v' && !it.tag.startsWith("canary") }
+            // Make sure it's sorted correctly
+            releases.sortByDescending { it.createdTime }
+            releases.find(predicate)?.let { return it }
+            if (response.headers()["link"]?.contains("rel=\"next\"", ignoreCase = true) == true) {
+                page += 1
+            } else {
+                return null
+            }
+        }
     }
 
     private fun Release.asMetroInfo(): UpdateInfo {

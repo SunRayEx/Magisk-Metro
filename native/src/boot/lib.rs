@@ -5,14 +5,17 @@ pub use base;
 use compress::{compress_bytes, decompress_bytes};
 use dtb::find_dtb_offset_for_cxx;
 use format::{check_fmt, fmt_compressed, fmt_compressed_any, fmt2name};
+use futility::{chromeos_blob_trailer, chromeos_vblock_size, sign_chromeos_for_cxx};
 use sign::{SHA, get_sha, sha256_hash, sign_payload_for_cxx};
 use std::env;
 
 mod cli;
+pub use cli::main;
 mod compress;
 mod cpio;
 mod dtb;
 mod format;
+mod futility;
 mod patch;
 mod payload;
 // Suppress warnings in generated code
@@ -80,13 +83,18 @@ pub mod ffi {
 
         fn check_fmt(buf: &[u8]) -> FileFormat;
         fn compress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: i32);
-        fn decompress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: i32);
+        fn decompress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: i32) -> bool;
         fn fmt2name(fmt: FileFormat) -> *const c_char;
         fn fmt_compressed(fmt: FileFormat) -> bool;
         fn fmt_compressed_any(fmt: FileFormat) -> bool;
 
         #[cxx_name = "sign_payload"]
         fn sign_payload_for_cxx(payload: &[u8]) -> Vec<u8>;
+
+        fn chromeos_vblock_size() -> usize;
+        fn chromeos_blob_trailer() -> Vec<u8>;
+        #[cxx_name = "sign_chromeos"]
+        fn sign_chromeos_for_cxx(kernel: &[u8]) -> Vec<u8>;
 
         #[cxx_name = "find_dtb_offset"]
         fn find_dtb_offset_for_cxx(buf: &[u8]) -> i32;

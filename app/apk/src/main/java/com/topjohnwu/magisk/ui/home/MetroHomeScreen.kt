@@ -41,6 +41,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +63,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -290,24 +295,24 @@ private fun MetroGrid(
         ) {
             Box(modifier = Modifier.padding(gap).size(boardWidth, boardHeight)) {
                 MetroBoard(
-                viewModel = viewModel,
-                placements = placements,
-                onPlacementsChange = ::persist,
-                tileSize = tileSize,
-                gap = gap,
-                cap = cap,
-                isLandscape = isLandscape,
-                modules = modules,
-                rootApps = rootApps,
-                importantLogs = importantLogs,
-                customTiles = customTiles,
-                onSettingsClick = onSettingsClick,
-                onModulesClick = onModulesClick,
-                onAppsClick = onAppsClick,
-                onLogsClick = onLogsClick,
-                onContributorsClick = onContributorsClick,
-                onMagiskClick = onMagiskClick,
-            )
+                    viewModel = viewModel,
+                    placements = placements,
+                    onPlacementsChange = ::persist,
+                    tileSize = tileSize,
+                    gap = gap,
+                    cap = cap,
+                    isLandscape = isLandscape,
+                    modules = modules,
+                    rootApps = rootApps,
+                    importantLogs = importantLogs,
+                    customTiles = customTiles,
+                    onSettingsClick = onSettingsClick,
+                    onModulesClick = onModulesClick,
+                    onAppsClick = onAppsClick,
+                    onLogsClick = onLogsClick,
+                    onContributorsClick = onContributorsClick,
+                    onMagiskClick = onMagiskClick,
+                )
             }
         }
     }
@@ -502,6 +507,7 @@ private fun MetroBoard(
             MagiskTile(
                 modifier = place(placement(MetroTileLayout.Magisk)),
                 introDelay = introDelay(MetroTileLayout.Magisk),
+                compact = placement(MetroTileLayout.Magisk).let { it.width == 1 && it.height == 1 },
                 onClick = onMagiskClick,
             )
         }
@@ -526,6 +532,7 @@ private fun MetroBoard(
         if (MetroTileLayout.isVisible(MetroTileLayout.Settings)) {
             SettingsTile(
                 modifier = place(placement(MetroTileLayout.Settings)),
+                placement = placement(MetroTileLayout.Settings),
                 introDelay = introDelay(MetroTileLayout.Settings),
                 onClick = onSettingsClick,
             )
@@ -543,6 +550,7 @@ private fun MetroBoard(
         if (MetroTileLayout.isVisible(MetroTileLayout.Contributors)) {
             ContributorTile(
                 modifier = place(placement(MetroTileLayout.Contributors)),
+                placement = placement(MetroTileLayout.Contributors),
                 introDelay = introDelay(MetroTileLayout.Contributors),
                 onClick = onContributorsClick,
             )
@@ -566,6 +574,7 @@ private fun MetroBoard(
             val accent = LocalMetroPalette.current.apps
             CustomTile(
                 modifier = place(placement),
+                placement = placement,
                 tile = tile,
                 accent = accent,
                 introDelay = introDelay(tile.id),
@@ -606,6 +615,7 @@ private fun MetroBoard(
 @Composable
 private fun CustomTile(
     modifier: Modifier,
+    placement: MetroTilePlacement,
     tile: MetroCustomTile,
     accent: com.topjohnwu.magisk.ui.theme.MetroAccent,
     introDelay: Float,
@@ -638,30 +648,37 @@ private fun CustomTile(
             }
         },
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = tile.title,
-                color = foreground,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (tile.ticker.isNotBlank()) {
-                AutoRollingList(
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
-                    items = tile.ticker.split('\n', '|').map(String::trim).filter(String::isNotBlank),
-                    rowHeight = ListRowCompact,
-                    emptyText = "",
-                    textColor = foreground,
-                )
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (tile.groupMembers.size <= 1) {
+                MetroTileIcons.get(tile.icon)?.let { icon ->
+                    TileIcon(imageVector = icon, tint = foreground, placement = placement)
+                }
             }
-            if (tile.groupMembers.size > 1) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 Text(
-                    text = "${tile.groupMembers.size} apps",
-                    color = foreground.copy(alpha = 0.78f),
-                    fontSize = 11.sp,
+                    text = tile.title,
+                    color = foreground,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (tile.ticker.isNotBlank()) {
+                    AutoRollingList(
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
+                        items = tile.ticker.split('\n', '|').map(String::trim).filter(String::isNotBlank),
+                        rowHeight = ListRowCompact,
+                        emptyText = "",
+                        textColor = foreground,
+                    )
+                }
+                if (tile.groupMembers.size > 1) {
+                    Text(
+                        text = "${tile.groupMembers.size} apps",
+                        color = foreground.copy(alpha = 0.78f),
+                        fontSize = 11.sp,
+                    )
+                }
             }
         }
     }
@@ -816,6 +833,7 @@ private fun MetroTile(
 private fun MagiskTile(
     modifier: Modifier,
     introDelay: Float,
+    compact: Boolean,
     onClick: () -> Unit,
 ) {
     val accent = LocalMetroPalette.current.magisk
@@ -828,41 +846,59 @@ private fun MagiskTile(
         introDelay = introDelay,
         onClick = onClick,
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(verticalAlignment = Alignment.Top) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // A one-cell tile has no reliable room for the version and status rows. Keep the
+            // tile legible by reducing it to the same enlarged, background-aware emblem used by
+            // the full tile instead of allowing text to clip or reflow.
+            if (compact) {
                 Image(
                     painter = painterResource(R.drawable.ic_magiskube),
                     contentDescription = "Magisk",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(44.dp),
+                    colorFilter = ColorFilter.tint(accent.onColor),
+                    modifier = Modifier
+                        .size(66.dp)
+                        .align(Alignment.Center),
                 )
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = stringResource(
-                            R.string.metro_magisk_version,
-                            BuildConfig.APP_VERSION_NAME.ifBlank { "dev" },
-                        ),
-                        color = accent.onColor,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = stringResource(
-                            if (Info.env.isActive) R.string.metro_enabled else R.string.metro_disabled
-                        ),
-                        color = accent.onColor.copy(alpha = 0.72f),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Normal,
-                    )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_magiskube),
+                            contentDescription = "Magisk",
+                            contentScale = ContentScale.Fit,
+                            colorFilter = ColorFilter.tint(accent.onColor),
+                            modifier = Modifier.size(66.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = stringResource(
+                                    R.string.metro_magisk_version,
+                                    BuildConfig.APP_VERSION_NAME.ifBlank { "dev" },
+                                ),
+                                color = accent.onColor,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = stringResource(
+                                    if (Info.env.isActive) R.string.metro_enabled else R.string.metro_disabled
+                                ),
+                                color = accent.onColor.copy(alpha = 0.72f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Normal,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    StatusRow(R.string.metro_root_status, Info.isRooted, accent.onColor)
+                    StatusRow(R.string.metro_zygisk_status, Info.isZygiskEnabled, accent.onColor)
+                    StatusRow(R.string.metro_ramdisk_status, Info.ramdisk, accent.onColor)
                 }
             }
-            Spacer(Modifier.weight(1f))
-            StatusRow(R.string.metro_root_status, Info.isRooted, accent.onColor)
-            StatusRow(R.string.metro_zygisk_status, Info.isZygiskEnabled, accent.onColor)
-            StatusRow(R.string.metro_ramdisk_status, Info.ramdisk, accent.onColor)
         }
     }
 }
@@ -985,7 +1021,12 @@ private fun AppTile(
 }
 
 @Composable
-private fun SettingsTile(modifier: Modifier, introDelay: Float, onClick: () -> Unit) {
+private fun SettingsTile(
+    modifier: Modifier,
+    placement: MetroTilePlacement,
+    introDelay: Float,
+    onClick: () -> Unit,
+) {
     val accent = LocalMetroPalette.current.settings
     MetroTile(
         modifier = modifier,
@@ -996,18 +1037,30 @@ private fun SettingsTile(modifier: Modifier, introDelay: Float, onClick: () -> U
         introDelay = introDelay,
         onClick = onClick,
     ) {
-        Text(
-            text = stringResource(R.string.metro_settings),
-            color = accent.onColor,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 22.sp,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            TileIcon(
+                imageVector = Icons.Default.Settings,
+                tint = accent.onColor,
+                placement = placement,
+            )
+            Text(
+                text = stringResource(R.string.metro_settings),
+                color = accent.onColor,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
     }
 }
 
 @Composable
-private fun ContributorTile(modifier: Modifier, introDelay: Float, onClick: () -> Unit) {
+private fun ContributorTile(
+    modifier: Modifier,
+    placement: MetroTilePlacement,
+    introDelay: Float,
+    onClick: () -> Unit,
+) {
     val accent = LocalMetroPalette.current.contributors
     MetroTile(
         modifier = modifier,
@@ -1018,21 +1071,44 @@ private fun ContributorTile(modifier: Modifier, introDelay: Float, onClick: () -
         introDelay = introDelay,
         onClick = onClick,
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = stringResource(R.string.metro_contributor),
-                color = accent.onColor,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 20.sp,
+        Box(modifier = Modifier.fillMaxSize()) {
+            TileIcon(
+                imageVector = Icons.Default.People,
+                tint = accent.onColor,
+                placement = placement,
             )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "@SunRayEx",
-                color = accent.onColor.copy(alpha = 0.9f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Normal,
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = stringResource(R.string.metro_contributor),
+                    color = accent.onColor,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 20.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "@SunRayEx",
+                    color = accent.onColor.copy(alpha = 0.9f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun TileIcon(
+    imageVector: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    placement: MetroTilePlacement,
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(60.dp),
+        )
     }
 }
 

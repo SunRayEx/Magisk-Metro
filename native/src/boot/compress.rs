@@ -1,5 +1,5 @@
 use crate::ffi::FileFormat;
-use crate::format::check_fmt;
+use crate::format::{check_fmt, detect_bcj_filter};
 use base::nix::fcntl::OFlag;
 use base::{Chunker, FileOrStd, LoggedResult, ReadExt, Utf8CStr, Utf8CString, WriteExt, log_err};
 use bzip2::Compression as BzCompression;
@@ -14,7 +14,9 @@ use lz4::{
     BlockMode, BlockSize, ContentChecksum, Decoder as LZ4FrameDecoder, Encoder as LZ4FrameEncoder,
     EncoderBuilder as LZ4FrameEncoderBuilder,
 };
-use lzma_rust2::{CheckType, LzmaOptions, LzmaReader, LzmaWriter, XzOptions, XzReader, XzWriter};
+use lzma_rust2::{
+    CheckType, LzmaOptions, LzmaReader, LzmaWriter, XzOptions, XzReader, XzWriter,
+};
 use std::cmp::min;
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
@@ -242,6 +244,23 @@ pub fn get_encoder<'a, W: Write + 'a>(
     })
 }
 
+pub fn get_encoder_bcj_detection<'a, W: Write + 'a>(
+    format: FileFormat,
+    w: W,
+    in_bytes: &[u8],
+) -> std::io::Result<Box<dyn WriteFinish<W> + 'a>> {
+    if format == FileFormat::XZ {
+        let mut opt = XzOptions::with_preset(6);
+        opt.set_check_sum_type(CheckType::Crc32);
+        if let Some(filter) = detect_bcj_filter(in_bytes) {
+            opt.prepend_pre_filter(filter, 0);
+        }
+        Ok(Box::new(XzWriter::new(w, opt)?))
+    } else {
+        get_encoder(format, w)
+    }
+}
+
 pub fn get_decoder<'a, R: Read + 'a>(
     format: FileFormat,
     r: R,
@@ -263,21 +282,22 @@ pub fn compress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: RawFd) {
     let mut out_file = unsafe { ManuallyDrop::new(File::from_raw_fd(out_fd)) };
 
     let _ = || -> LoggedResult<()> {
-        let mut encoder = get_encoder(format, out_file.deref_mut())?;
+        let mut encoder = get_encoder_bcj_detection(format, out_file.deref_mut(), in_bytes)?;
         std::io::copy(&mut Cursor::new(in_bytes), encoder.deref_mut())?;
         encoder.finish()?;
         Ok(())
     }();
 }
 
-pub fn decompress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: RawFd) {
+pub fn decompress_bytes(format: FileFormat, in_bytes: &[u8], out_fd: RawFd) -> bool {
     let mut out_file = unsafe { ManuallyDrop::new(File::from_raw_fd(out_fd)) };
 
-    let _ = || -> LoggedResult<()> {
+    (|| -> LoggedResult<()> {
         let mut decoder = get_decoder(format, in_bytes)?;
         std::io::copy(decoder.as_mut(), out_file.deref_mut())?;
         Ok(())
-    }();
+    })()
+    .is_ok()
 }
 
 // Command-line entry points
@@ -376,8 +396,13 @@ pub(crate) fn compress_cmd(
         FileOrStd::File(outfile)
     };
 
-    let mut encoder = get_encoder(method, output.as_file())?;
-    std::io::copy(&mut input.as_file(), encoder.as_mut())?;
+    let mut buf = [0u8; 4096];
+    let len = input.as_file().read(&mut buf)?;
+    let buf = &buf[..len];
+
+    let mut encoder = get_encoder_bcj_detection(method, output.as_file(), buf)?;
+    let mut reader = Cursor::new(buf).chain(input.as_file());
+    std::io::copy(&mut reader, encoder.as_mut())?;
     encoder.finish()?;
 
     if rm_in {

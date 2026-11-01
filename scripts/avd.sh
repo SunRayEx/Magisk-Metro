@@ -11,7 +11,6 @@ emu_args_base="-no-window -no-audio -no-boot-anim -gpu software -read-only -no-s
 log_args="-show-kernel -logcat '' -logcat-output logcat.log"
 avd_name='magisk_avd'
 emu_args=
-emu_pid=
 
 atd_min_api=30
 atd_max_api=36
@@ -62,22 +61,11 @@ wait_for_boot() {
   return 1
 }
 
-wait_emu() {
-  local which_pid
-
-  timeout $boot_timeout bash -c wait_for_boot &
-  local wait_pid=$!
-
-  # Handle the case when emulator dies earlier than timeout
-  wait -p which_pid -n $emu_pid $wait_pid
-  [ $which_pid -eq $wait_pid ]
-}
-
 dump_vars() {
   local val
-  for name in $@ emu_args; do
+  for name in $@; do
     eval val=\$$name
-    echo $name=\"$val\"\;
+    echo local $name=\"$val\"\;
   done
   # Always export AVD_TEST_LOG
   echo export AVD_TEST_LOG=\"$AVD_TEST_LOG\";
@@ -91,7 +79,7 @@ path_to_pkg() {
   echo "${1////;}"
 }
 
-resolve_vars() {
+parse_args() {
   set +x
   local return_vals="$1"
   shift
@@ -185,8 +173,12 @@ resolve_vars() {
   local avd_pkg="system-images/android-$ver/$type/$arch"
   local ramdisk="$ANDROID_HOME/$avd_pkg/ramdisk.img"
 
-  # Dump variables to output
-  dump_vars $arg_list
+  # Dump global variables
+  echo emu_args=\"$emu_args\"
+  echo OPTIND=$OPTIND
+
+  # Dump local variables
+  dump_vars $return_vals
 }
 
 dl_emu() {
@@ -203,9 +195,10 @@ setup_emu() {
 }
 
 test_emu() {
-  local variant=$1
+  local apk=$1
+  local image=$2
 
-  local magisk_args="-ramdisk magisk_${variant}.img -feature -SystemAsRoot"
+  local magisk_args="-ramdisk $image -feature -SystemAsRoot"
 
   if [ -n "$AVD_TEST_LOG" ]; then
     rm -f logcat.log
@@ -216,23 +209,25 @@ test_emu() {
   local emu_pid=$!
   wait_for_boot $emu_pid
 
-  emu_pid=$!
-  wait_emu
-
-  run_setup $variant
+  run_setup $apk
 
   adb reboot
   wait_for_boot $emu_pid
 
   run_tests
 
-  kill -INT $emu_pid
-  wait $emu_pid
+  adb emu kill
+  wait
 }
 
 test_main() {
-  local ver avd_pkg ramdisk
-  eval $(resolve_vars "ver avd_pkg ramdisk" $1 $2)
+  local vars
+  vars=$(parse_args "ver avd_pkg ramdisk" "$@")
+  eval "$vars"
+
+  # Shift off the options we just parsed so that "$@" only contains the remaining positional arguments
+  shift $((OPTIND - 1))
+  local apks=($(print_apks "$@"))
 
   # Specify an explicit port so that tests can run with other emulators running at the same time
   local emu_port=5682
@@ -251,32 +246,28 @@ test_main() {
   wait_for_boot $!
 
   # Patch images
-  if [ -z "$AVD_TEST_SKIP_DEBUG" ]; then
-    ./build.py -v avd_patch "$ramdisk" magisk_debug.img
-  fi
-  if [ -z "$AVD_TEST_SKIP_RELEASE" ]; then
-    ./build.py -vr avd_patch "$ramdisk" magisk_release.img
-  fi
+  local images=()
+  for apk in "${apks[@]}"; do
+    images+=("magisk-$(basename $apk .apk).img")
+    ./build.py -v patch --avd --apk "$apk" "$ramdisk" "${images[-1]}"
+  done
 
-  kill -INT $emu_pid
-  wait $emu_pid
+  adb emu kill
+  wait
 
-  if [ -z "$AVD_TEST_SKIP_DEBUG" ]; then
-    print_title "* Testing $avd_pkg (debug)"
-    test_emu debug
-  fi
-
-  if [ -z "$AVD_TEST_SKIP_RELEASE" ]; then
-    print_title "* Testing $avd_pkg (release)"
-    test_emu release
-  fi
+  for i in "${!apks[@]}"; do
+    print_title "* Testing $avd_pkg ($(basename ${apks[i]}))"
+    test_emu ${apks[i]} ${images[i]}
+  done
 
   cleanup
 }
 
 run_main() {
-  local ver avd_pkg
-  eval $(resolve_vars "ver avd_pkg" $1 $2)
+  local vars
+  vars=$(parse_args "ver avd_pkg" "$@")
+  eval "$vars"
+
   setup_emu "$avd_pkg" $ver
   print_title "* Launching $avd_pkg"
   local emu_log=$(mktemp)
@@ -294,8 +285,10 @@ run_main() {
 }
 
 dl_main() {
-  local avd_pkg
-  eval $(resolve_vars "avd_pkg" $1 $2)
+  local vars
+  vars=$(parse_args "avd_pkg" "$@")
+  eval "$vars"
+
   print_title "* Downloading $avd_pkg"
   dl_emu "$avd_pkg"
 }
@@ -305,7 +298,6 @@ live_test_main() {
   for apk in "${apks[@]}"; do
     # Cleanup
     adb shell pm uninstall com.topjohnwu.magisk || true
-    adb shell pm uninstall repackaged.com.topjohnwu.magisk.test || true
     adb shell /system/xbin/su 0 rm -rf /data/adb/modules
 
     # "Install" Magisk
@@ -322,6 +314,20 @@ live_test_main() {
   done
 }
 
+app_test_main() {
+  local apks=($(print_apks "$@"))
+  local pkg='com.topjohnwu.magisk.test'
+  local app="$pkg/$pkg.AppTestRunner"
+  for apk in "${apks[@]}"; do
+    # Cleanup
+    adb shell pm uninstall com.topjohnwu.magisk || true
+    adb install --user current -r -g $apk
+    adb install --user current -r -g out/test.apk
+    am_instrument '.AppTest' $app
+  done
+}
+
+
 case "$1" in
   test )
     shift
@@ -333,6 +339,11 @@ case "$1" in
     shift
     set -x
     live_test_main "$@"
+    ;;
+  app-test )
+    shift
+    set -x
+    app_test_main "$@"
     ;;
   run )
     shift

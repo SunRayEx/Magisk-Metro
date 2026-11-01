@@ -17,19 +17,15 @@
     <string name="loading">Učitavanje…</string>
     <string name="update">Ažuriranje</string>
     <string name="not_available">N/A</string>
-    <string name="hide">Sakrij</string>
-    <string name="home_package">Paket</string>
-    <string name="home_app_title">Apl.</string>
-    <string name="reinstall">Ponovo instaliraj</string>
+    <string name="hide">Sakrij</string>    <string name="home_package">Paket</string>
+    <string name="home_app_title">Apl.</string>    <string name="reinstall">Ponovo instaliraj</string>
     <string name="home_notice_content">Preuzmite Magisk SAMO sa zvanične GitHub stranice. Fajlovi iz nepoznatih izvora mogu biti maliciozni!</string>
     <string name="home_support_title">Podržite nas</string>
     <string name="home_follow_title">Zapratite nas</string>
     <string name="home_item_source">Izvor</string>
-    <string name="home_support_content">Magisk jeste i uvek će biti besplatan i open source. Međutim, možete pokazati da Vam je stalo svojom donacijom.</string>
-    <string name="home_installed_version">Instalirano</string>
+    <string name="home_support_content">Magisk jeste i uvek će biti besplatan i open source. Međutim, možete pokazati da Vam je stalo svojom donacijom.</string>    <string name="home_installed_version">Instalirano</string>
     <string name="home_latest_version">Najnovije</string>
-    <string name="invalid_update_channel">Nevalidan kanal ažuriranja</string>
-    <string name="uninstall_magisk_title">Deinstaliraj Magisk</string>
+    <string name="invalid_update_channel">Nevalidan kanal ažuriranja</string>    <string name="uninstall_magisk_title">Deinstaliraj Magisk</string>
     <string name="uninstall_magisk_msg">Svi moduli će biti onemogućeni/uklonjeni!\nKoren će biti uklonjen!\nSvako neenkriptovano interno skladište će upotrebom Magisk-a biti ponovo enkriptovano!</string>
 
     <!--Install-->
@@ -41,22 +37,17 @@
     <string name="install_next">Naredno</string>
     <string name="install_start">Počnimo</string>
     <string name="manager_download_install">Pritisni da preuzmeš i instaliraš</string>
-    <string name="direct_install">Direktna instalacija (Preporučeno)</string>
-    <string name="install_inactive_slot">Instalacija na neaktivan slot (Nakon OTA)</string>
-    <string name="install_inactive_slot_msg">Vaš uređaj će biti FORSIRAN da se pokrene na trenutno neaktivnom slotu nakon ponovnog pokretanja!\nKoristite opciju samo kad se OTA završi.\nNastavi?</string>
+    <string name="direct_install">Direktna instalacija (Preporučeno)</string>    <string name="install_inactive_slot">Instalacija na neaktivan slot (Nakon OTA)</string>    <string name="install_inactive_slot_msg">Vaš uređaj će biti FORSIRAN da se pokrene na trenutno neaktivnom slotu nakon ponovnog pokretanja!\nKoristite opciju samo kad se OTA završi.\nNastavi?</string>
     <string name="setup_title">Dodatne postavke</string>
-    <string name="select_patch_file">Izaberite fajl</string>
-    <string name="patch_file_msg">Izaberite sliku (*.img) ili ODIN tarfile (*.tar) ili payload.bin (*.bin)</string>
+    <string name="download_dialog_title">Unesi URL slike</string>
+    <string name="download_dialog_msg">Potpuna OTA slika ili fabrička slika</string>
     <string name="reboot_delay_toast">Ponovo pokretanje za 5 sekundi…</string>
     <string name="flash_screen_title">Instalacija</string>
 
     <!--Superuser-->
     <string name="su_request_title">Super-korisnički zahtev</string>
     <string name="touch_filtered_warning">Magisk ne može da verifikuje vaš odgovor, jer aplikacija prikriva super-korisnički zahtev.</string>
-    <string name="deny">Zabrani</string>
     <string name="prompt">Zahtev</string>
-    <string name="restrict">Ograniči</string>
-    <string name="grant">Dozvoli</string>
     <string name="su_warning">Pruža potpun pristup vašem uređaju.\nZabranite ako niste sigurni!</string>
     <string name="forever">Zauvek</string>
     <string name="once">Jednom</string>
@@ -64,6 +55,19 @@
     <string name="twentymin">20 min</string>
     <string name="thirtymin">30 min</string>
     <string name="sixtymin">60 min</string>
+
+
+    <string name="deny">Zabrani</string>
+
+    <string name="restrict">Ograniči</string>
+    <string name="grant">Dozvoli</string>
+
+
+
+
+
+
+
     <string name="su_allow_toast">%1$s je dobio prava na super-korisnika</string>
     <string name="su_deny_toast">%1$s nije dobio prava na super-korisnika</string>
     <string name="su_snack_grant">Super-korisnička prava od %1$s su pružena</string>
@@ -75,7 +79,11 @@
     <string name="su_revoke_title">Opozovi?</string>
     <string name="su_revoke_msg">Potvrdi da opozoveš prava na super-korisnika od %1$s?</string>
     <string name="toast">Toast</string>
+    <string name="notification">Notifikacija</string>
     <string name="none">Ništa</string>
+    <string name="su_notification_channel">Super-korisničke notifikacije</string>
+    <string name="su_notification_granted_title">Super-korisnik odobren</string>
+    <string name="su_notification_denied_title">Super-korisnik odbijen</string>
     <string name="superuser_toggle_notification">Notifikacije</string>
     <string name="superuser_toggle_revoke">Opozovi</string>
     <string name="superuser_policy_none">Nijedna aplikacija nije tražila permisije za super-korisnika još uvek.</string>
@@ -85,20 +93,26 @@
     <string name="log_data_magisk_none">Magisk logovi su prazni, to je čudno.</string>
     <string name="menuSaveLog">Sačuvaj log</string>
     <string name="menuClearLog">Ukloni log</string>
-    <string name="logs_cleared">Log uspešno uklonjen</string>
-    <string name="back">Nazad</string>
-    <string name="enabled">Omogućeno</string>
+    <string name="logs_cleared">Log uspešno uklonjen</string>    <string name="back">Nazad</string>    <string name="enabled">Omogućeno</string>
     <string name="disabled">Onemogućeno</string>
     <string name="pid">PID: %1$d</string>
     <string name="target_uid">Ciljani UID: %1$d</string>
     <string name="target_pid">Ciljani PID: %s</string>
     <string name="selinux_context">SELinux kontekst: %s</string>
     <string name="supp_group">Dopunska grupa: %s</string>
+    <string name="granted">Odobreno</string>
+    <string name="denied">Odbijeno</string>
 
     <!--MagiskHide-->
     <string name="show_system_app">Prikaži sistemske apl.</string>
     <string name="show_os_app">Prikaži apl. OS-a</string>
     <string name="hide_filter_hint">Filtriraj po imenu</string>
+    <string name="sort_by_name">Sortiraj po imenu</string>
+    <string name="sort_by_package_name">Sortiraj po imenu paketa</string>
+    <string name="sort_by_install_time">Sortiraj po vremenu instalacije</string>
+    <string name="sort_by_update_time">Sortiraj po vremenu ažuriranja</string>
+    <string name="sort_reverse">Obrnuti redosled</string>
+    <string name="menu_sort">Sortiranje</string>
     <string name="hide_search">Pretraga</string>
 
     <!--Module-->
@@ -124,16 +138,12 @@
 
     <!--Settings-->
     <string name="settings_dark_mode_title">Tema</string>
-    <string name="settings_dark_mode_message">Izaberite temu koja vam najviše odgovara!</string>
+    <string name="settings_dark_mode_message">Izaberite temu koja Vam najviše odgovara!</string>
     <string name="settings_dark_mode_light">Uvek svetlo</string>
     <string name="settings_dark_mode_system">Prati sistem</string>
     <string name="settings_dark_mode_dark">Uvek tamno</string>
     <string name="settings_download_path_title">Putanja za preuzimanje</string>
     <string name="settings_download_path_message">Fajlovi će biti sačuvani na %1$s</string>
-    <string name="settings_hide_app_title">Sakrij Magisk apl.</string>
-    <string name="settings_hide_app_summary">Instaliraj proxy aplikaciju sa nasumičnim ID-jem paketa i prilagođenom labelom</string>
-    <string name="settings_restore_app_title">Povrati Magisk apl.</string>
-    <string name="settings_restore_app_summary">Otkrij apl. i povrati originalni APK</string>
     <string name="language">Jezik</string>
     <string name="system_default">(Podrazumevano sistemski)</string>
     <string name="settings_check_update_title">Proveri ažuriranja</string>
@@ -147,39 +157,25 @@
     <string name="settings_zygisk_summary">Pokreni delove Magisk-a u Zygote daemon-u</string>
     <string name="settings_denylist_title">Sprovedi listu zabrana</string>
     <string name="settings_denylist_summary">Procesi na listi zabrana će povratiti sve Magisk izmene</string>
-    <string name="settings_denylist_config_title">Konfiguriši listu zabrana</string>
-    <string name="settings_denylist_config_summary">Izaberi procese koji će biti na listi zabrana</string>
     <string name="settings_hosts_title">Bezsistemski domaćini (hosts)</string>
     <string name="settings_hosts_summary">Podrška bezsistemskih domaćina za aplikacije blokiranja reklama</string>
     <string name="settings_hosts_toast">Modul bezsistemskih domaćina dodat</string>
-    <string name="settings_app_name_hint">Novo ime</string>
-    <string name="settings_app_name_helper">Apl. će biti spakovana pod ovim imenom</string>
-    <string name="settings_app_name_error">Nevalidan format</string>
-    <string name="settings_su_app_adb">Aplikacije i ADB</string>
-    <string name="settings_su_app">Samo aplikacije</string>
-    <string name="settings_su_adb">Samo ADB</string>
-    <string name="settings_su_disable">Onemogućeno</string>
-    <string name="settings_su_request_10">10 sekundi</string>
-    <string name="settings_su_request_15">15 sekundi</string>
-    <string name="settings_su_request_20">20 sekundi</string>
-    <string name="settings_su_request_30">30 sekundi</string>
-    <string name="settings_su_request_45">45 sekundi</string>
-    <string name="settings_su_request_60">60 sekundi</string>
-    <string name="superuser_access">Pristup super-korisnika</string>
-    <string name="auto_response">Automatski odgovor</string>
-    <string name="request_timeout">Istek zahteva</string>
     <string name="superuser_notification">Notifikacije super-korisnika</string>
-    <string name="settings_su_reauth_title">Ponovo odobri nakon ažuriranja</string>
-    <string name="settings_su_reauth_summary">Ponovo traži permisije super-korisnika nakon ažuriranja aplikacija</string>
-    <string name="settings_su_tapjack_title">Zaštita od tapjacking-a</string>
-    <string name="settings_su_tapjack_summary">Prompt dijalog super-korisnika neće reagovati dok je prikriven drugim prozorom ili overlay-em</string>
+
+
     <string name="settings_su_auth_title">Autentifikacija korisnika</string>
     <string name="settings_su_auth_summary">Traži autentifikaciju korisnika tokom zahteva super-korisnika</string>
     <string name="settings_su_auth_insecure">Nijedan metod autentifikacije nije podešen na uređaju</string>
     <string name="settings_su_restrict_title">Ograniči korenske sposobnosti</string>
     <string name="settings_su_restrict_summary">Podrazumevano ograničava apl. super-korisnika. Upozorenje: ovo će većinu aplikacija skršiti. Ne omogućavaj, osim ako znaš šta radiš.</string>
     <string name="settings_customization">Prilagođavanje</string>
-    <string name="setting_add_shortcut_summary">Dodaj lepu prečicu na početni ekran u slučaju da se ime i ikonica ne prepoznaju lako nakon skrivanja aplikacije</string>
+    <string name="settings_color_mode">Režim boje</string>
+    <string name="color_mode_system">Sistemsko</string>
+    <string name="color_mode_light">Svetlo</string>
+    <string name="color_mode_dark">Tamno</string>
+    <string name="color_mode_monet_system">Monet (Sistemsko)</string>
+    <string name="color_mode_monet_light">Monet (Svetlo)</string>
+    <string name="color_mode_monet_dark">Monet (Tamno)</string>
     <string name="settings_doh_title">DNS preko HTTPS-a</string>
     <string name="settings_doh_description">Zaobilazno rešenje DNS trovanja u nekim nacijama</string>
     <string name="settings_random_name_title">Nasumično ime na izlazu</string>
@@ -220,7 +216,6 @@
     <string name="flashing">Flešovanje…</string>    <string name="done">Završeno!</string>
     <string name="done_action">Pokretanje akcije %1$s završeno</string>
     <string name="failure">Neuspešno!</string>
-    <string name="hide_app_title">Skrivanje Magisk aplikacije…</string>
     <string name="open_link_failed_toast">Nije pronađena aplikacija za otvaranje linka</string>
     <string name="complete_uninstall">Kompletna deinstalacija</string>
     <string name="restore_img">Povrati slike</string>
@@ -238,15 +233,9 @@
     <string name="unsupport_system_app_msg">Pokretanje aplikacije kao sistemske nije podržano. Molimo postavite aplikaciju da bude korisnička.</string>
     <string name="unsupport_other_su_msg">Detektovan \"su\" binary koji nije Magisk-ov. Molimo uklonite konkurentno korensko rešenje i/ili reinstalirajte Magisk.</string>
     <string name="unsupport_external_storage_msg">Magisk je instaliran na eksterno skladište. Molimo pomerite apl. u interno skladište.</string>
-    <string name="unsupport_nonroot_stub_msg">Skrivena Magisk aplikacija ne može nastaviti sa radom jer je koren izgubljen. Molimo povratite originalni APK.</string>
-    <string name="unsupport_nonroot_stub_title">@string/settings_restore_app_title</string>
     <string name="external_rw_permission_denied">Dozvolite permisiju za skladište da biste omogućili ovu funkcionalnost</string>
     <string name="post_notifications_denied">Dozvolite permisiju za notifikacije da biste omogućili ovu funkcionalnost</string>
     <string name="install_unknown_denied">Dozvolite \"instaliranje nepoznatih aplikacija\" da biste omogućili ovu funkcionalnost</string>
-    <string name="add_shortcut_title">Dodaj prečicu na početni ekran</string>
-    <string name="add_shortcut_msg">Nakon skrivanja aplikacije, njeno ime i ikonicu ćete teško prepoznati. Želite li dodati lepu prečicu na početni ekran?</string>
     <string name="app_not_found">Nije pronađena aplikacija za ovu akciju</string>
     <string name="reboot_apply_change">Ponovo pokreni da primeniš izmene</string>
-    <string name="restore_app_confirmation">Ovo će vratiti skrivenu aplikaciju na originalnu. Da li stvarno to želite?</string>
-
 </resources>

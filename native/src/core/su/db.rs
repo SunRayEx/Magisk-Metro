@@ -1,8 +1,8 @@
 use crate::daemon::{
-    AID_APP_END, AID_APP_START, AID_ROOT, AID_SHELL, MagiskD, to_app_id, to_user_id,
+    AID_APP_END, AID_APP_START, AID_ROOT, MagiskD, to_app_id, to_user_id,
 };
 use crate::db::DbArg::Integer;
-use crate::db::{MultiuserMode, RootAccess, SqlTable, SqliteResult, SqliteReturn};
+use crate::db::{MultiuserMode, SqlTable, SqliteResult, SqliteReturn};
 use crate::ffi::{DbValues, SuPolicy};
 use base::ResultExt;
 
@@ -12,20 +12,12 @@ impl Default for SuPolicy {
     }
 }
 
+#[derive(Copy, Clone, Default)]
 pub struct RootSettings {
     pub policy: SuPolicy,
     pub log: bool,
     pub notify: bool,
-}
-
-impl Default for RootSettings {
-    fn default() -> Self {
-        RootSettings {
-            policy: SuPolicy::Query,
-            log: true,
-            notify: true,
-        }
-    }
+    pub until: i64,
 }
 
 impl SqlTable for RootSettings {
@@ -36,6 +28,7 @@ impl SqlTable for RootSettings {
                 "policy" => self.policy.repr = val,
                 "logging" => self.log = val != 0,
                 "notification" => self.notify = val != 0,
+                "until" => self.until = values.get_text(i as i32).parse().unwrap_or(0),
                 _ => {}
             }
         }
@@ -53,7 +46,7 @@ impl SqlTable for UidList {
 impl MagiskD {
     pub fn get_root_settings(&self, uid: i32, settings: &mut RootSettings) -> SqliteResult<()> {
         self.db_exec_with_rows(
-            "SELECT policy, logging, notification FROM policies \
+            "SELECT policy, logging, notification, until FROM policies \
              WHERE uid=? AND (until=0 OR until>strftime('%s', 'now'))",
             &[Integer(uid as i64)],
             settings,
@@ -101,19 +94,14 @@ impl MagiskD {
             Err(_) => return false,
         };
 
-        // Check user root access settings
-        match cfg.root_access {
-            RootAccess::Disabled => return false,
-            RootAccess::AppsOnly if uid == AID_SHELL => return false,
-            RootAccess::AdbOnly if uid != AID_SHELL => return false,
-            _ => {}
-        }
-
         // Check multiuser settings
         match cfg.multiuser_mode {
             MultiuserMode::OwnerOnly if to_user_id(uid) != 0 => return false,
             MultiuserMode::OwnerManaged => uid = to_app_id(uid),
             _ => {}
+        }
+        if to_app_id(uid) < AID_APP_START {
+            uid = to_app_id(uid);
         }
 
         let mut granted = false;

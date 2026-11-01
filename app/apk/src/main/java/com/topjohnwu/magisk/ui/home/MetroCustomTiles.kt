@@ -12,6 +12,7 @@ data class MetroCustomTile(
     val ticker: String,
     val color: String,
     val groupMembers: List<String> = listOf(packageName),
+    val icon: String = "none",
 )
 
 /** Safe, compact preference serialization for arbitrary user-entered text. */
@@ -24,7 +25,7 @@ object MetroCustomTiles {
         .filter(String::isNotBlank)
         .mapNotNull { record ->
             val fields = record.split(SEP)
-            if (fields.size != 6) return@mapNotNull null
+            if (fields.size !in 6..7) return@mapNotNull null
             val rawId = fields[0]
             // Migrate old buggy saves where the id was also Base64-encoded (and possibly
             // double-encoded after repeated saves). New saves keep the id plain.
@@ -40,6 +41,7 @@ object MetroCustomTiles {
                 ticker = decoded[2]!!,
                 color = decoded[3]!!,
                 groupMembers = members,
+                icon = decoded.getOrNull(5)?.takeIf { it in MetroTileIcons.names } ?: "none",
             )
         }
         .toList()
@@ -61,6 +63,7 @@ object MetroCustomTiles {
         ticker: String,
         color: String,
         groupMembers: List<String> = listOf(packageName),
+        icon: String = "none",
     ): MetroCustomTile {
         val tile = MetroCustomTile(
             id = "custom_${UUID.randomUUID()}",
@@ -69,6 +72,7 @@ object MetroCustomTiles {
             ticker = ticker,
             color = color,
             groupMembers = groupMembers.take(9),
+            icon = icon.takeIf { it in MetroTileIcons.names } ?: "none",
         )
         save(load() + tile)
         return tile
@@ -76,6 +80,11 @@ object MetroCustomTiles {
 
     fun remove(id: String) {
         save(load().filterNot { it.id == id })
+    }
+
+    fun setIcon(id: String, icon: String) {
+        val selected = icon.takeIf { it in MetroTileIcons.names } ?: "none"
+        save(load().map { if (it.id == id) it.copy(icon = selected) else it })
     }
 
     private fun save(tiles: List<MetroCustomTile>) {
@@ -86,6 +95,7 @@ object MetroCustomTiles {
                 tile.ticker,
                 tile.color,
                 tile.groupMembers.joinToString(","),
+                tile.icon,
             ).map(::encode)
             tile.id + SEP + encoded.joinToString(SEP)
         }

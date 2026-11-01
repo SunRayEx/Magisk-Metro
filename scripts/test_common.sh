@@ -44,7 +44,7 @@ ensure_android_cli() {
 # $2 = component
 am_instrument() {
   set +x
-  local out=$(adb shell am instrument -w --user 0 -e class "$1" "$2")
+  local out=$(adb shell am instrument -w --user current -e class "$1" "$2")
   echo "$out"
   if grep -q 'OK (' <<< "$out"; then
     set -x
@@ -55,21 +55,15 @@ am_instrument() {
   fi
 }
 
-# $1 = pkg
-wait_for_pm() {
-  sleep 5
-  adb shell pm uninstall $1 || true
-}
-
 run_setup() {
-  local variant=$1
+  local apk=$1
   adb shell 'PATH=$PATH:/debug_ramdisk magisk -v'
 
   # Install the Magisk app
-  adb install -r -g out/app-${variant}.apk
+  adb install --user current -r -g $apk
 
   # Install the test app
-  adb install -r -g out/test.apk
+  adb install --user current -r -g out/test.apk
 
   local app='com.topjohnwu.magisk.test/com.topjohnwu.magisk.test.AppTestRunner'
 
@@ -77,24 +71,18 @@ run_setup() {
   am_instrument '.Environment#setupEnvironment' $app
 }
 
+print_apks() {
+  if [ "$#" -eq 0 ]; then
+    find out -maxdepth 1 -type f -name "app-*.apk" -or -name "apk-*.apk"
+  else
+    echo "$@"
+  fi
+}
+
 run_tests() {
   local pkg='com.topjohnwu.magisk.test'
-  local self="$pkg/$pkg.TestRunner"
   local app="$pkg/$pkg.AppTestRunner"
-  local stub="repackaged.$pkg/$pkg.AppTestRunner"
 
   # Run app tests
-  am_instrument '.MagiskAppTest,.AdditionalTest' $app
-
-  # Test app hiding
-  am_instrument '.AppMigrationTest#testAppHide' $self
-
-  # Make sure it still works
-  am_instrument '.MagiskAppTest' $stub
-
-  # Test app restore
-  am_instrument '.AppMigrationTest#testAppRestore' $self
-
-  # Make sure it still works
-  am_instrument '.MagiskAppTest' $app
+  am_instrument '.SmokeTest,.IntegrationTest' $app
 }

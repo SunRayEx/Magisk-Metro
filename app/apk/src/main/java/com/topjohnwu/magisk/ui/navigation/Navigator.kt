@@ -1,16 +1,15 @@
 package com.topjohnwu.magisk.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 
-class Navigator(initialKey: NavKey) {
-    val backStack: SnapshotStateList<NavKey> = mutableStateListOf(initialKey)
+class Navigator(val backStack: NavBackStack<NavKey>) {
+    constructor(vararg initialKeys: NavKey) : this(NavBackStack(*initialKeys))
 
     /**
      * When set, every pop is offered here first (system back, in-page back buttons and
@@ -23,13 +22,19 @@ class Navigator(initialKey: NavKey) {
     private var bypassInterceptor = false
 
     fun push(key: NavKey) {
+        // Ignore pushing the screen that is already on top (e.g. a double tap, or the same
+        // request delivered twice). Both copies would get the same content key, so they would
+        // share one ViewModel and saved state, and need two back presses to leave.
+        if (backStack.lastOrNull() == key) return
         backStack.add(key)
     }
 
-    fun pop() {
-        val top = backStack.lastOrNull() ?: return
-        if (!bypassInterceptor && popInterceptor?.invoke(top) == true) return
-        backStack.removeLastOrNull()
+    fun pop(): Boolean {
+        if (backStack.size <= 1) return false
+        val top = backStack.last()
+        if (!bypassInterceptor && popInterceptor?.invoke(top) == true) return false
+        backStack.removeAt(backStack.lastIndex)
+        return true
     }
 
     /** Pops without consulting [popInterceptor]; used by whoever intercepted the pop. */
@@ -48,20 +53,22 @@ class Navigator(initialKey: NavKey) {
         val Saver: Saver<Navigator, Any> = listSaver(
             save = { navigator -> navigator.backStack.toList() },
             restore = { savedList ->
-                val initialKey = savedList.firstOrNull() ?: Route.Main
-                Navigator(initialKey).also {
-                    it.backStack.clear()
-                    it.backStack.addAll(savedList)
+                val stack = NavBackStack<NavKey>()
+                if (savedList.isNotEmpty()) {
+                    stack.addAll(savedList)
+                } else {
+                    stack.add(Route.Main)
                 }
+                Navigator(stack)
             }
         )
     }
 }
 
 @Composable
-fun rememberNavigator(startRoute: NavKey): Navigator {
-    return rememberSaveable(startRoute, saver = Navigator.Saver) {
-        Navigator(startRoute)
+fun rememberNavigator(vararg startRoutes: NavKey = arrayOf(Route.Main)): Navigator {
+    return rememberSaveable(saver = Navigator.Saver) {
+        Navigator(*startRoutes)
     }
 }
 

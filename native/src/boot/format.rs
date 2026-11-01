@@ -1,5 +1,6 @@
 use crate::ffi::FileFormat;
 use base::{Utf8CStr, cstr, libc};
+use lzma_rust2::FilterType;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -102,10 +103,9 @@ pub fn fmt_compressed_any(fmt: FileFormat) -> bool {
 const CHROMEOS_MAGIC: &[u8] = b"CHROMEOS";
 const BOOT_MAGIC: &[u8] = b"ANDROID!";
 const VENDOR_BOOT_MAGIC: &[u8] = b"VNDRBOOT";
-const GZIP1_MAGIC: &[u8] = b"\x1f\x8b";
 const GZIP2_MAGIC: &[u8] = b"\x1f\x9e";
-const LZOP_MAGIC: &[u8] = b"\x89LZO";
-const XZ_MAGIC: &[u8] = b"\xfd7zXZ";
+const LZOP_MAGIC: &[u8] = b"\x89LZO\x00\x0d\x0a\x1a\x0a";
+const XZ_MAGIC: &[u8] = b"\xfd7zXZ\x00";
 const BZIP_MAGIC: &[u8] = b"BZh";
 const LZ41_MAGIC: &[u8] = b"\x03\x21\x4c\x18";
 const LZ42_MAGIC: &[u8] = b"\x04\x22\x4d\x18";
@@ -115,6 +115,57 @@ const DTB_MAGIC: &[u8] = b"\xd0\x0d\xfe\xed";
 const DHTB_MAGIC: &[u8] = b"\x44\x48\x54\x42\x01\x00\x00\x00";
 const TEGRABLOB_MAGIC: &[u8] = b"-SIGNED-BY-SIGNBLOB-";
 const ZIMAGE_MAGIC: &[u8] = b"\x18\x28\x6f\x01";
+
+fn crc32_ieee(buf: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &byte in buf {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+fn check_xz(buf: &[u8]) -> bool {
+    // 0..6 : Header magic: 0xFD, '7', 'z', 'X', 'Z', 0x00
+    // 6..8 : Stream Flags (byte 0: reserved 0x00, byte 1: check type 0/1/4/10)
+    // 8..12: CRC32 of stream flags, little endian
+    if buf.len() < 12 || !buf.starts_with(XZ_MAGIC) {
+        return false;
+    }
+    if buf[6] != 0x00 || (buf[7] & 0xf0) != 0 {
+        return false;
+    }
+    let check_id = buf[7] & 0x0f;
+    if !matches!(check_id, 0 | 1 | 4 | 10) {
+        return false;
+    }
+    let Ok(crc_bytes) = buf[8..12].try_into() else {
+        return false;
+    };
+    crc32_ieee(&buf[6..8]) == u32::from_le_bytes(crc_bytes)
+}
+
+fn check_gzip(buf: &[u8]) -> bool {
+    // RFC 1952: ID1=0x1f, ID2=0x8b, CM=8 (deflate), FLG bits 5-7 reserved (0)
+    if buf.len() >= 10 && buf[0] == 0x1f && buf[1] == 0x8b && buf[2] == 8 && (buf[3] & 0xe0) == 0 {
+        return true;
+    }
+    buf.starts_with(GZIP2_MAGIC)
+}
+
+fn check_bzip2(buf: &[u8]) -> bool {
+    // BZIP2 stream: 'B','Z','h' + '1'..='9' + compressed block magic '\x31\x41\x59\x26\x53\x59'
+    buf.len() >= 10
+        && buf.starts_with(BZIP_MAGIC)
+        && (b'1'..=b'9').contains(&buf[3])
+        && &buf[4..10] == b"\x31\x41\x59\x26\x53\x59"
+}
 
 fn guess_lzma(buf: &[u8]) -> bool {
     // 0     : (pb * 5 + lp) * 9 + lc
@@ -140,15 +191,15 @@ pub fn check_fmt(buf: &[u8]) -> FileFormat {
         FileFormat::AOSP
     } else if buf.starts_with(VENDOR_BOOT_MAGIC) {
         FileFormat::AOSP_VENDOR
-    } else if buf.starts_with(GZIP1_MAGIC) || buf.starts_with(GZIP2_MAGIC) {
+    } else if check_gzip(buf) {
         FileFormat::GZIP
     } else if buf.starts_with(LZOP_MAGIC) {
         FileFormat::LZOP
-    } else if buf.starts_with(XZ_MAGIC) {
+    } else if check_xz(buf) {
         FileFormat::XZ
     } else if guess_lzma(buf) {
         FileFormat::LZMA
-    } else if buf.starts_with(BZIP_MAGIC) {
+    } else if check_bzip2(buf) {
         FileFormat::BZIP2
     } else if buf.starts_with(LZ41_MAGIC) || buf.starts_with(LZ42_MAGIC) {
         FileFormat::LZ4
@@ -167,4 +218,51 @@ pub fn check_fmt(buf: &[u8]) -> FileFormat {
     } else {
         FileFormat::UNKNOWN
     }
+}
+
+fn is_raw_arm32(buf: &[u8]) -> bool {
+    // Only inspect the first 256 bytes (up to 64 instructions)
+    let sample = &buf[..buf.len().min(256)];
+    if sample.len() < 64 {
+        return false;
+    }
+    let words = sample.chunks_exact(4);
+    let count = words.len();
+    let arm_cond_count = words
+        .filter(|chunk| {
+            let top_nibble = chunk[3] >> 4;
+            top_nibble == 0xE || top_nibble == 0xF
+        })
+        .count();
+
+    arm_cond_count * 100 / count >= 75
+}
+
+pub fn detect_bcj_filter(buf: &[u8]) -> Option<FilterType> {
+    if buf.len() >= 20 && buf.starts_with(b"\x7fELF") {
+        let e_machine = match buf[5] {
+            1 => u16::from_le_bytes([buf[18], buf[19]]),
+            2 => u16::from_be_bytes([buf[18], buf[19]]),
+            _ => return None,
+        };
+        return match e_machine {
+            0x03 | 0x3E => Some(FilterType::BcjX86),
+            0x28 => Some(FilterType::BcjArmThumb),
+            0xB7 => Some(FilterType::BcjArm64),
+            0xF3 => Some(FilterType::BcjRiscv),
+            _ => None,
+        };
+    }
+
+    if buf.len() >= 0x3C && &buf[0x38..0x3C] == b"ARM\x64" {
+        return Some(FilterType::BcjArm64);
+    }
+    if buf.len() >= 0x34 && &buf[0x30..0x34] == b"RSC\x05" {
+        return Some(FilterType::BcjRiscv);
+    }
+    if is_raw_arm32(buf) {
+        return Some(FilterType::BcjArm);
+    }
+
+    None
 }

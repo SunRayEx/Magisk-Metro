@@ -42,7 +42,7 @@ object PersistentModules {
     /** Must match METROLINK_VERSION in the Zig source; older binaries are replaced on sight. */
     private const val TOOL_VERSION = 2
 
-    fun supported(): Boolean = Info.env.isActive && !isRunningAsStub
+    fun supported(): Boolean = Info.env.isActive
 
     /** Whether the feature is configured by the user (Settings · Misc). */
     fun configured(): Boolean = Config.metroPersistentModules

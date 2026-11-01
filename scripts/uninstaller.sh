@@ -12,7 +12,6 @@ umask 022
 
 OUTFD=$2
 COMMONDIR=$INSTALLER/assets
-CHROMEDIR=$INSTALLER/assets/chromeos
 
 if [ ! -f $COMMONDIR/util_functions.sh ]; then
   echo "! Unable to extract zip file!"
@@ -54,7 +53,6 @@ BINDIR=$INSTALLER/lib/$ABI
 cd $BINDIR
 for file in lib*.so; do mv "$file" "${file:3:${#file}-6}"; done
 cd /
-cp -af $CHROMEDIR/. $BINDIR/chromeos
 chmod -R 755 $BINDIR
 
 ############
@@ -62,8 +60,6 @@ chmod -R 755 $BINDIR
 ############
 
 cd $BINDIR
-
-CHROMEOS=false
 
 ui_print "- Unpacking boot image"
 # Dump image for MTD/NAND character device boot partitions
@@ -77,10 +73,6 @@ fi
 case $? in
   1 )
     abort "! Unsupported/Unknown image format"
-    ;;
-  2 )
-    ui_print "- ChromeOS boot image detected"
-    CHROMEOS=true
     ;;
 esac
 
@@ -129,8 +121,6 @@ case $((STATUS & 3)) in
         rm -f ramdisk.cpio
       fi
       ./magiskboot repack $BOOTIMAGE
-      # Sign chromeos boot
-      $CHROMEOS && sign_chromeos
       ui_print "- Flashing restored boot image"
       flash_image new-boot.img $BOOTIMAGE || abort "! Insufficient partition size"
     fi

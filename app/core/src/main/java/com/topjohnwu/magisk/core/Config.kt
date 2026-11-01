@@ -1,6 +1,5 @@
 package com.topjohnwu.magisk.core
 
-import android.os.Bundle
 import androidx.core.content.edit
 import com.topjohnwu.magisk.core.di.ServiceLocator
 import com.topjohnwu.magisk.core.model.ColorMode
@@ -11,28 +10,24 @@ import kotlinx.coroutines.GlobalScope
 
 object Config : PreferenceConfig, DBConfig {
 
-    override val stringDB get() = ServiceLocator.stringDB
     override val settingsDB get() = ServiceLocator.settingsDB
     override val context get() = ServiceLocator.deContext
     override val coroutineScope get() = GlobalScope
 
     object Key {
         // db configs
-        const val ROOT_ACCESS = "root_access"
         const val SU_MULTIUSER_MODE = "multiuser_mode"
         const val SU_MNT_NS = "mnt_ns"
         const val SU_BIOMETRIC = "su_biometric"
         const val ZYGISK = "zygisk"
         const val BOOTLOOP = "bootloop"
-        const val SU_MANAGER = "requester"
-        const val KEYSTORE = "keystore"
 
         // prefs
         const val SU_REQUEST_TIMEOUT = "su_request_timeout"
         const val SU_AUTO_RESPONSE = "su_auto_response"
-        const val SU_NOTIFICATION = "su_notification"
         const val SU_REAUTH = "su_reauth"
         const val SU_TAPJACK = "su_tapjack"
+        const val SU_NOTIFICATION = "su_notification"
         const val SU_RESTRICT = "su_restrict"
         const val CHECK_UPDATES = "check_update"
         const val RELEASE_CHANNEL = "release_channel"
@@ -44,7 +39,6 @@ object Config : PreferenceConfig, DBConfig {
         const val DOWNLOAD_DIR = "download_dir"
         const val SAFETY = "safety_notice"
         const val THEME_ORDINAL = "theme_ordinal"
-        const val ASKED_HOME = "asked_home"
         const val DOH = "doh"
         const val RAND_NAME = "rand_name"
         const val METRO_TILE_CUSTOMIZATION = "metro_tile_customization"
@@ -60,9 +54,6 @@ object Config : PreferenceConfig, DBConfig {
         const val METRO_WALLPAPER_ENABLED = "metro_wallpaper_enabled"
         const val METRO_WALLPAPER_BLUR = "metro_wallpaper_blur"
         const val METRO_WALLPAPER_ACCENT = "metro_wallpaper_accent"
-
-        val NO_MIGRATION = setOf(ASKED_HOME, SU_REQUEST_TIMEOUT,
-            SU_AUTO_RESPONSE, SU_REAUTH, SU_TAPJACK)
     }
 
     object OldValue {
@@ -83,12 +74,6 @@ object Config : PreferenceConfig, DBConfig {
         const val DEBUG_CHANNEL = 2
         const val CUSTOM_CHANNEL = 3
 
-        // root access mode
-        const val ROOT_ACCESS_DISABLED = 0
-        const val ROOT_ACCESS_APPS_ONLY = 1
-        const val ROOT_ACCESS_ADB_ONLY = 2
-        const val ROOT_ACCESS_APPS_AND_ADB = 3
-
         // su multiuser
         const val MULTIUSER_MODE_OWNER_ONLY = 0
         const val MULTIUSER_MODE_OWNER_MANAGED = 1
@@ -102,6 +87,7 @@ object Config : PreferenceConfig, DBConfig {
         // su notification
         const val NO_NOTIFICATION = 0
         const val NOTIFICATION_TOAST = 1
+        const val NOTIFICATION_STATUS_BAR = 2
 
         // su auto response
         const val SU_PROMPT = 0
@@ -117,7 +103,6 @@ object Config : PreferenceConfig, DBConfig {
     @JvmField var recovery = false
     var denyList = false
 
-    var askedHome by preference(Key.ASKED_HOME, false)
     var bootloop by dbSettings(Key.BOOTLOOP, 0)
 
     var safetyNotice by preference(Key.SAFETY, true)
@@ -174,61 +159,26 @@ object Config : PreferenceConfig, DBConfig {
         }
 
     var zygisk by dbSettings(Key.ZYGISK, Info.isEmulator)
-    var suManager by dbStrings(Key.SU_MANAGER, "", true)
-    var keyStoreRaw by dbStrings(Key.KEYSTORE, "", true)
-
     var suDefaultTimeout by preferenceStrInt(Key.SU_REQUEST_TIMEOUT, 10)
     var suAutoResponse by preferenceStrInt(Key.SU_AUTO_RESPONSE, Value.SU_PROMPT)
+    var suReAuth by preference(Key.SU_REAUTH, false)
+    var suTapjack by preference(Key.SU_TAPJACK, true)
     var suNotification by preferenceStrInt(Key.SU_NOTIFICATION, Value.NOTIFICATION_TOAST)
-    var rootMode by dbSettings(Key.ROOT_ACCESS, Value.ROOT_ACCESS_APPS_AND_ADB)
     var suMntNamespaceMode by dbSettings(Key.SU_MNT_NS, Value.NAMESPACE_MODE_REQUESTER)
     var suMultiuserMode by dbSettings(Key.SU_MULTIUSER_MODE, Value.MULTIUSER_MODE_OWNER_ONLY)
     private var suBiometric by dbSettings(Key.SU_BIOMETRIC, false)
     var suAuth
-        get() = Info.isDeviceSecure && suBiometric
+        // Credential availability must not silently disable a configured security gate.
+        get() = suBiometric
         set(value) {
             suBiometric = value
         }
-    var suReAuth by preference(Key.SU_REAUTH, false)
-    var suTapjack by preference(Key.SU_TAPJACK, true)
     var suRestrict by preference(Key.SU_RESTRICT, false)
 
     private const val SU_FINGERPRINT = "su_fingerprint"
     private const val UPDATE_CHANNEL = "update_channel"
 
-    fun toBundle(): Bundle {
-        val map = prefs.all - Key.NO_MIGRATION
-        return Bundle().apply {
-            for ((key, value) in map) {
-                when (value) {
-                    is String -> putString(key, value)
-                    is Int -> putInt(key, value)
-                    is Boolean -> putBoolean(key, value)
-                }
-            }
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun fromBundle(bundle: Bundle) {
-        val keys = bundle.keySet().apply { removeAll(Key.NO_MIGRATION) }
-        prefs.edit {
-            for (key in keys) {
-                when (val value = bundle.get(key)) {
-                    is String -> putString(key, value)
-                    is Int -> putInt(key, value)
-                    is Boolean -> putBoolean(key, value)
-                }
-            }
-        }
-    }
-
-    fun init(bundle: Bundle?) {
-        // Only try to load prefs when fresh install
-        if (bundle != null && prefs.all.isEmpty()) {
-            fromBundle(bundle)
-        }
-
+    fun init() {
         prefs.edit {
             // Migrate su_fingerprint
             if (prefs.getBoolean(SU_FINGERPRINT, false))

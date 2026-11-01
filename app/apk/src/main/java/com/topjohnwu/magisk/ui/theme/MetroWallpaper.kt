@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -176,13 +177,15 @@ private fun decode(context: Context, uriString: String, blurLevel: Int): MetroWa
     val halfH = (base.height * 0.5f).roundToInt().coerceAtLeast(1)
     val small = Bitmap.createScaledBitmap(base, halfW, halfH, true)
     val radius = blurRadiusPx(blurLevel)
+    // At zero blur, keep the original sampled image. Reusing the half-resolution glass
+    // bitmap here makes a sharp wallpaper look soft even though no blur is requested.
     val blurred = if (radius >= 1) {
         val px = IntArray(halfW * halfH)
         small.getPixels(px, 0, halfW, 0, 0, halfW, halfH)
         gaussianApproxBlur(px, halfW, halfH, radius)
         Bitmap.createBitmap(px, halfW, halfH, Bitmap.Config.ARGB_8888)
     } else {
-        small
+        base
     }
 
     val (accent, onAccent) = extractAccent(base)
@@ -315,6 +318,13 @@ private fun extractAccent(bmp: Bitmap): Pair<Int, Int> {
 }
 
 /**
+ * True while [MetroWallpaperBackdrop] draws the secondary-page white veil itself. Pages then
+ * skip their own white layer in [metroScreenBackground], so the veil is applied once and
+ * secondary pages keep the same transparency as the home page.
+ */
+val LocalMetroBackdropVeil = compositionLocalOf { false }
+
+/**
  * Full-window wallpaper drawn behind NavDisplay: with it enabled, every screen's own
  * background becomes translucent, so home and secondary pages share one continuous
  * backdrop with no per-page image wiring.
@@ -363,6 +373,7 @@ fun Modifier.metroScreenBackground(): Modifier {
     val wallpaper = MetroWallpaper.active
     val dark = isSystemInDarkTheme()
     val background = MaterialTheme.colorScheme.background
+    val backdropVeil = LocalMetroBackdropVeil.current
     if (!wallpaper) return this.background(background)
     // Readability treatment over the photo, shared by home and every secondary page:
     // a light veil in light mode (white scrim) or a dark veil in dark mode, topped with
@@ -370,15 +381,22 @@ fun Modifier.metroScreenBackground(): Modifier {
     // Draw both layers in one pass. This keeps the veil behind page content while
     // avoiding a later opaque background modifier covering the white layer.
     return this.drawBehind {
-        drawRect(Color.White.copy(alpha = if (dark) 0.18f else 0.76f))
-        drawRect(background.copy(alpha = if (dark) 0.28f else 0.18f))
+        // The backdrop already drew this layer on secondary pages; drawing it again would
+        // stack two veils and make the wallpaper nearly opaque.
+        if (!backdropVeil) drawRect(Color.White.copy(alpha = if (dark) 0.18f else 0.76f))
+        // Scale the scheme colour's OWN alpha: in wallpaper mode background is
+        // Color.Transparent (black at alpha 0), and copy(alpha = x) turned it into an
+        // 18-28% black layer that greyed every page's white veil.
+        val tint = background.copy(alpha = background.alpha * if (dark) 0.28f else 0.18f)
+        if (tint.alpha > 0f) drawRect(tint)
     }
 }
 
 /** Tile fill over the blurred wallpaper: a neutral dark veil for text contrast that
  *  recedes slightly as blur increases, plus a whisper of the tile's own accent so the
  *  board keeps a hint of colour identity. The photo stays clearly visible. */
-private fun glassVeilAlpha(blurLevel: Int): Float = 0.34f + 0.16f * (1f - blurLevel / 100f)
+private fun glassVeilAlpha(blurLevel: Int): Float =
+    0.16f + 0.18f * (1f - blurLevel / 100f)
 
 /**
  * Frosted-glass fill for a Start tile: samples the region of the pre-blurred wallpaper
@@ -430,7 +448,7 @@ fun MetroTileGlass(color: Color, tileRect: Rect?) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(color.copy(alpha = 0.18f)),
+                .background(color.copy(alpha = 0.10f))
         )
     }
 }

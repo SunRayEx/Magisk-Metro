@@ -3,6 +3,7 @@ package com.topjohnwu.magisk.ui.home
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.R as CoreR
 import com.topjohnwu.magisk.ui.navigation.Route
+import com.topjohnwu.magisk.ui.pivot.PivotSection
 
 /**
  * Built-in Magisk destinations that can be pinned to the Start screen as a custom tile.
@@ -43,7 +44,8 @@ object MetroMagiskShortcuts {
             Destination.Settings -> Route.MetroPivot("SETTINGS")
             Destination.Theme -> Route.Theme
             Destination.Persistent -> Route.PersistentModules
-            Destination.DenyList -> Route.DenyList
+            // The DenyList editor is the Exclude page of the Apps pivot
+            Destination.DenyList -> Route.MetroPivot(PivotSection.DENYLIST_ALIAS)
             Destination.Contributors -> Route.Contributors
             null -> null
         }

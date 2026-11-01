@@ -2,10 +2,7 @@ package com.topjohnwu.magisk.ui.metro
 
 import android.content.Context
 import android.provider.Settings
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.animation.core.Animatable
@@ -50,7 +47,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -220,6 +216,14 @@ class MetroTransitionController(
     var boardVisuals by mutableStateOf<List<MetroTileVisual>>(emptyList())
         private set
 
+    /**
+     * True once the launch action has replaced the live board. Until then the board is
+     * still composed and animates its own tiles, so the overlay must not replay them on
+     * top (that double-draw made the tiles flicker for the first frames of a launch).
+     */
+    var boardDetached by mutableStateOf(false)
+        private set
+
     /** Bumped on every launch; visible tiles re-record their pixels when it changes. */
     var captureGeneration by mutableIntStateOf(0)
         private set
@@ -281,6 +285,7 @@ class MetroTransitionController(
         if (!canLaunch()) return
         sourceTile = tile
         boardVisuals = emptyList()
+        boardDetached = false
         captureGeneration += 1
         phase = MetroTransitionPhase.Press(tile.id)
         commands.trySend(MetroTransitionCommand.Launch(tile, action))
@@ -375,6 +380,7 @@ class MetroTransitionController(
         val before = navigator?.current()
         command.action()
         launchedRoute = navigator?.current()?.takeIf { it !== before && it != Route.Main }
+        boardDetached = launchedRoute != null
         // Hover wait: the tile stays pressed while the destination page loads beneath the
         // playback overlay; the first frame after the action releases the choreography.
         if (launchedRoute != null) {
@@ -464,6 +470,7 @@ class MetroTransitionController(
         pageExit = 0f
         returnIn = 0f
         boardVisuals = emptyList()
+        boardDetached = false
     }
 
     private fun resetAll() {
@@ -724,6 +731,10 @@ fun Modifier.metroPageShell(): Modifier {
     // Keep the exiting page composed while it reverses the exact full-width slide used
     // when it entered. The page remains visible underneath the returning tile capture
     // until the handoff is complete.
+    // The layer must be OUTERMOST so the caller's background (metroScreenBackground) is
+    // drawn inside it: hidden while the leave choreography plays and sliding in with the
+    // page. Applied after the caller's chain, the opaque background showed up the moment
+    // the page was pushed, under the still-animating tiles.
     return Modifier.graphicsLayer(
         alpha = appearValue * (1f - exit),
         translationX = if (entersAfterTransition) {
@@ -731,7 +742,7 @@ fun Modifier.metroPageShell(): Modifier {
         } else {
             exit * slideInWidthPx
         },
-    )
+    ).then(this)
 }
 
 /**
@@ -763,6 +774,9 @@ fun MetroTileContinuum(
             // Tile playback on a TRANSPARENT stage: the page is open underneath and
             // loads on its own — the flying tiles simply pass over it, and the tapped
             // tile fades as it grows, so the page shows through from early on.
+            // Before the push (and for external launches) the live board is still on
+            // screen animating the same poses; replaying it as well would double-draw.
+            if (!controller.boardDetached) return
             Box(modifier = modifier.fillMaxSize()) {
                 controller.boardVisuals.forEach { visual ->
                     val pose = metroTilePose(

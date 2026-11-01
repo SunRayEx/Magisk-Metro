@@ -15,6 +15,7 @@ import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ALLOW
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.DENY
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ZERO
 import com.topjohnwu.magisk.core.su.SuRequestHandler
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.util.concurrent.TimeUnit.SECONDS
 
 class SuRequestViewModel(
@@ -46,49 +48,57 @@ class SuRequestViewModel(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    var authenticate: (onSuccess: () -> Unit) -> Unit = { it() }
+    var authenticate: (onSuccess: () -> Unit) -> Unit = {}
     var finishActivity: () -> Unit = {}
 
-    val useTapjackProtection get() = _uiState.value.useTapjackProtection
+    val useTapjackProtection get() = Config.suTapjack
 
     private val handler = SuRequestHandler(AppContext.packageManager, policyDB)
     private val millis = SECONDS.toMillis(Config.suDefaultTimeout.toLong())
     private var timer = SuTimer(millis, 1000)
+    private var started = false
     private var initialized = false
     private var responded = false
+    private var authenticating = false
 
     fun setSelectedItemPosition(position: Int) {
+        if (position !in 0..Config.Value.TIMEOUT_LIST.size) return
         _uiState.update { it.copy(selectedItemPosition = position) }
     }
 
     fun grantPressed() {
-        cancelTimer()
-        if (Config.suAuth) {
-            authenticate { respond(ALLOW) }
-        } else {
-            respond(ALLOW)
-        }
+        authorize { respond(ALLOW) }
     }
 
     /** Grants exactly this request; the policy is never persisted, so it cannot be found in
      * the authorized list afterwards. */
     fun grantOncePressed() {
-        cancelTimer()
-        if (Config.suAuth) {
-            authenticate { respondOnce(ALLOW) }
-        } else {
-            respondOnce(ALLOW)
-        }
+        authorize { respondOnce(ALLOW) }
     }
 
     /** Level 0 grant: uid 0 identity with reduced capabilities and an isolated mount namespace. */
     fun zeroPressed() {
+        authorize { respondZero() }
+    }
+
+    private fun authorize(action: () -> Unit) {
+        if (!initialized || responded || authenticating || !_uiState.value.grantEnabled) return
         cancelTimer()
         if (Config.suAuth) {
-            authenticate { respondZero() }
+            authenticating = true
+            _uiState.update { it.copy(grantEnabled = false) }
+            authenticate {
+                authenticating = false
+                action()
+            }
         } else {
-            respondZero()
+            action()
         }
+    }
+
+    fun authenticationCancelled() {
+        authenticating = false
+        respondOnce(DENY)
     }
 
     fun denyPressed() {
@@ -100,11 +110,20 @@ class SuRequestViewModel(
     }
 
     fun handleRequest(intent: Intent) {
-        viewModelScope.launch(Dispatchers.Default) {
-            if (handler.start(intent))
-                showDialog()
-            else
+        if (started) return
+        started = true
+        viewModelScope.launch {
+            try {
+                val needsPrompt = withContext(Dispatchers.IO) { handler.start(intent) }
+                if (needsPrompt) showDialog() else finishActivity()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Initialization failures must never reach the grant UI. The daemon's
+                // bounded FIFO wait rejects requests that could not be initialized.
+                Timber.e(e)
                 finishActivity()
+            }
         }
     }
 
@@ -129,6 +148,7 @@ class SuRequestViewModel(
         }
 
         val selectedPos = timeoutPrefs.getInt(packageName, 0)
+            .takeIf { it in 0..Config.Value.TIMEOUT_LIST.size } ?: 0
         _uiState.update {
             it.copy(
                 showUi = true,
@@ -145,14 +165,8 @@ class SuRequestViewModel(
             delay(1000)
             _uiState.update { it.copy(grantEnabled = true) }
         }
-        timer.start()
         initialized = true
-    }
-
-    fun activityDestroyed() {
-        if (initialized && !responded) {
-            respond(DENY)
-        }
+        timer.start()
     }
 
     override fun onCleared() {
@@ -160,9 +174,9 @@ class SuRequestViewModel(
         timer.cancel()
         if (initialized && !responded) {
             responded = true
-            val pos = _uiState.value.selectedItemPosition
             runBlocking(Dispatchers.IO) {
-                handler.respond(DENY, timeoutAt(pos))
+                // Closing the activity must not install a permanent deny policy.
+                handler.respond(DENY, -1)
             }
         }
     }
@@ -184,9 +198,10 @@ class SuRequestViewModel(
         timeoutPrefs.edit { putInt(pkg, pos) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            handler.respond(action, timeoutAt(pos))
-            withContext(Dispatchers.Main) {
-                finishActivity()
+            try {
+                handler.respond(action, timeoutAt(pos))
+            } finally {
+                withContext(Dispatchers.Main) { finishActivity() }
             }
         }
     }
@@ -204,22 +219,24 @@ class SuRequestViewModel(
         timeoutPrefs.edit { putInt(pkg, pos) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            handler.respond(ZERO, 0)
-            withContext(Dispatchers.Main) {
-                finishActivity()
+            try {
+                handler.respond(ZERO, 0)
+            } finally {
+                withContext(Dispatchers.Main) { finishActivity() }
             }
         }
     }
 
     private fun respondOnce(action: Int) {
-        if (!initialized) {
-            return
-        }
-
+        if (!initialized || responded) return
+        responded = true
         timer.cancel()
-        viewModelScope.launch {
-            handler.respond(action, -1)
-            finishActivity()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                handler.respond(action, -1)
+            } finally {
+                withContext(Dispatchers.Main) { finishActivity() }
+            }
         }
     }
 
@@ -243,7 +260,7 @@ class SuRequestViewModel(
 
         override fun onFinish() {
             _uiState.update { it.copy(denyCountdown = 0) }
-            respond(DENY)
+            respondOnce(DENY)
         }
     }
 }
