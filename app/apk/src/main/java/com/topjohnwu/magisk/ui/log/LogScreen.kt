@@ -47,10 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -194,8 +191,6 @@ fun LogScreen(
                 beyondViewportPageCount = 0,
             ) { page ->
                 val isCurrentLogPage = pagerState.currentPage == page
-                val childOwner = rememberNavigationEventDispatcherOwner(enabled = isCurrentLogPage)
-                CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides childOwner) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -232,7 +227,6 @@ fun LogScreen(
             }
         }
     }
-}
 
 @Composable
 private fun SuLogTab(

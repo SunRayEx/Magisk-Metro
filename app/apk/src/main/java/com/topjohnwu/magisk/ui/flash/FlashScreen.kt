@@ -11,6 +11,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,9 +22,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.metroScreenBackground
@@ -50,21 +48,12 @@ fun FlashScreen(
     val exitTitle = stringResource(CoreR.string.running_exit_title)
     val exitMessage = stringResource(CoreR.string.running_exit_msg)
 
-    val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-    NavigationBackHandler(
-        state = backState,
-        isBackEnabled = !finished,
-        onBackCompleted = {
-            if (!finished) {
-                exitConfirmDialog.showConfirm(
-                    title = exitTitle,
-                    content = exitMessage,
-                )
-            } else {
-                onBack()
-            }
-        }
-    )
+    BackHandler(enabled = !finished) {
+        exitConfirmDialog.showConfirm(
+            title = exitTitle,
+            content = exitMessage,
+        )
+    }
 
     val statusText = when (flashState) {
         FlashViewModel.State.FLASHING -> stringResource(CoreR.string.flashing)

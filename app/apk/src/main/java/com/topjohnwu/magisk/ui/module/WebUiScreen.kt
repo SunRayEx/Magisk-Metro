@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,9 +50,6 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
 import com.topjohnwu.superuser.CallbackList
@@ -102,12 +100,9 @@ internal fun WebUiScreen(moduleId: String, moduleName: String) {
     }
 
     // Back walks the page history first, like a browser; only then leaves the WebUI.
-    val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-    NavigationBackHandler(
-        state = backState,
-        isBackEnabled = canGoBack,
-        onBackCompleted = { webView?.goBack() },
-    )
+    BackHandler(enabled = canGoBack) {
+        webView?.goBack()
+    }
 
     DisposableEffect(Unit) {
         onDispose {

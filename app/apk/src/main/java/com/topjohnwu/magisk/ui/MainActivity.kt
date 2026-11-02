@@ -85,6 +85,7 @@ import com.topjohnwu.magisk.ui.metro.LocalMetroRootSize
 import com.topjohnwu.magisk.ui.metro.LocalMetroTransition
 import com.topjohnwu.magisk.ui.metro.MetroTileContinuum
 import com.topjohnwu.magisk.ui.metro.MetroTransitionController
+import com.topjohnwu.magisk.ui.metro.MetroTransitionPhase
 import com.topjohnwu.magisk.ui.module.PersistentScreen
 import com.topjohnwu.magisk.ui.pivot.MetroPivotScreen
 import com.topjohnwu.magisk.ui.pivot.PivotSection
@@ -219,7 +220,15 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                         MagisKubeTheme {
                         // One shared backdrop behind every route; pages render translucent
                         // backgrounds over it when the wallpaper theme is active.
-                        val secondaryPage = navigator.current() != Route.Main
+                        // Keep the secondary-page backdrop/veil connected throughout the
+                        // return handoff. The route is popped at the midpoint of the
+                        // animation, so deriving this only from the back stack briefly
+                        // removes the veil and exposes the board before the transition has
+                        // finished, producing a one-frame flash.
+                        val transitionPhase = transition.phase
+                        val secondaryPage = navigator.current() != Route.Main ||
+                            transitionPhase is MetroTransitionPhase.ReturnPrepare ||
+                            transitionPhase is MetroTransitionPhase.Returning
                         MetroWallpaperBackdrop(
                             secondaryPage = secondaryPage,
                         )
@@ -242,9 +251,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                                 rememberSaveableStateHolderNavEntryDecorator(),
                                 rememberViewModelStoreNavEntryDecorator<Any>()
                             ),
-                            predictivePopTransitionSpec = {
-                                EnterTransition.None togetherWith ExitTransition.None
-                            },
                             entryProvider = entryProvider {
                                 entry<Route.Main> {
                                     val homeVM: HomeViewModel = viewModel(factory = VMFactory)

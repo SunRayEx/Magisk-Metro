@@ -34,13 +34,8 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
-import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -128,16 +123,11 @@ fun MainScreen(
 
     val homePageIndex = remember(visibleTabs) { visibleTabs.indexOf(Tab.HOME).coerceAtLeast(0) }
     val isNotAtHome = pagerState.currentPage != homePageIndex && navigator.current() == Route.Main
-    val tabBackState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-    NavigationBackHandler(
-        state = tabBackState,
-        isBackEnabled = isNotAtHome,
-        onBackCompleted = {
-            scope.launch {
-                pagerState.animateScrollToPage(homePageIndex)
-            }
+    BackHandler(enabled = isNotAtHome) {
+        scope.launch {
+            pagerState.animateScrollToPage(homePageIndex)
         }
-    )
+    }
 
     // The collapsed rail needs 520dp (44dp top space, 96dp FAB header, 5 items, 44dp bottom) to
     // show every item. In shorter windows use the bar, like the library does below 480dp.
@@ -242,10 +232,6 @@ fun MainScreen(
             userScrollEnabled = isBar,
         ) { page ->
             val isCurrentPage = pagerState.currentPage == page
-            val childOwner = rememberNavigationEventDispatcherOwner(enabled = isCurrentPage)
-            CompositionLocalProvider(
-                LocalNavigationEventDispatcherOwner provides childOwner,
-            ) {
                 val tab = visibleTabs[page]
                 Box(
                 modifier = Modifier
@@ -328,7 +314,6 @@ fun MainScreen(
                         SettingsScreen(vm)
                     }
                 }
-            }
             }
         }
     }
