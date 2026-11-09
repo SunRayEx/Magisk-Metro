@@ -278,10 +278,12 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                                     val denyListVM: DenyListViewModel = viewModel(factory = VMFactory)
                                     LaunchedEffect(Unit) {
                                         homeVM.startLoading()
-                                        superuserVm.startLoading()
                                         logVM.startLoading()
-                                        moduleVM.startLoading()
-                                        denyListVM.startLoading()
+                                        if (Info.env.isActive) {
+                                            superuserVm.startLoading()
+                                            moduleVM.startLoading()
+                                            denyListVM.startLoading()
+                                        }
                                     }
                                     MagisKubeTheme {
                                         MetroPivotScreen(

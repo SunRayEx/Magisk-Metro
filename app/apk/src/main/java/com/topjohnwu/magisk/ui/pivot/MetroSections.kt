@@ -307,7 +307,7 @@ fun MagiskSection(vm: HomeViewModel) {
                         )
                     }
                 }
-                item {
+                if (Info.env.isActive) item {
                     MetroFlipItem(index = 2, visible = visible) {
                         MetroActionRow(
                             title = stringResource(R.string.metro_uninstall_magisk),
@@ -837,33 +837,35 @@ fun LogsSection(vm: LogViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val hasRoot = Info.env.isActive
     MetroSubPivot(
-        titles = listOf(
-            stringResource(R.string.metro_log_su),
-            stringResource(R.string.metro_log_magisk),
-        ),
+        titles = buildList {
+            if (hasRoot) add(stringResource(R.string.metro_log_su))
+            add(stringResource(R.string.metro_log_magisk))
+        },
     ) { page, visible ->
+        val magiskPage = !hasRoot || page == 1
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                if (page == 1) {
+                if (magiskPage) {
                     MetroTextButton(stringResource(R.string.metro_save), accent) { vm.saveMagiskLog() }
                     Spacer(Modifier.width(8.dp))
                 }
-                MetroTextButton(stringResource(R.string.metro_clear), accent) {
-                    if (page == 1) vm.clearMagiskLog() else vm.clearLog()
+                if (hasRoot) MetroTextButton(stringResource(R.string.metro_clear), accent) {
+                    if (magiskPage) vm.clearMagiskLog() else vm.clearLog()
                 }
             }
             if (loading) {
                 MetroCentered(stringResource(R.string.metro_loading))
-            } else if (page == 1 && magiskItems.isEmpty()) {
+            } else if (magiskPage && magiskItems.isEmpty()) {
                 MetroCentered(stringResource(R.string.metro_no_logs))
-            } else if (page == 0 && suItems.isEmpty()) {
+            } else if (!magiskPage && suItems.isEmpty()) {
                 MetroCentered(stringResource(R.string.metro_no_su_logs))
             } else {
-                if (page == 1) {
+                if (magiskPage) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()),
                     ) {
@@ -1250,12 +1252,12 @@ fun SettingsSection(vm: SettingsViewModel) {
         onDismissDialog = vm::dismissDialog,
     )
     MetroSubPivot(
-        titles = listOf(
-            stringResource(CoreR.string.settings_customization),
-            stringResource(CoreR.string.home_app_title),
-            stringResource(CoreR.string.magisk),
-            stringResource(CoreR.string.superuser),
-        ),
+        titles = buildList {
+            add(stringResource(CoreR.string.settings_customization))
+            add(stringResource(CoreR.string.home_app_title))
+            if (uiState.isMagiskInstalled) add(stringResource(CoreR.string.magisk))
+            if (uiState.isSuperUserAvailable && uiState.isMagiskInstalled) add(stringResource(CoreR.string.superuser))
+        },
     ) { page, _ ->
         val scrollState = rememberScrollState()
         Column(

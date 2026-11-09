@@ -2,12 +2,14 @@ package com.topjohnwu.magisk.ui.metro
 
 import android.content.Context
 import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,9 +25,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -34,11 +37,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import com.topjohnwu.magisk.ui.anim.MetroDiveEase
 import com.topjohnwu.magisk.ui.anim.MetroEaseOut
 import com.topjohnwu.magisk.ui.anim.MetroFlyEase
 import com.topjohnwu.magisk.ui.navigation.Navigator
-import com.topjohnwu.magisk.ui.theme.MetroWallpaperBackdrop
+import com.topjohnwu.magisk.ui.theme.MetroTileGlass
+import com.topjohnwu.magisk.ui.theme.MetroWallpaper
 import com.topjohnwu.magisk.ui.navigation.Route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -85,11 +88,15 @@ sealed interface MetroTransitionPhase {
  *  tile's OWN recorded pixels (glass, text, lists) and [bounds] its root-space rect at tap
  *  time; together they let the tile itself — never a colour block — keep morphing across
  *  the route swap, and land back exactly where it came from. */
+class MetroTilePart(val picture: android.graphics.Picture, val bounds: Rect, val id: String)
+
 class MetroTileSnapshot(
     val id: String,
     val title: String,
     val bounds: Rect,
     val picture: android.graphics.Picture?,
+    val color: Color,
+    val parts: MutableList<MetroTilePart> = mutableListOf(),
 )
 
 /** Shared, non-linear timing for every phase. Durations live here only. */
@@ -97,45 +104,44 @@ private val MetroReverseEase = Easing { fraction ->
     1f - MetroEaseOut.transform(1f - fraction)
 }
 
-// The return path is intentionally softer than the enter dive: less front-loaded motion
-// keeps the tile from snapping into place while still preserving the same destination rect.
-private val MetroReturnDiveEase = CubicBezierEasing(0.4f, 0f, 0.6f, 1f)
+// Both directions use the same fast-start, slow-finish morph curve.
+private val MetroTileMorphEase = CubicBezierEasing(0.1f, 0.9f, 0.22f, 1f)
 
 object MetroTransitionSpec {
     /** Phase A: the tapped tile is pressed in (animated to ~0.80 scale) and holds. */
-    const val PRESS_MS = 345
+    const val PRESS_MS = 276
 
     /** Phase B: other tiles page-turn off screen one by one in reading order. Each tile's
      *  own flight occupies [TILE_FLIGHT_SPAN] of this window; starts are staggered. */
-    const val OTHERS_OUT_MS = 1400
+    const val OTHERS_OUT_MS = 947
 
     /** The tapped tile MORPHS (non-uniform stretch) from its own rect to the full screen;
      *  it stays fully opaque — the transparency starts only after the push, over the
      *  already-open destination page. */
-    const val ZOOM_DELAY_MS = 335
-    const val ZOOM_MS = 900
+    const val ZOOM_DELAY_MS = 348
+    const val ZOOM_MS = 800
 
     /** The tile turns transparent while it finishes growing; the page is already open
      *  beneath it, so this reads as the tile dissolving into the page mid-zoom. */
-    const val OVERLAY_FADE_MS = 700
+    const val OVERLAY_FADE_MS = 560
 
     /** The destination page fades in over the emptied board (its own page shell). */
-    const val PAGE_APPEAR_MS = 470
+    const val PAGE_APPEAR_MS = 376
 
     /** After the leave choreography ends on a blank screen, the page slides in from the
      *  right across the full screen width. */
-    const val PAGE_ENTER_SLIDE_MS = 480
+    const val PAGE_ENTER_SLIDE_MS = 384
 
     /** Returning: the page reverses the enter slide before the board comes back. */
-    const val PAGE_EXIT_MS = 432
+    const val PAGE_EXIT_MS = 301
 
     /** Return: the fullscreen tile capture fades in WHILE the page reverses its enter
      *  slide, so the handover remains a continuous crossfade. */
-    const val RETURN_TAKEOVER_MS = 220
+    const val RETURN_TAKEOVER_MS = 153
 
     /** Return: the tapped tile fades back to its original look first, then the other
      *  tiles flip back in one at a time, in the same reading order. */
-    const val RETURN_MS = 2400
+    const val RETURN_MS = 1245
 
     /** Fraction of [RETURN_MS] at which the tapped tile is fully opaque again. */
     const val RETURN_TILE_IN_END = 0.52f
@@ -143,7 +149,7 @@ object MetroTransitionSpec {
     /** Fraction of the return timeline at which the other tiles start flipping back in. */
     const val RETURN_OTHERS_START = 0.52f
 
-    const val RESTORE_MS = 680
+    const val RESTORE_MS = 544
 
     /** How long the pressed tile hovers waiting for the destination's first rendered
      *  frame before the choreography proceeds anyway (safety fallback). */
@@ -161,6 +167,7 @@ class MetroTileVisual(
     val picture: android.graphics.Picture,
     val rect: Rect,
     val introDelay: Float,
+    val color: Color,
 )
 
 /** Internal command envelope for the composition-driven sequence runner. */
@@ -281,8 +288,9 @@ class MetroTransitionController(
      * even queued) so a same-frame second tap can never enqueue a second transition; the
      * navigation action runs only once the leave choreography completes.
      */
-    fun requestLaunch(tile: MetroTileSnapshot, action: () -> Unit) {
+    fun requestLaunch(tile: MetroTileSnapshot, initialPress: Float = 0f, action: () -> Unit) {
         if (!canLaunch()) return
+        pressIn = initialPress.coerceIn(0f, 1f)
         sourceTile = tile
         boardVisuals = emptyList()
         boardDetached = false
@@ -302,10 +310,11 @@ class MetroTransitionController(
         picture: android.graphics.Picture,
         rect: Rect,
         introDelay: Float,
+        color: Color,
     ) {
         if (phase == MetroTransitionPhase.Idle || phase is MetroTransitionPhase.Intro) return
         if (boardVisuals.any { it.id == id }) return
-        boardVisuals = boardVisuals + MetroTileVisual(id, picture, rect, introDelay)
+        boardVisuals = boardVisuals + MetroTileVisual(id, picture, rect, introDelay, color)
     }
 
     /** Cold-start board intro; plays once per activity (rotation-safe via [playedIntro]). */
@@ -365,7 +374,7 @@ class MetroTransitionController(
         // once the push has happened). One or two frames later every visible tile has
         // re-recorded its pixels for the board playback.
         val pressAnim = scope.launch {
-            Animatable(0f).apply {
+            Animatable(pressIn).apply {
                 animateTo(1f, tween(MetroTransitionSpec.PRESS_MS, easing = MetroEaseOut)) {
                     pressIn = value
                 }
@@ -391,13 +400,13 @@ class MetroTransitionController(
         // Phase B (replayed on the overlay above the open page): the board flips off
         // screen one page at a time while the tapped tile MORPHS to the exact fullscreen
         // rect — opaque, its own stretched content, the page hidden beneath.
+        pressAnim.join()
         phase = MetroTransitionPhase.Leaving(tile.id)
         val others = scope.launch { animateOthersTo(1f, MetroTransitionSpec.OTHERS_OUT_MS) }
         val morph = scope.launch {
             delay(MetroTransitionSpec.ZOOM_DELAY_MS.toLong())
             animateTileZoomTo(1f, MetroTransitionSpec.ZOOM_MS)
         }
-        pressAnim.join()
         others.join()
         morph.join()
         if (launchedRoute == null) {
@@ -495,7 +504,7 @@ class MetroTransitionController(
 
     private suspend fun animateTileZoomTo(target: Float, ms: Int) {
         Animatable(tileZoom).apply {
-            animateTo(target, tween(ms, easing = MetroDiveEase)) { tileZoom = value }
+            animateTo(target, tween(ms, easing = LinearEasing)) { tileZoom = value }
         }
     }
 
@@ -561,13 +570,12 @@ private fun metroOrderStagger(progress: Float, order: Float): Float {
  */
 private fun metroMorphPose(z: Float, tile: Rect?, rootSize: IntSize): MetroTilePose {
     val p = z.coerceIn(0f, 1f)
-    if (p <= 0f) return MetroTilePose()
     if (tile == null || rootSize.width <= 0 || rootSize.height <= 0) {
         return MetroTilePose()
     }
-    val e = MetroDiveEase.transform(p)
-    val scaleX = 1f + (rootSize.width / tile.width - 1f) * e
-    val scaleY = 1f + (rootSize.height / tile.height - 1f) * e
+    val e = MetroTileMorphEase.transform(p)
+    val scaleX = 0.95f + (rootSize.width / tile.width - 0.95f) * e
+    val scaleY = 0.95f + (rootSize.height / tile.height - 0.95f) * e
     return MetroTilePose(
         // 从开始放大就同步渐变透明: the transparency starts with the zoom itself, so the
         // page (open since the instant push, loading on its own) shows through the
@@ -575,8 +583,8 @@ private fun metroMorphPose(z: Float, tile: Rect?, rootSize: IntSize): MetroTileP
         alpha = 1f - e,
         scaleX = scaleX,
         scaleY = scaleY,
-        translationX = -tile.left * e,
-        translationY = -tile.top * e,
+        translationX = tile.width * 0.025f * (1f - e) - tile.left * e,
+        translationY = tile.height * 0.025f * (1f - e) - tile.top * e,
         transformOrigin = TransformOrigin(0f, 0f),
     )
 }
@@ -593,11 +601,11 @@ fun metroTilePose(
     val order = orderFraction(introDelay)
     return when (val p = controller.phase) {
         is MetroTransitionPhase.Press -> if (p.tileId == tileId) {
-            // 压陷并悬停: the tile presses in clearly (~0.80) and holds before the cascade.
+            // Press in by 5% and hold until the morph begins.
             val press = controller.pressIn
             MetroTilePose(
-                scaleX = 1f - 0.20f * press,
-                scaleY = 1f - 0.20f * press,
+                scaleX = 1f - 0.05f * press,
+                scaleY = 1f - 0.05f * press,
                 shadowElevation = 20f * press,
             )
         } else MetroTilePose()
@@ -606,7 +614,7 @@ fun metroTilePose(
         is MetroTransitionPhase.Arriving,
         is MetroTransitionPhase.ExternalLaunch -> if (src != null) {
             if (src.id == tileId) {
-                // 本体放大并形变为全屏: the real tile morphs, opaque, content and all.
+                // The tile morphs to fullscreen while its content keeps its proportions.
                 metroMorphPose(controller.tileZoom, tileRect, rootSize)
             } else {
                 // 翻页式外旋: tiles flip fully OFF SCREEN toward the upper-left, one by one.
@@ -784,9 +792,12 @@ fun MetroTileContinuum(
                     )
                     TileReplay(
                         picture = visual.picture,
+                        color = visual.color,
                         rect = visual.rect,
                         pose = pose,
                         density = density,
+                        proportionalContent = visual.id == src.id,
+                        parts = if (visual.id == src.id) src.parts else emptyList(),
                     )
                 }
             }
@@ -806,21 +817,24 @@ fun MetroTileContinuum(
             val handoff = if (phase is MetroTransitionPhase.Returning) {
                 ((controller.returnIn - 0.96f) / 0.04f).coerceIn(0f, 1f)
             } else 0f
-            val rect = lerp(rootRect, src.bounds, MetroReturnDiveEase.transform(p))
+            val rect = lerp(rootRect, src.bounds, MetroTileMorphEase.transform(p))
             if (controller.overlayAlpha <= 0.01f) return
             // 缩小的同时渐变透明: the capture fades out WHILE it shrinks home, crossfading
             // with the real tile (which fades in underneath at the same rate) — the exact
             // mirror of the leave's zoom-and-fade, with no opaque handover anywhere.
             TileReplay(
                 picture = picture,
+                color = src.color,
                 rect = rect,
                 pose = MetroTilePose(
                     // Return from a fully transparent capture: colour appears as the capture
                     // shrinks along the exact reverse path, then crossfades to the live tile.
-                    alpha = controller.overlayAlpha * MetroReturnDiveEase.transform(p) *
+                    alpha = controller.overlayAlpha * MetroTileMorphEase.transform(p) *
                         (1f - handoff),
                 ),
                 density = density,
+                proportionalContent = true,
+                parts = src.parts,
                 modifier = modifier,
             )
         }
@@ -831,9 +845,12 @@ fun MetroTileContinuum(
 @Composable
 private fun TileReplay(
     picture: android.graphics.Picture,
+    color: Color,
     rect: Rect,
     pose: MetroTilePose,
     density: Density,
+    proportionalContent: Boolean,
+    parts: List<MetroTilePart>,
     modifier: Modifier = Modifier,
 ) {
     if (pose.alpha <= 0.01f) return
@@ -859,17 +876,45 @@ private fun TileReplay(
                 shadowElevation = pose.shadowElevation * density.density,
                 transformOrigin = pose.transformOrigin,
             )
-            .drawBehind {
+            .drawWithContent {
+                drawContent()
                 if (picture.width > 0 && picture.height > 0) {
                     val canvas = drawContext.canvas.nativeCanvas
                     canvas.save()
-                    canvas.scale(
-                        size.width / picture.width,
-                        size.height / picture.height,
-                    )
-                    canvas.drawPicture(picture)
+                    val scaleX = size.width / picture.width
+                    val scaleY = size.height / picture.height
+                    val scale = minOf(scaleX * pose.scaleX, scaleY * pose.scaleY)
+                    if (proportionalContent && parts.isNotEmpty()) {
+                        val x = scale / pose.scaleX
+                        val y = scale / pose.scaleY
+                        parts.forEach { part ->
+                            canvas.save()
+                            val anchorX = when (part.id) { "count" -> 1f; "emblem", "icon" -> 0.5f; else -> 0f }
+                            val anchorY = when (part.id) { "count", "status" -> 1f; "emblem", "icon" -> 0.5f; else -> 0f }
+                            val bounds = part.bounds
+                            canvas.translate(
+                                (bounds.left + bounds.width * anchorX) * scaleX - bounds.width * x * anchorX,
+                                (bounds.top + bounds.height * anchorY) * scaleY - bounds.height * y * anchorY,
+                            )
+                            canvas.scale(x, y)
+                            canvas.drawPicture(part.picture)
+                            canvas.restore()
+                        }
+                    } else {
+                        canvas.scale(
+                            if (proportionalContent) scale / pose.scaleX else scaleX,
+                            if (proportionalContent) scale / pose.scaleY else scaleY,
+                        )
+                        canvas.drawPicture(picture)
+                    }
                     canvas.restore()
                 }
             },
-    )
+    ) {
+        if (MetroWallpaper.active && MetroWallpaper.art != null) {
+            MetroTileGlass(color, animationKey = pose)
+        } else {
+            Box(Modifier.fillMaxSize().background(color))
+        }
+    }
 }

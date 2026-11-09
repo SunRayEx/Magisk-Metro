@@ -477,6 +477,7 @@ internal fun AppSettingsSection(
             onCheckedChange = onToggleRandomPackageName
         )
 
+        if (uiState.isMagiskInstalled) {
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 16.dp),
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -503,6 +504,7 @@ internal fun AppSettingsSection(
             summary = stringResource(R.string.metro_persistent_summary),
             onClick = { viewModel.navigateToPersistentModules() }
         )
+        }
     }
 }
 

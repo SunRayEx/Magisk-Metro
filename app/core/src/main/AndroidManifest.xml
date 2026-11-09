@@ -36,7 +36,7 @@
     <application
         android:name=".App"
         android:allowBackup="false"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:icon="@drawable/ic_launcher"
         android:label="MagisKube"
         android:requestLegacyExternalStorage="true"

@@ -4,6 +4,10 @@ import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Color as AndroidColor
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -23,13 +27,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.core.graphics.ColorUtils
 import androidx.core.net.toUri
 import com.topjohnwu.magisk.core.AppContext
@@ -399,56 +405,50 @@ private fun glassVeilAlpha(blurLevel: Int): Float =
     0.16f + 0.18f * (1f - blurLevel / 100f)
 
 /**
- * Frosted-glass fill for a Start tile: samples the region of the pre-blurred wallpaper
- * that sits EXACTLY behind the tile. The crop math mirrors what ContentScale.Crop does
- * for the full-screen backdrop (uniform scale to cover, centred), so the glass lines up
- * pixel-for-pixel with the background instead of stretching.
+ * Frosted-glass fill sampled in root coordinates. Mapping the four transformed corners
+ * keeps the wallpaper fixed under the tile, including during perspective animations.
  */
 @Composable
-fun MetroTileGlass(color: Color, tileRect: Rect?) {
+fun MetroTileGlass(color: Color, animationKey: Any? = null) {
     val art = MetroWallpaper.art
     if (!MetroWallpaper.active || art == null) return
     val rootSize = LocalMetroRootSize.current
-    val rect = tileRect ?: return
-    if (rootSize.width == 0 || rootSize.height == 0) return
-
-    val img = art.blurred
-    // ContentScale.Crop mapping: the image is scaled uniformly to COVER the root, centred.
-    val coverScale = max(
-        rootSize.width.toFloat() / img.width,
-        rootSize.height.toFloat() / img.height,
-    )
-    val dispW = img.width * coverScale
-    val dispH = img.height * coverScale
-    val offX = (rootSize.width - dispW) / 2f
-    val offY = (rootSize.height - dispH) / 2f
-    // Root px -> image px, then clamp the crop inside the bitmap.
-    val left = ((rect.left - offX) / coverScale).roundToInt().coerceIn(0, img.width - 1)
-    val top = ((rect.top - offY) / coverScale).roundToInt().coerceIn(0, img.height - 1)
-    val w = (rect.width / coverScale).roundToInt().coerceIn(1, img.width - left)
-    val h = (rect.height / coverScale).roundToInt().coerceIn(1, img.height - top)
-    val painter = remember(img, left, top, w, h) {
-        BitmapPainter(img, IntOffset(left, top), IntSize(w, h))
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var positionRevision by remember { mutableIntStateOf(0) }
+    val bitmap = art.blurred.asAndroidBitmap()
+    val paint = remember(bitmap) {
+        Paint(Paint.FILTER_BITMAP_FLAG).apply {
+            shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
     }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            painter = painter,
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier.fillMaxSize(),
-        )
-        // Neutral dark veil for white-text contrast…
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = glassVeilAlpha(MetroWallpaper.blurLevel))),
-        )
-        // …with only a whisper of the tile's accent on top.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(color.copy(alpha = 0.10f))
-        )
-    }
+    val veil = glassVeilAlpha(MetroWallpaper.blurLevel)
+    Box(Modifier.fillMaxSize().onGloballyPositioned {
+        coordinates = it
+        positionRevision++
+    }.drawBehind {
+        // Invalidate the sampled glass when the transformed layer or scroll position changes.
+        animationKey?.hashCode()
+        positionRevision.hashCode()
+        if (rootSize.width == 0 || rootSize.height == 0) return@drawBehind
+        val layout = coordinates?.takeIf { it.isAttached } ?: return@drawBehind
+        val local = floatArrayOf(0f, 0f, size.width, 0f, size.width, size.height, 0f, size.height)
+        val root = FloatArray(8)
+        for (i in 0 until 4) {
+            val point = layout.localToRoot(Offset(local[i * 2], local[i * 2 + 1]))
+            root[i * 2] = point.x
+            root[i * 2 + 1] = point.y
+        }
+        val matrix = Matrix()
+        if (!matrix.setPolyToPoly(root, 0, local, 0, 4)) return@drawBehind
+        val scale = max(rootSize.width.toFloat() / bitmap.width, rootSize.height.toFloat() / bitmap.height)
+        val imageToRoot = Matrix().apply {
+            setScale(scale, scale)
+            postTranslate((rootSize.width - bitmap.width * scale) / 2f, (rootSize.height - bitmap.height * scale) / 2f)
+        }
+        matrix.preConcat(imageToRoot)
+        paint.shader.setLocalMatrix(matrix)
+        drawContext.canvas.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint)
+        drawRect(Color.Black.copy(alpha = veil))
+        drawRect(color.copy(alpha = 0.10f))
+    })
 }

@@ -255,7 +255,7 @@ fun Project.setupAppCommon() {
         }
 
         defaultConfig {
-            targetSdk = 36
+            targetSdk = 37
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt")
             )

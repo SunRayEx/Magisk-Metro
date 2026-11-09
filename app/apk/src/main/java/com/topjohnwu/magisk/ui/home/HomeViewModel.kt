@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
 import androidx.core.net.toUri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.magisk.arch.AsyncLoadViewModel
 import com.topjohnwu.magisk.core.AppContext
@@ -15,6 +18,7 @@ import com.topjohnwu.magisk.core.ktx.await
 import com.topjohnwu.magisk.core.ktx.reboot
 import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.model.UpdateInfo
+import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.core.repository.NetworkService
 import com.topjohnwu.magisk.core.tasks.MagiskInstaller
 import com.topjohnwu.magisk.utils.asFlow
@@ -51,6 +55,10 @@ class HomeViewModel(
         val magiskInstalledVersion: String = computeMagiskInstalledVersion(),
         val managerInstalledVersion: String = computeManagerInstalledVersion(),
     )
+
+    var metroModules by mutableStateOf<List<LocalModule>>(emptyList())
+    var metroRootApps by mutableStateOf<List<String>>(emptyList())
+    var metroLogs by mutableStateOf<List<String>>(emptyList())
 
     // Info.update is reset on every connectivity change, so keep the update that the UI shows
     private var latestUpdate: UpdateInfo? = null

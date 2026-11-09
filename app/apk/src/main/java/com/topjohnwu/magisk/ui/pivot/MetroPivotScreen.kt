@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.ui.deny.DenyListViewModel
 import com.topjohnwu.magisk.ui.home.HomeViewModel
 import com.topjohnwu.magisk.ui.log.LogViewModel
@@ -69,8 +70,9 @@ fun MetroPivotScreen(
 ) {
     val palette = LocalMetroPalette.current
     val view = LocalView.current
-    val sections = PivotSection.entries
-    val pagerState = rememberPagerState(initialPage = initialSection.ordinal) { sections.size }
+    val sections = if (Info.env.isActive) PivotSection.entries else
+        listOf(PivotSection.MAGISK, PivotSection.LOGS, PivotSection.SETTINGS)
+    val pagerState = rememberPagerState(initialPage = sections.indexOf(initialSection).coerceAtLeast(0)) { sections.size }
     val headerState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val activeSection = sections[pagerState.currentPage]

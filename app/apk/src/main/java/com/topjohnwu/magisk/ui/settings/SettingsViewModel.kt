@@ -46,6 +46,7 @@ class SettingsViewModel : BaseViewModel() {
     val externalZygisk: StateFlow<String?> = _externalZygisk.asStateFlow()
 
     fun refreshExternalZygisk() {
+        if (!Info.env.isActive) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val provider = runCatching {
                 LocalModule.installed()
@@ -63,6 +64,7 @@ class SettingsViewModel : BaseViewModel() {
 
 
     private fun buildInitialState(): SettingsUiState {
+        val installed = Info.env.isActive
         val isDynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val selectedColorIndex = ColorMode.fromValue(Config.colorMode).toUiIndex(isDynamicColorSupported)
 
@@ -95,12 +97,12 @@ class SettingsViewModel : BaseViewModel() {
             downloadPathDisplay = MediaStoreUtils.fullPath(Config.downloadDir),
             randomPackageNameEnabled = Config.randName,
 
-            zygiskEnabled = Config.zygisk,
-            isZygiskPendingReboot = Config.zygisk != Info.isZygiskEnabled,
+            zygiskEnabled = installed && Config.zygisk,
+            isZygiskPendingReboot = installed && Config.zygisk != Info.isZygiskEnabled,
             denyListEnabled = Config.denyList,
 
-            selectedMultiuserModeIndex = Config.suMultiuserMode,
-            selectedNamespaceModeIndex = Config.suMntNamespaceMode,
+            selectedMultiuserModeIndex = if (installed) Config.suMultiuserMode else Config.Value.MULTIUSER_MODE_OWNER_ONLY,
+            selectedNamespaceModeIndex = if (installed) Config.suMntNamespaceMode else Config.Value.NAMESPACE_MODE_REQUESTER,
             selectedNotificationModeIndex = Config.suNotification,
             suRestrictEnabled = Config.suRestrict,
         ).withEnvironment()
@@ -145,7 +147,7 @@ class SettingsViewModel : BaseViewModel() {
             isSuperUserAvailable = isSuperUserAvailable,
             isDeviceSecure = Info.isDeviceSecure,
             // Show the configured security gate even if credentials are unavailable.
-            suAuthEnabled = Config.suAuth,
+            suAuthEnabled = isMagiskInstalled && Config.suAuth,
             // Turned off when the notification permission is denied on startup
             checkUpdateEnabled = Config.checkUpdate,
         )

@@ -80,7 +80,7 @@ class ModuleViewModel : AsyncLoadViewModel() {
     init {
         viewModelScope.launch {
             Info.isConnected.asFlow().collect {
-                startLoading()
+                if (Info.env.isActive) startLoading()
             }
         }
     }

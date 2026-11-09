@@ -124,7 +124,17 @@ object PersistentModules {
 
     fun snapshot(id: String) = run("'$BINARY' snapshot '$id'")
 
-    fun unpin(id: String) = run("'$BINARY' unpin '$id'")
+    fun unpin(id: String): PersistentResult {
+        if (!Regex("[A-Za-z0-9_-][A-Za-z0-9._-]*").matches(id)) {
+            return PersistentResult(false, null, "invalid module id")
+        }
+        val result = run("'$BINARY' unpin '$id'")
+        if (!result.ok) return result
+        val cleanup = Shell.cmd("rm -rf -- '$BASE_DIR/store/$id'").exec()
+        return if (cleanup.isSuccess) result else PersistentResult(
+            false, null, "module unpinned, but snapshot cleanup failed (exit=${cleanup.code})",
+        )
+    }
 
     fun toggle(id: String, enabled: Boolean) =
         run("'$BINARY' toggle '$id' ${if (enabled) 1 else 0}")

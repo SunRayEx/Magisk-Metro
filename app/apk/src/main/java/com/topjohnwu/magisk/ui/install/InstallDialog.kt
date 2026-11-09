@@ -10,41 +10,24 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -70,11 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.window.core.layout.WindowSizeClass
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.ktx.registerRuntimeReceiver
@@ -87,7 +67,6 @@ import com.topjohnwu.magisk.ui.component.MarkdownText
 import com.topjohnwu.magisk.ui.component.SettingsArrow
 import com.topjohnwu.magisk.ui.component.SettingsSwitch
 import com.topjohnwu.magisk.ui.component.rememberConfirmDialog
-import com.topjohnwu.magisk.ui.component.verticalScrollbar
 import com.topjohnwu.magisk.core.R as CoreR
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -134,56 +113,19 @@ fun InstallDialog(
         )
     }
 
-    // Full screen dialogs are only for compact windows; read this outside of the Dialog window
-    val fullScreen = !currentWindowAdaptiveInfo().windowSizeClass
-        .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
-
     if (show) {
-        Dialog(
+        MagiskDialog(
             onDismissRequest = onDismiss,
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
-            )
-        ) {
-            val scrollState = rememberScrollState()
-            Scaffold(
-                modifier = if (fullScreen) modifier.fillMaxSize() else modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(24.dp)
-                    .widthIn(max = 560.dp)
-                    .heightIn(max = 800.dp)
-                    .clip(RoundedCornerShape(28.dp)),
-                contentWindowInsets = WindowInsets.safeDrawing,
-                containerColor = if (fullScreen) MaterialTheme.colorScheme.background
-                    else MaterialTheme.colorScheme.surfaceContainerHigh,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(CoreR.string.install)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = stringResource(android.R.string.cancel)
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = if (fullScreen) MaterialTheme.colorScheme.surface
-                                else MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    )
+            modifier = modifier,
+            title = { Text(stringResource(CoreR.string.install)) },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text(stringResource(android.R.string.cancel))
                 }
-            ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .verticalScrollbar(scrollState, contentPadding = PaddingValues(vertical = 12.dp))
-                        .verticalScroll(scrollState)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+            },
+            scrollable = true,
+        ) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (installUiState.notes.isNotEmpty()) {
                         MarkdownText(installUiState.notes)
                     }
@@ -229,7 +171,6 @@ fun InstallDialog(
                         }
                     }
                 }
-            }
         }
     }
 }
