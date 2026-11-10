@@ -55,6 +55,7 @@ tasks.withType<KotlinCompile>().configureEach {
 dependencies {
     implementation(project(":core"))
     coreLibraryDesugaring(libs.jdk.libs)
+    testImplementation(libs.test.junit)
 
     // Compose
     implementation(libs.compose.ui)

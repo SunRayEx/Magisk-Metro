@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,7 +17,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -38,33 +36,27 @@ import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.PersistentModules
 import com.topjohnwu.magisk.core.model.module.LocalModule
 import com.topjohnwu.magisk.ui.anim.MetroFlipItem
+import com.topjohnwu.magisk.ui.component.MagiskDialog
 import com.topjohnwu.magisk.ui.home.MetroUiState
-import com.topjohnwu.magisk.ui.metro.metroPageShell
 import com.topjohnwu.magisk.ui.theme.LocalMetroPalette
 import com.topjohnwu.magisk.ui.theme.MetroAccent
-import com.topjohnwu.magisk.ui.theme.MetroAccentRole
-import com.topjohnwu.magisk.ui.theme.MetroColors
-import com.topjohnwu.magisk.ui.theme.metroScreenBackground
 import java.text.DateFormat
-import java.util.Date
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.setValue
-import com.topjohnwu.magisk.ui.component.MagiskDialog
 
 private data class Installed(val id: String, val name: String, val version: String, val versionCode: Int)
 
 @Composable
-internal fun PersistentScreen() {
+internal fun PersistentScreen(visible: Boolean) {
     val accent = LocalMetroPalette.current.modules
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val activity = context as? android.app.Activity
     var busy by remember { mutableStateOf(false) }
     var revision by remember { mutableStateOf(MetroUiState.version) }
 
-    val supported = remember { PersistentModules.supported() }
+    val supported = PersistentModules.supported()
 
     val manifest by produceState<PersistentModulesResult>(initialValue = PersistentModulesResult(null, emptyList()), revision) {
         value = withContext(Dispatchers.IO) {
@@ -77,19 +69,41 @@ internal fun PersistentScreen() {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .metroScreenBackground()
-            .metroPageShell(),
-    ) {
-        Text(
-            text = stringResource(R.string.metro_persistent),
-            color = accent.color,
-            fontSize = 34.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 24.dp, end = 28.dp, top = 18.dp, bottom = 2.dp),
-        )
+    // Serialize writes to the shared manifest and always release the UI after a failure.
+    fun runOperation(applied: Boolean = false, operation: () -> com.topjohnwu.magisk.core.PersistentResult) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { operation() }
+                if (!result.ok) {
+                    reportFailure(context, result)
+                } else if (applied) {
+                    android.widget.Toast.makeText(
+                        context,
+                        R.string.metro_persistent_applied,
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                reportFailure(context, com.topjohnwu.magisk.core.PersistentResult(false, null, e.message))
+            } finally {
+                revision++
+                busy = false
+            }
+        }
+    }
+
+    val pinned = manifest.declaration?.modules.orEmpty()
+    val unpinned = remember(manifest) {
+        val pinnedIds = pinned.mapTo(HashSet()) { it.id }
+        manifest.installed.filterNot { it.id in pinnedIds }
+    }
+
+    // The parent pivot owns the title, background and page transition.
+    Column(modifier = Modifier.fillMaxSize()) {
         manifest.declaration?.appliedAt?.let { applied ->
             Text(
                 text = stringResource(
@@ -136,23 +150,7 @@ internal fun PersistentScreen() {
                     ).show()
                     return@MetroActionButton
                 }
-                busy = true
-                scope.launch(Dispatchers.IO) {
-                    val result = PersistentModules.apply()
-                    withContext(Dispatchers.Main) {
-                        if (result.ok) {
-                            android.widget.Toast.makeText(
-                                context,
-                                R.string.metro_persistent_applied,
-                                android.widget.Toast.LENGTH_SHORT,
-                            ).show()
-                        } else {
-                            reportFailure(context, result)
-                        }
-                        busy = false
-                        revision++
-                    }
-                }
+                runOperation(applied = true) { PersistentModules.apply() }
             }
             Spacer(Modifier.width(8.dp))
             MetroActionButton(
@@ -173,16 +171,14 @@ internal fun PersistentScreen() {
             return@Column
         }
 
-        val declaration = manifest.declaration
-        val pinned = declaration?.modules.orEmpty()
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             if (pinned.isNotEmpty()) {
                 item {
                     MetroSectionHeader(stringResource(R.string.metro_persistent_pinned), accent)
                 }
             }
-            itemsIndexed(pinned) { index, entry ->
-                MetroFlipItem(index = index, visible = true) {
+            itemsIndexed(pinned, key = { _, entry -> "pinned:${entry.id}" }) { index, entry ->
+                MetroFlipItem(index = index, visible = visible) {
                     PersistentRow(
                         title = entry.name,
                         subtitle = listOf(
@@ -194,34 +190,16 @@ internal fun PersistentScreen() {
                         checked = entry.enabled,
                         accent = accent,
                         onToggle = { checked ->
-                            busy = true
-                            scope.launch(Dispatchers.IO) {
-                                val result = PersistentModules.toggle(entry.id, checked)
-                                withContext(Dispatchers.Main) {
-                                    if (!result.ok) reportFailure(context, result)
-                                    busy = false
-                                    revision++
-                                }
-                            }
+                            runOperation { PersistentModules.toggle(entry.id, checked) }
                         },
                         onUnpin = {
-                            busy = true
-                            scope.launch(Dispatchers.IO) {
-                                val result = PersistentModules.unpin(entry.id)
-                                withContext(Dispatchers.Main) {
-                                    if (!result.ok) reportFailure(context, result)
-                                    busy = false
-                                    revision++
-                                }
-                            }
+                            runOperation { PersistentModules.unpin(entry.id) }
                         },
                     )
                 }
             }
 
             item { MetroSectionHeader(stringResource(R.string.metro_persistent_available), accent) }
-            val pinnedIds = pinned.map { it.id }.toSet()
-            val unpinned = manifest.installed.filterNot { it.id in pinnedIds }
             if (unpinned.isEmpty() && pinned.isEmpty()) {
                 item {
                     Text(
@@ -232,8 +210,8 @@ internal fun PersistentScreen() {
                     )
                 }
             }
-            itemsIndexed(unpinned) { index, module ->
-                MetroFlipItem(index = index + pinned.size, visible = true) {
+            itemsIndexed(unpinned, key = { _, module -> "available:${module.id}" }) { index, module ->
+                MetroFlipItem(index = index + pinned.size, visible = visible) {
                     PersistentRow(
                         title = module.name,
                         subtitle = module.id,
@@ -241,15 +219,7 @@ internal fun PersistentScreen() {
                         accent = accent,
                         onToggle = { checked ->
                             if (!checked) return@PersistentRow
-                            busy = true
-                            scope.launch(Dispatchers.IO) {
-                                val result = PersistentModules.snapshot(module.id)
-                                withContext(Dispatchers.Main) {
-                                    if (!result.ok) reportFailure(context, result)
-                                    busy = false
-                                    revision++
-                                }
-                            }
+                            runOperation { PersistentModules.snapshot(module.id) }
                         },
                         onUnpin = null,
                     )

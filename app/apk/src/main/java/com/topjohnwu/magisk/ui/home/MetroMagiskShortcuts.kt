@@ -43,7 +43,8 @@ object MetroMagiskShortcuts {
             Destination.Logs -> Route.MetroPivot("LOGS")
             Destination.Settings -> Route.MetroPivot("SETTINGS")
             Destination.Theme -> Route.Theme
-            Destination.Persistent -> Route.PersistentModules
+            // Keep existing pinned tiles working, but use the single management page.
+            Destination.Persistent -> Route.MetroPivot("MODULES")
             // The DenyList editor is the Exclude page of the Apps pivot
             Destination.DenyList -> Route.MetroPivot(PivotSection.DENYLIST_ALIAS)
             Destination.Contributors -> Route.Contributors

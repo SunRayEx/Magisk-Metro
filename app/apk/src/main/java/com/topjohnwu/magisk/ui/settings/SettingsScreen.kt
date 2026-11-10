@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
@@ -280,7 +281,10 @@ internal fun CustomizationSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         // Metro theme chooser: previews every packaged, wallpaper and custom theme.
         SettingsArrow(
@@ -357,7 +361,10 @@ internal fun CustomizationSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         val resources = LocalResources.current
         val tileCustomization by viewModel.tileCustomization.collectAsStateWithLifecycle()
@@ -403,7 +410,10 @@ internal fun AppSettingsSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         // Update Channel
         SettingsDropdown(
@@ -478,32 +488,20 @@ internal fun AppSettingsSection(
         )
 
         if (uiState.isMagiskInstalled) {
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
 
-        // Persistent modules (master switch)
-        val persistentModules by viewModel.persistentModules.collectAsStateWithLifecycle()
-        SettingsSwitch(
-            title = stringResource(R.string.metro_persistent_title),
-            summary = stringResource(R.string.metro_persistent_summary),
-            checked = persistentModules,
-            enabled = Info.env.isActive,
-            onCheckedChange = { viewModel.togglePersistentModules(it) }
-        )
-
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-
-        // Configure persistent modules
-        SettingsArrow(
-            title = stringResource(R.string.metro_persistent),
-            summary = stringResource(R.string.metro_persistent_summary),
-            onClick = { viewModel.navigateToPersistentModules() }
-        )
+            // Keep only the master switch here; management lives in the Modules pivot.
+            val persistentModules by viewModel.persistentModules.collectAsStateWithLifecycle()
+            SettingsSwitch(
+                title = stringResource(R.string.metro_persistent_title),
+                summary = stringResource(R.string.metro_persistent_summary),
+                checked = persistentModules,
+                enabled = Info.env.isActive,
+                onCheckedChange = { viewModel.togglePersistentModules(it) }
+            )
         }
     }
 }
@@ -523,7 +521,10 @@ internal fun MagiskSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         // Systemless Hosts
         SettingsArrow(
@@ -590,7 +591,10 @@ internal fun SuperuserSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        )
     ) {
         // Authentication
         SettingsSwitch(

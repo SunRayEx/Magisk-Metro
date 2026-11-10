@@ -86,7 +86,6 @@ import com.topjohnwu.magisk.ui.metro.LocalMetroTransition
 import com.topjohnwu.magisk.ui.metro.MetroTileContinuum
 import com.topjohnwu.magisk.ui.metro.MetroTransitionController
 import com.topjohnwu.magisk.ui.metro.MetroTransitionPhase
-import com.topjohnwu.magisk.ui.module.PersistentScreen
 import com.topjohnwu.magisk.ui.pivot.MetroPivotScreen
 import com.topjohnwu.magisk.ui.pivot.PivotSection
 import com.topjohnwu.magisk.ui.settings.SettingsViewModel
@@ -301,11 +300,6 @@ class MainActivity : ComponentActivity(), SplashScreenHost {
                                 entry<Route.TileGroup> { key ->
                                     MagisKubeTheme {
                                         TileGroupScreen(key.tileId)
-                                    }
-                                }
-                                entry<Route.PersistentModules> {
-                                    MagisKubeTheme {
-                                        PersistentScreen()
                                     }
                                 }
                                 entry<Route.EditTiles> {

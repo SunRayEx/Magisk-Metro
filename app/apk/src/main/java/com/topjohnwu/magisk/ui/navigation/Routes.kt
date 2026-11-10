@@ -24,9 +24,6 @@ sealed interface Route : NavKey, Parcelable {
     data object Contributors : Route
 
     @Parcelize
-    data object PersistentModules : Route
-
-    @Parcelize
     data object EditTiles : Route
 
     @Parcelize

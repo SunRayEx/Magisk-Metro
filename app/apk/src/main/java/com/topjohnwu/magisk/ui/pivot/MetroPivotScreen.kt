@@ -15,8 +15,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
@@ -78,7 +79,7 @@ fun MetroPivotScreen(
     val activeSection = sections[pagerState.currentPage]
     // Publish the visible section so the hosting fragment (and every dialog raised through it)
     // tints itself with the accent of the tile that opened this pivot.
-    MetroPivotState.section.value = activeSection
+    SideEffect { MetroPivotState.section.value = activeSection }
     val accent = when (activeSection) {
         PivotSection.MAGISK -> palette.magisk
         PivotSection.APPS -> palette.apps
@@ -87,7 +88,7 @@ fun MetroPivotScreen(
         PivotSection.SETTINGS -> palette.settings
     }
 
-    // Settings pushes secondary destinations (persistent modules, deny list config, theme)
+    // Settings pushes secondary destinations (theme and tile customization)
     // through the shared Navigator instead of Fragment directions. Modules does the same for
     // the module action screen, so its events must be collected too or the action button stays
     // dead.
@@ -104,16 +105,19 @@ fun MetroPivotScreen(
     LaunchedEffect(pagerState.currentPage) {
         headerState.animateScrollToItem(pagerState.currentPage)
     }
-    LaunchedEffect(accent) {
-        (view.context as? Activity)?.window?.let { window ->
+    DisposableEffect(view, accent) {
+        val window = (view.context as? Activity)?.window
+        val animator = window?.let {
             // Blend between section accents instead of snapping when pages settle.
             android.animation.ValueAnimator.ofArgb(window.statusBarColor, accent.color.toArgb()).apply {
                 duration = 200
                 addUpdateListener { window.statusBarColor = it.animatedValue as Int }
-            }.start()
-            WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
-                accent.onColor.luminance() < 0.5f
+                WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars =
+                    accent.onColor.luminance() < 0.5f
+                start()
+            }
         }
+        onDispose { animator?.cancel() }
     }
 
     Column(
@@ -150,9 +154,9 @@ fun MetroPivotScreen(
                 .padding(start = 24.dp, end = 28.dp, top = 12.dp, bottom = 8.dp),
         ) {
             sections.forEachIndexed { index, section ->
-                val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
-                val selected = distance < 0.5f
                 item(key = section.name) {
+                    val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
+                    val selected = distance < 0.5f
                     Text(
                         text = when (section) {
                             PivotSection.MAGISK -> stringResource(R.string.metro_install)

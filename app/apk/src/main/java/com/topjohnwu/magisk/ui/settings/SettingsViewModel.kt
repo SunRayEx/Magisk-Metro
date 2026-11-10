@@ -108,15 +108,6 @@ class SettingsViewModel : BaseViewModel() {
         ).withEnvironment()
     }
 
-    fun navigateToPersistentModules() {
-        if (!Config.metroPersistentModules) {
-            // Nothing to configure yet: the master switch must be enabled first.
-            showSnackbar(AppR.string.metro_persistent_goto_settings)
-        } else {
-            navigateTo(Route.PersistentModules)
-        }
-    }
-
     fun navigateToTheme() {
         navigateTo(Route.Theme)
     }

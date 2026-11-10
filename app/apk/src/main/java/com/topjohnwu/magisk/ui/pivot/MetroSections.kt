@@ -36,7 +36,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,7 +46,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import com.topjohnwu.magisk.ui.navigation.LocalNavigator
-import com.topjohnwu.magisk.ui.navigation.Route
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -62,7 +60,6 @@ import com.topjohnwu.magisk.arch.VMFactory
 import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.ktx.toast
-import com.topjohnwu.magisk.core.PersistentModules
 import com.topjohnwu.magisk.core.download.DownloadEngine
 import com.topjohnwu.magisk.core.download.Subject
 import com.topjohnwu.magisk.core.ktx.timeDateFormat
@@ -88,6 +85,7 @@ import com.topjohnwu.magisk.ui.log.MagiskLogEntry
 import com.topjohnwu.magisk.ui.module.ModuleItem
 import com.topjohnwu.magisk.ui.module.ModuleViewModel
 import com.topjohnwu.magisk.ui.module.OnlineModuleSubject
+import com.topjohnwu.magisk.ui.module.PersistentScreen
 import com.topjohnwu.magisk.ui.settings.AppSettingsSection
 import com.topjohnwu.magisk.ui.settings.CustomizationSection
 import com.topjohnwu.magisk.ui.settings.MagiskSection as SettingsMagiskSection
@@ -214,9 +212,9 @@ private fun MetroSubPivot(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             titles.forEachIndexed { index, title ->
-                val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
-                val selected = distance < 0.5f
                 item(key = title) {
+                    val distance = kotlin.math.abs(index - pagerState.currentPage - pagerState.currentPageOffsetFraction)
+                    val selected = distance < 0.5f
                     Text(
                         text = title,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 1f - distance.coerceIn(0f, 1f) * 0.62f),
@@ -941,7 +939,6 @@ fun ModulesSection(vm: ModuleViewModel) {
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val loading = uiState.loading
     val items = uiState.modules
-    val context = LocalContext.current
 
     // Declared before any early return: a launcher must be created on every recomposition path,
     // and the empty state below needs it too.
@@ -949,18 +946,8 @@ fun ModulesSection(vm: ModuleViewModel) {
         uri?.let { vm.confirmLocalInstall(it) }
     }
 
-    if (loading && items.isEmpty()) {
-        MetroCentered(stringResource(R.string.metro_loading))
-        return
-    }
-    if (items.isEmpty()) {
-        // No modules installed yet: offer the install action straight from the empty state instead
-        // of leaving the page with only a dead-end label.
-        MetroEmptyModules(accent) { filePicker.launch("application/zip") }
-        return
-    }
     val modules = items
-    val updates = modules.filter { it.showUpdate }
+    val updates = remember(modules) { modules.filter { it.showUpdate } }
     MetroSubPivot(
         titles = listOf(
             stringResource(R.string.metro_persistent),
@@ -970,7 +957,15 @@ fun ModulesSection(vm: ModuleViewModel) {
     ) { page, visible ->
         val pageModules = if (page == 1) modules else updates
         if (page == 0) {
-            PersistentTab(accent, visible)
+            PersistentScreen(visible = visible)
+            return@MetroSubPivot
+        }
+        if (loading && items.isEmpty()) {
+            MetroCentered(stringResource(R.string.metro_loading))
+            return@MetroSubPivot
+        }
+        if (page == 1 && items.isEmpty()) {
+            MetroEmptyModules(accent) { filePicker.launch("application/zip") }
             return@MetroSubPivot
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -1026,106 +1021,6 @@ private fun MetroEmptyModules(accent: MetroAccent, onInstall: () -> Unit) {
             }
         }
     }
-}
-
-/** Read-only mirror of the persistent declaration with a jump into the management page. */
-@Composable
-private fun PersistentTab(accent: MetroAccent, visible: Boolean) {
-    val context = LocalContext.current
-    val navigator = LocalNavigator.current
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var revision by remember { mutableStateOf(0) }
-
-    // Keyed on [revision] so the declaration re-loads after an apply instead of showing the
-    // pre-apply snapshot forever.
-    val snapshot by produceState<Pair<Int, com.topjohnwu.magisk.core.PersistentManifest?>>(
-        initialValue = revision to null,
-        revision,
-    ) {
-        value = revision to withContext(Dispatchers.IO) { PersistentModules.fetch() }
-    }
-    val declaration = snapshot.second
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-            MetroFlipItem(index = 0, visible = visible) {
-                Column(modifier = Modifier.padding(SectionPadding)) {
-                    Text(
-                        text = stringResource(R.string.metro_persistent),
-                        color = accent.color,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = declaration?.modules?.joinToString(", ") { it.name }
-                            ?.takeIf(String::isNotEmpty)
-                            ?: stringResource(R.string.metro_persistent_empty),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 3.dp),
-                    )
-                }
-            }
-        }
-        item {
-            MetroFlipItem(index = 1, visible = visible) {
-                Row(
-                    modifier = Modifier
-                        .padding(SectionPadding)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // apply() shells out to a root binary (it can copy a multi-MB .so and relabel
-                    // the store), so it must never run on the main thread: doing so froze the UI
-                    // and looked exactly like a dead button.
-                    MetroTextButton(
-                        text = stringResource(R.string.metro_persistent_apply),
-                        accent = accent,
-                        enabled = !busy,
-                    ) {
-                        if (!PersistentModules.configured()) {
-                            // Not configured yet: send the user to Settings to flip the switch.
-                            Toast.makeText(
-                                context,
-                                R.string.metro_persistent_goto_settings,
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            return@MetroTextButton
-                        }
-                        busy = true
-                        scope.launch(Dispatchers.IO) {
-                            val result = PersistentModules.apply()
-                            withContext(Dispatchers.Main) {
-                                if (result.ok) {
-                                    Toast.makeText(
-                                        context,
-                                        R.string.metro_persistent_applied,
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    reportPersistentFailure(context, result)
-                                }
-                                busy = false
-                                revision++
-                            }
-                        }
-                    }
-                    MetroTextButton(stringResource(R.string.metro_persistent_manage), accent) {
-                        navigator.push(Route.PersistentModules)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun reportPersistentFailure(
-    context: android.content.Context,
-    result: com.topjohnwu.magisk.core.PersistentResult,
-) {
-    val text = context.getString(R.string.metro_persistent_failed) +
-        (result.message?.let { ": $it" } ?: "")
-    Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 }
 
 @Composable
